@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, Edit2, X, Check, Download } from 'lucide-react';
+import { Trash2, Plus, Edit2, X, Check, Download, LogOut } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import './App.css';
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
   const [applications, setApplications] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -19,10 +26,84 @@ export default function App() {
     notes: ''
   });
 
-  // Load from Supabase on mount
+  // Check if user is logged in on mount
   useEffect(() => {
-    loadApplications();
+    checkUser();
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Load applications when user logs in
+  useEffect(() => {
+    if (user) {
+      loadApplications();
+    }
+  }, [user]);
+
+  const checkUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    } catch (error) {
+      console.error('Error checking user:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      
+      setUser(data.user);
+    } catch (error) {
+      setAuthError(error.message);
+    }
+  };
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      
+      if (data.user) {
+        alert('Account created! Please check your email to verify your account.');
+      }
+    } catch (error) {
+      setAuthError(error.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setApplications([]);
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
 
   const loadApplications = async () => {
     try {
@@ -72,49 +153,49 @@ export default function App() {
   };
 
   const handleSave = async () => {
-  if (!formData.company.trim() || !formData.position.trim()) {
-    alert('Company and position are required');
-    return;
-  }
-
-  setIsSyncing(true);
-  try {
-    if (editingId) {
-      // Update existing
-      const { error } = await supabase
-        .from('applications')
-        .update(formData)
-        .eq('id', editingId);
-
-      if (error) {
-        console.error('Update error:', error);
-        alert('Failed to update application');
-        return;
-      }
-    } else {
-      // Insert new - ADD user_id HERE
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { error } = await supabase
-        .from('applications')
-        .insert([{
-          ...formData,
-          user_id: user.id  // ADD THIS LINE
-        }]);
-
-      if (error) {
-        console.error('Insert error:', error);
-        alert('Failed to save application');
-        return;
-      }
+    if (!formData.company.trim() || !formData.position.trim()) {
+      alert('Company and position are required');
+      return;
     }
 
-    setIsModalOpen(false);
-    await loadApplications();
-  } finally {
-    setIsSyncing(false);
-  }
-};
+    setIsSyncing(true);
+    try {
+      if (editingId) {
+        // Update existing
+        const { error } = await supabase
+          .from('applications')
+          .update(formData)
+          .eq('id', editingId);
+
+        if (error) {
+          console.error('Update error:', error);
+          alert('Failed to update application');
+          return;
+        }
+      } else {
+        // Insert new - with user_id
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        const { error } = await supabase
+          .from('applications')
+          .insert([{
+            ...formData,
+            user_id: user.id
+          }]);
+
+        if (error) {
+          console.error('Insert error:', error);
+          alert('Failed to save application');
+          return;
+        }
+      }
+
+      setIsModalOpen(false);
+      await loadApplications();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this application?')) return;
@@ -224,6 +305,104 @@ export default function App() {
     printWindow.print();
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Login/Signup screen
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient flex items-center justify-center px-4">
+        <div className="max-w-md w-full">
+          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-8 shadow-2xl">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-slate-50 mb-2">Application Monitor</h1>
+              <p className="text-slate-400">Track your job applications</p>
+            </div>
+
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={() => {
+                  setAuthMode('login');
+                  setAuthError('');
+                }}
+                className={`flex-1 py-2 rounded-lg transition-colors ${
+                  authMode === 'login'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                Login
+              </button>
+              <button
+                onClick={() => {
+                  setAuthMode('signup');
+                  setAuthError('');
+                }}
+                className={`flex-1 py-2 rounded-lg transition-colors ${
+                  authMode === 'signup'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
+
+            <form onSubmit={authMode === 'login' ? handleLogin : handleSignup}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-slate-300 text-sm mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    required
+                    className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 text-sm mb-2">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {authError && (
+                  <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3">
+                    <p className="text-red-400 text-sm">{authError}</p>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors"
+                >
+                  {authMode === 'login' ? 'Login' : 'Sign Up'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main app (when logged in)
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient flex items-center justify-center">
@@ -260,9 +439,20 @@ export default function App() {
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="header-accent"></div>
-            <h1 className="text-3xl font-bold text-slate-50">Application Monitor</h1>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="header-accent"></div>
+              <h1 className="text-3xl font-bold text-slate-50">Application Monitor</h1>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-slate-400 text-sm">{user.email}</span>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+              >
+                <LogOut size={16} /> Logout
+              </button>
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
