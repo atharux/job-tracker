@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, Edit2, X, Check, Download, LogOut } from 'lucide-react';
+import { Trash2, Plus, Edit2, X, Check, Download } from 'lucide-react';
 import { supabase } from './supabaseClient';
-import Login from './Login';
 import './App.css';
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
   const [applications, setApplications] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -22,26 +19,10 @@ export default function App() {
     notes: ''
   });
 
-  // Check authentication on mount
+  // Load from Supabase on mount
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user || null);
-      setAuthLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-    });
-
-    return () => subscription?.unsubscribe();
+    loadApplications();
   }, []);
-
-  // Load applications when user changes
-  useEffect(() => {
-    if (user) {
-      loadApplications();
-    }
-  }, [user]);
 
   const loadApplications = async () => {
     try {
@@ -49,7 +30,6 @@ export default function App() {
       const { data, error } = await supabase
         .from('applications')
         .select('*')
-        .eq('user_id', user.id)
         .order('date_applied', { ascending: false });
 
       if (error) {
@@ -92,43 +72,49 @@ export default function App() {
   };
 
   const handleSave = async () => {
-    if (!formData.company.trim() || !formData.position.trim()) {
-      alert('Company and position are required');
-      return;
-    }
+  if (!formData.company.trim() || !formData.position.trim()) {
+    alert('Company and position are required');
+    return;
+  }
 
-    setIsSyncing(true);
-    try {
-      if (editingId) {
-        const { error } = await supabase
-          .from('applications')
-          .update(formData)
-          .eq('id', editingId)
-          .eq('user_id', user.id);
+  setIsSyncing(true);
+  try {
+    if (editingId) {
+      // Update existing
+      const { error } = await supabase
+        .from('applications')
+        .update(formData)
+        .eq('id', editingId);
 
-        if (error) {
-          console.error('Update error:', error);
-          alert('Failed to update application');
-          return;
-        }
-      } else {
-        const { error } = await supabase
-          .from('applications')
-          .insert([{ ...formData, user_id: user.id }]);
-
-        if (error) {
-          console.error('Insert error:', error);
-          alert('Failed to save application');
-          return;
-        }
+      if (error) {
+        console.error('Update error:', error);
+        alert('Failed to update application');
+        return;
       }
+    } else {
+      // Insert new - ADD user_id HERE
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase
+        .from('applications')
+        .insert([{
+          ...formData,
+          user_id: user.id  // ADD THIS LINE
+        }]);
 
-      setIsModalOpen(false);
-      await loadApplications();
-    } finally {
-      setIsSyncing(false);
+      if (error) {
+        console.error('Insert error:', error);
+        alert('Failed to save application');
+        return;
+      }
     }
-  };
+
+    setIsModalOpen(false);
+    await loadApplications();
+  } finally {
+    setIsSyncing(false);
+  }
+};
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this application?')) return;
@@ -138,8 +124,7 @@ export default function App() {
       const { error } = await supabase
         .from('applications')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('id', id);
 
       if (error) {
         console.error('Delete error:', error);
@@ -156,11 +141,6 @@ export default function App() {
   const handleCancel = () => {
     setIsModalOpen(false);
     setEditingId(null);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
   };
 
   const exportToCSV = () => {
@@ -244,20 +224,6 @@ export default function App() {
     printWindow.print();
   };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gradient flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-slate-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Login onLogin={() => {}} />;
-  }
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient flex items-center justify-center">
@@ -294,21 +260,9 @@ export default function App() {
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4 justify-between">
-            <div className="flex items-center gap-3">
-              <div className="header-accent"></div>
-              <h1 className="text-3xl font-bold text-slate-50">Application Monitor</h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <p className="text-slate-400 text-sm">{user.email}</p>
-              <button
-                onClick={handleLogout}
-                className="btn-logout"
-                title="Log out"
-              >
-                <LogOut size={18} />
-              </button>
-            </div>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="header-accent"></div>
+            <h1 className="text-3xl font-bold text-slate-50">Application Monitor</h1>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
