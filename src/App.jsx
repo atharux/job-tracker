@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, Edit2, X, Check, Download, LogOut } from 'lucide-react';
+import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import './App.css';
 
@@ -289,7 +289,7 @@ export default function App() {
                   <td>${app.company}</td>
                   <td>${app.position}</td>
                   <td>${new Date(app.date_applied).toLocaleDateString('de-DE')}</td>
-                  <td>${app.contact_person || '—'}</td>
+                  <td>${app.contact_person || 'â€”'}</td>
                   <td>${app.status}</td>
                   <td>${app.notes}</td>
                 </tr>
@@ -303,6 +303,150 @@ export default function App() {
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.print();
+  };
+
+  const parseCSV = (text) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const rows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let char of lines[i]) {
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          values.push(current.trim().replace(/^"|"$/g, ''));
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      values.push(current.trim().replace(/^"|"$/g, ''));
+
+      if (values.length === headers.length) {
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header.toLowerCase().replace(/ /g, '_')] = values[index];
+        });
+        rows.push(row);
+      }
+    }
+
+    return rows;
+  };
+
+  const validateAndFormatCSVData = (rows) => {
+    const validStatuses = ['applied', 'interview', 'offered', 'rejected', 'accepted'];
+    const formatted = [];
+
+    for (const row of rows) {
+      if (!row.company || !row.position) {
+        continue;
+      }
+
+      const status = row.status?.toLowerCase();
+      const formattedRow = {
+        company: row.company,
+        position: row.position,
+        date_applied: row.date_applied || new Date().toISOString().split('T')[0],
+        contact_person: row.contact_person || '',
+        status: validStatuses.includes(status) ? status : 'applied',
+        notes: row.notes || ''
+      };
+
+      formatted.push(formattedRow);
+    }
+
+    return formatted;
+  };
+
+  const findDuplicates = (newData) => {
+    const duplicates = [];
+    
+    for (const newApp of newData) {
+      const isDuplicate = applications.some(existingApp => 
+        existingApp.company.toLowerCase() === newApp.company.toLowerCase() &&
+        existingApp.position.toLowerCase() === newApp.position.toLowerCase()
+      );
+      
+      if (isDuplicate) {
+        duplicates.push(newApp);
+      }
+    }
+
+    return duplicates;
+  };
+
+  const handleCSVUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    event.target.value = '';
+
+    setIsSyncing(true);
+    try {
+      const text = await file.text();
+      const parsedData = parseCSV(text);
+      
+      if (parsedData.length === 0) {
+        alert('No valid data found in CSV file. Please check the format.');
+        return;
+      }
+
+      const validatedData = validateAndFormatCSVData(parsedData);
+      
+      if (validatedData.length === 0) {
+        alert('No valid applications found. Make sure each row has Company and Position.');
+        return;
+      }
+
+      const duplicates = findDuplicates(validatedData);
+      
+      if (duplicates.length > 0) {
+        const duplicateList = duplicates
+          .map(d => `${d.company} - ${d.position}`)
+          .join('\n');
+        
+        const confirmed = confirm(
+          `Found ${duplicates.length} potential duplicate(s):\n\n${duplicateList}\n\nDo you want to import them anyway?`
+        );
+        
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const dataToInsert = validatedData.map(app => ({
+        ...app,
+        user_id: user.id
+      }));
+
+      const { error } = await supabase
+        .from('applications')
+        .insert(dataToInsert);
+
+      if (error) {
+        console.error('CSV upload error:', error);
+        alert('Failed to upload applications. Please try again.');
+        return;
+      }
+
+      alert(`Successfully imported ${validatedData.length} application(s)!`);
+      await loadApplications();
+    } catch (error) {
+      console.error('CSV processing error:', error);
+      alert('Failed to process CSV file. Please check the format.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Loading state
@@ -376,7 +520,7 @@ export default function App() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                     required
                     className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
@@ -456,7 +600,7 @@ export default function App() {
           </div>
           <div className="flex items-center justify-between">
             <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
-            <p className="text-slate-400 text-xs">{isSyncing ? '● Syncing...' : '● Synced to cloud'}</p>
+            <p className="text-slate-400 text-xs">{isSyncing ? 'â— Syncing...' : 'â— Synced to cloud'}</p>
           </div>
         </div>
 
@@ -491,6 +635,19 @@ export default function App() {
           </button>
 
           <div className="export-buttons">
+            <label 
+              className="btn-upload"
+              title="CSV Format: Company, Position, Date Applied, Contact Person, Status, Notes&#10;&#10;Required: Company and Position&#10;Status must be: applied, interview, offered, rejected, or accepted"
+            >
+              <Upload size={16} /> Import CSV
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleCSVUpload}
+                style={{ display: 'none' }}
+                disabled={isSyncing}
+              />
+            </label>
             <button 
               onClick={exportToCSV}
               className="btn-export"
@@ -548,7 +705,7 @@ export default function App() {
                     <td className="date">
                       {new Date(app.date_applied).toLocaleDateString()}
                     </td>
-                    <td className="contact">{app.contact_person || '—'}</td>
+                    <td className="contact">{app.contact_person || 'â€”'}</td>
                     <td>
                       <span className={`status-badge ${statusConfig[app.status].bg} ${statusConfig[app.status].text}`}>
                         {statusConfig[app.status].label}
