@@ -588,23 +588,23 @@ export default function App() {
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
+          <div className="header-row mb-4">
+            <div className="header-title-group">
               <div className="header-accent"></div>
               <h1 className="text-3xl font-bold text-slate-50">Application Monitor</h1>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="header-actions">
               <span className="text-slate-400 text-sm">{user.email}</span>
               <button
                 onClick={toggleTheme}
-                className="theme-toggle px-3 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                className="theme-toggle px-3 py-2 rounded-lg transition-colors"
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
               >
                 {theme === 'dark' ? '☀️' : '🌙'}
               </button>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-slate-300"
               >
                 <LogOut size={16} /> Logout
               </button>
@@ -612,7 +612,7 @@ export default function App() {
           </div>
           <div className="flex items-center justify-between">
             <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
-            <p className="text-slate-400 text-xs">{isSyncing ? 'â— Syncing...' : 'â— Synced to cloud'}</p>
+            <p className="text-slate-400 text-xs">{isSyncing ? '● Syncing...' : '● Synced to cloud'}</p>
           </div>
         </div>
 
