@@ -10,6 +10,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [theme, setTheme] = useState('dark'); // 'dark' or 'garden'
 
   const [applications, setApplications] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -103,6 +104,10 @@ export default function App() {
     } catch (error) {
       console.error('Error logging out:', error);
     }
+  };
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'garden' : 'dark');
   };
 
   const loadApplications = async () => {
@@ -577,7 +582,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient">
+    <div className="min-h-screen bg-gradient" data-theme={theme}>
       <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
@@ -590,6 +595,13 @@ export default function App() {
             </div>
             <div className="flex items-center gap-4">
               <span className="text-slate-400 text-sm">{user.email}</span>
+              <button
+                onClick={toggleTheme}
+                className="theme-toggle px-3 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+              >
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </button>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
