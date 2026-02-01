@@ -697,7 +697,7 @@ export default function App() {
                 <th>Company</th>
                 <th>Position</th>
                 <th>Applied</th>
-                <th>Contact</th>
+                <th>Link</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
