@@ -1,14 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Trash2,
-  Plus,
-  Edit2,
-  X,
-  Check,
-  Download,
-  LogOut,
-  Upload,
-} from 'lucide-react';
+import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import MilestoneToast from './MilestoneToast.jsx';
 import * as gamification from './gamification.js';
@@ -45,21 +36,17 @@ export default function App() {
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [milestoneQueue, setMilestoneQueue] = useState([]);
 
-  // Central gamification helper
+  // A. Gamification helper
   const applyGamification = async (action, actionData = {}) => {
     if (!gamificationState || !user) return;
 
     const oldState = gamificationState;
-    const newState = gamification.computeNewState(
-      oldState,
-      action,
-      actionData,
-    );
+    const newState = gamification.computeNewState(oldState, action, actionData);
 
     const milestones = gamification.detectMilestones(
       oldState,
       newState,
-      applications,
+      applications
     );
 
     setGamificationState(newState);
@@ -102,7 +89,7 @@ export default function App() {
     }
   }, [user]);
 
-  // Streaks (optional): once per load of gamification state
+  // D. Streaks (once per state load / user)
   useEffect(() => {
     if (gamificationState && user) {
       applyGamification('streak_bonus');
@@ -141,13 +128,13 @@ export default function App() {
       a =>
         a.status === 'interview' ||
         a.status === 'offered' ||
-        a.status === 'accepted',
+        a.status === 'accepted'
     ).length;
     points += interviews * 25;
 
     // 50 points per offer (status = offered or accepted)
     const offers = applications.filter(
-      a => a.status === 'offered' || a.status === 'accepted',
+      a => a.status === 'offered' || a.status === 'accepted'
     ).length;
     points += offers * 50;
 
@@ -160,12 +147,10 @@ export default function App() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
       if (!user) {
         console.log('[GAMIFICATION] No user found, skipping');
         return;
       }
-
       console.log('[GAMIFICATION] User ID:', user.id);
 
       const { data, error } = await supabase
@@ -173,36 +158,21 @@ export default function App() {
         .select('*')
         .eq('user_id', user.id)
         .single();
-
       console.log('[GAMIFICATION] Query result:', { data, error });
 
       if (error && error.code === 'PGRST116') {
-        console.log(
-          '[GAMIFICATION] No existing state found, creating initial state...',
-        );
+        console.log('[GAMIFICATION] No existing state found, creating initial state...');
 
-        // Load existing applications for this user to calculate retro points
+        // Load existing applications to calculate retroactive points (scoped to user)
         const { data: existingApps } = await supabase
           .from('applications')
           .select('*')
           .eq('user_id', user.id);
+        console.log('[GAMIFICATION] Existing apps:', existingApps?.length || 0);
 
-        console.log(
-          '[GAMIFICATION] Existing apps:',
-          existingApps?.length || 0,
-        );
-
-        const retroPoints = calculateRetroactivePoints(
-          existingApps || [],
-        );
+        const retroPoints = calculateRetroactivePoints(existingApps || []);
         const initialRank = gamification.calculateRank(retroPoints);
-
-        console.log(
-          '[GAMIFICATION] Retroactive points:',
-          retroPoints,
-          'Initial rank:',
-          initialRank,
-        );
+        console.log('[GAMIFICATION] Retroactive points:', retroPoints, 'Initial rank:', initialRank);
 
         const initialState = {
           ...gamification.getInitialState(),
@@ -215,23 +185,13 @@ export default function App() {
           .insert([{ user_id: user.id, ...initialState }])
           .select()
           .single();
-
-        console.log('[GAMIFICATION] Insert result:', {
-          newData,
-          insertError,
-        });
+        console.log('[GAMIFICATION] Insert result:', { newData, insertError });
 
         if (!insertError) {
           setGamificationState(newData);
-          console.log(
-            '[GAMIFICATION] State set successfully:',
-            newData,
-          );
+          console.log('[GAMIFICATION] State set successfully:', newData);
         } else {
-          console.error(
-            '[GAMIFICATION] Insert error:',
-            insertError,
-          );
+          console.error('[GAMIFICATION] Insert error:', insertError);
         }
       } else if (!error) {
         setGamificationState(data);
@@ -240,23 +200,18 @@ export default function App() {
         console.error('[GAMIFICATION] Unexpected error:', error);
       }
     } catch (error) {
-      console.error(
-        '[GAMIFICATION] Error in loadGamificationState:',
-        error,
-      );
+      console.error('[GAMIFICATION] Error in loadGamificationState:', error);
     }
   };
 
   const handleLogin = async e => {
     e.preventDefault();
     setAuthError('');
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
       if (error) throw error;
       setUser(data.user);
     } catch (error) {
@@ -267,19 +222,14 @@ export default function App() {
   const handleSignup = async e => {
     e.preventDefault();
     setAuthError('');
-
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
       });
-
       if (error) throw error;
-
       if (data.user) {
-        alert(
-          'Account created! Please check your email to verify your account.',
-        );
+        alert('Account created! Please check your email to verify your account.');
       }
     } catch (error) {
       setAuthError(error.message);
@@ -291,9 +241,6 @@ export default function App() {
       await supabase.auth.signOut();
       setUser(null);
       setApplications([]);
-      setGamificationState(null);
-      setActiveMilestone(null);
-      setMilestoneQueue([]);
     } catch (error) {
       console.error('Error logging out:', error);
     }
@@ -310,18 +257,15 @@ export default function App() {
         setApplications([]);
         return;
       }
-
       const { data, error } = await supabase
         .from('applications')
         .select('*')
         .eq('user_id', user.id)
         .order('date_applied', { ascending: false });
-
       if (error) {
         console.error('Load error:', error);
         return;
       }
-
       setApplications(data || []);
     } catch (e) {
       console.error('Failed to load:', e);
@@ -365,23 +309,20 @@ export default function App() {
     const oldStatus = applications.find(a => a.id === editingId)?.status;
 
     setIsSyncing(true);
-
     try {
       if (editingId) {
         // Update existing
         const { error } = await supabase
           .from('applications')
           .update(formData)
-          .eq('id', editingId)
-          .eq('user_id', user.id);
-
+          .eq('id', editingId);
         if (error) {
           console.error('Update error:', error);
           alert('Failed to update application');
           return;
         }
 
-        // Status change gamification
+        // C. Trigger gamification on status change
         if (oldStatus && oldStatus !== formData.status) {
           await applyGamification('update_status', {
             oldStatus,
@@ -390,17 +331,19 @@ export default function App() {
         }
       } else {
         // Insert new - with user_id
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         const { error } = await supabase
           .from('applications')
           .insert([{ ...formData, user_id: user.id }]);
-
         if (error) {
           console.error('Insert error:', error);
           alert('Failed to save application');
           return;
         }
 
-        // New application gamification
+        // C. Trigger gamification on new application
         await applyGamification('create_application');
       }
 
@@ -412,23 +355,18 @@ export default function App() {
   };
 
   const handleDelete = async id => {
-    if (!window.confirm('Delete this application?')) return;
-
+    if (!confirm('Delete this application?')) return;
     setIsSyncing(true);
-
     try {
       const { error } = await supabase
         .from('applications')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
-
+        .eq('id', id);
       if (error) {
         console.error('Delete error:', error);
         alert('Failed to delete application');
         return;
       }
-
       await loadApplications();
     } finally {
       setIsSyncing(false);
@@ -441,15 +379,7 @@ export default function App() {
   };
 
   const exportToCSV = () => {
-    const headers = [
-      'Company',
-      'Position',
-      'Date Applied',
-      'Contact Person',
-      'Status',
-      'Notes',
-    ];
-
+    const headers = ['Company', 'Position', 'Date Applied', 'Contact Person', 'Status', 'Notes'];
     const rows = applications.map(app => [
       app.company,
       app.position,
@@ -458,23 +388,16 @@ export default function App() {
       app.status,
       app.notes,
     ]);
-
     const csv = [headers, ...rows]
       .map(row => row.map(cell => `"${cell || ''}"`).join(','))
       .join('\n');
-
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
-
     const a = document.createElement('a');
     a.href = url;
-    a.download = `job-applications-${new Date()
-      .toISOString()
-      .split('T')[0]}.csv`;
-
+    a.download = `job-applications-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
-
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
   };
@@ -503,14 +426,12 @@ export default function App() {
             <tr>
               <td>${app.company}</td>
               <td>${app.position}</td>
-              <td>${new Date(
-                app.date_applied,
-              ).toLocaleDateString('de-DE')}</td>
+              <td>${new Date(app.date_applied).toLocaleDateString('de-DE')}</td>
               <td>${app.contact_person || '—'}</td>
               <td>${app.status}</td>
               <td>${app.notes || ''}</td>
             </tr>
-          `,
+          `
             )
             .join('')}
         </table>
@@ -526,16 +447,11 @@ export default function App() {
     const json = JSON.stringify(applications, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = window.URL.createObjectURL(blob);
-
     const a = document.createElement('a');
     a.href = url;
-    a.download = `job-applications-${new Date()
-      .toISOString()
-      .split('T')[0]}.json`;
-
+    a.download = `job-applications-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
-
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
   };
@@ -543,40 +459,29 @@ export default function App() {
   const handleFileUpload = async e => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     try {
       const text = await file.text();
       const imported = JSON.parse(text);
-
       if (!Array.isArray(imported)) {
         alert('Invalid JSON format: expected an array of applications.');
         return;
       }
-
       setIsSyncing(true);
-
       const rows = imported.map(app => ({
         company: app.company || '',
         position: app.position || '',
-        date_applied:
-          app.date_applied ||
-          new Date().toISOString().split('T')[0],
+        date_applied: app.date_applied || new Date().toISOString().split('T')[0],
         contact_person: app.contact_person || '',
         status: app.status || 'applied',
         notes: app.notes || '',
         user_id: user.id,
       }));
-
-      const { error } = await supabase
-        .from('applications')
-        .insert(rows);
-
+      const { error } = await supabase.from('applications').insert(rows);
       if (error) {
         console.error('Import error:', error);
         alert('Failed to import applications');
         return;
       }
-
       await loadApplications();
       alert(`Imported ${rows.length} applications.`);
     } catch (err) {
@@ -733,9 +638,7 @@ export default function App() {
       : 'bg-emerald-50 text-emerald-950';
 
   return (
-    <div
-      className={`min-h-screen ${themeClasses} transition-colors duration-300`}
-    >
+    <div className={`min-h-screen ${themeClasses} transition-colors duration-300`}>
       <div className="max-w-5xl mx-auto px-4 py-6">
         <header className="flex items-center justify-between mb-6">
           <div className="space-y-1">
@@ -845,6 +748,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* E. Stats grid with 5th Rank square */}
         <div className="grid grid-cols-5 gap-3 mb-4">
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
             <div className="text-[11px] text-slate-500 mb-1">Total</div>
@@ -873,8 +777,7 @@ export default function App() {
                   {gamificationState.points} pts
                   {gamificationState.streak_days > 0 && (
                     <>
-                      {' '}
-                      🔥 {gamificationState.streak_days} day
+                      {' '}🔥 {gamificationState.streak_days} day
                       {gamificationState.streak_days !== 1 ? 's' : ''}
                     </>
                   )}
@@ -888,32 +791,24 @@ export default function App() {
 
         <div className="flex items-center justify-between mb-2">
           <div className="flex gap-1.5 text-[11px]">
-            {[
-              'all',
-              'applied',
-              'interview',
-              'offered',
-              'rejected',
-              'accepted',
-            ].map(status => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
-                  filterStatus === status
-                    ? 'bg-sky-500 text-slate-950 border-sky-500'
-                    : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:bg-slate-800/90'
-                }`}
-              >
-                {status === 'all'
-                  ? 'All'
-                  : statusConfig[status].label}
-              </button>
-            ))}
+            {['all', 'applied', 'interview', 'offered', 'rejected', 'accepted'].map(
+              status => (
+                <button
+                  key={status}
+                  onClick={() => setFilterStatus(status)}
+                  className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
+                    filterStatus === status
+                      ? 'bg-sky-500 text-slate-950 border-sky-500'
+                      : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:bg-slate-800/90'
+                  }`}
+                >
+                  {status === 'all' ? 'All' : statusConfig[status].label}
+                </button>
+              )
+            )}
           </div>
           <div className="text-[11px] text-slate-500">
-            Showing {filteredApplications.length} of {applications.length}{' '}
-            applications
+            Showing {filteredApplications.length} of {applications.length} applications
           </div>
         </div>
 
@@ -957,9 +852,8 @@ export default function App() {
                     colSpan={6}
                     className="px-3 py-6 text-center text-sm text-slate-500"
                   >
-                    No applications found.{` `}
-                    {filterStatus !== 'all' &&
-                      'Try changing the filter.'}
+                    No applications found.{' '}
+                    {filterStatus !== 'all' && 'Try changing the filter.'}
                   </td>
                 </tr>
               ) : (
@@ -978,9 +872,7 @@ export default function App() {
                     </td>
                     <td className="px-3 py-2 text-slate-400">
                       {app.date_applied
-                        ? new Date(
-                            app.date_applied,
-                          ).toLocaleDateString()
+                        ? new Date(app.date_applied).toLocaleDateString()
                         : '—'}
                     </td>
                     <td className="px-3 py-2 text-slate-300">
@@ -1168,6 +1060,7 @@ export default function App() {
           </div>
         )}
 
+        {/* A. Render the milestone toast */}
         {activeMilestone && (
           <MilestoneToast
             milestone={activeMilestone}
@@ -1185,3 +1078,4 @@ export default function App() {
     </div>
   );
 }
+
