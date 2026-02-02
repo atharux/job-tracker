@@ -46,7 +46,7 @@ export default function App() {
   const [milestoneQueue, setMilestoneQueue] = useState([]);
 
   // Central gamification helper
-  const applyGamification = async (action, actionData = {}) => {
+  const applyGamification = async (action, actionData = {}, freshApplications = null) => {
     if (!gamificationState || !user) return;
 
     const oldState = gamificationState;
@@ -59,7 +59,7 @@ export default function App() {
     const milestones = gamification.detectMilestones(
       oldState,
       newState,
-      applications,
+      freshApplications || applications,
     );
 
     setGamificationState(newState);
@@ -102,9 +102,9 @@ export default function App() {
     }
   }, [user]);
 
-  // Streaks (optional): once per load of gamification state
+  // Streaks (optional): once per load of gamification state AND applications
   useEffect(() => {
-    if (gamificationState && user) {
+    if (gamificationState && user && applications.length >= 0) {
       applyGamification('streak_bonus');
     }
   }, [gamificationState?.id, user?.id]);
@@ -381,12 +381,20 @@ export default function App() {
           return;
         }
 
+        // Reload applications first to get fresh data
+        await loadApplications();
+
         // Status change gamification
         if (oldStatus && oldStatus !== formData.status) {
+          const { data: freshApps } = await supabase
+            .from('applications')
+            .select('*')
+            .eq('user_id', user.id);
+          
           await applyGamification('update_status', {
             oldStatus,
             newStatus: formData.status,
-          });
+          }, freshApps || []);
         }
       } else {
         // Insert new - with user_id
@@ -400,12 +408,19 @@ export default function App() {
           return;
         }
 
+        // Reload applications first to get fresh data
+        await loadApplications();
+
         // New application gamification
-        await applyGamification('create_application');
+        const { data: freshApps } = await supabase
+          .from('applications')
+          .select('*')
+          .eq('user_id', user.id);
+        
+        await applyGamification('create_application', {}, freshApps || []);
       }
 
       setIsModalOpen(false);
-      await loadApplications();
     } finally {
       setIsSyncing(false);
     }
@@ -506,7 +521,7 @@ export default function App() {
               <td>${new Date(
                 app.date_applied,
               ).toLocaleDateString('de-DE')}</td>
-              <td>${app.contact_person || '—'}</td>
+              <td>${app.contact_person || 'â€”'}</td>
               <td>${app.status}</td>
               <td>${app.notes || ''}</td>
             </tr>
@@ -699,7 +714,7 @@ export default function App() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                placeholder="••••••••"
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               />
             </div>
 
@@ -768,7 +783,7 @@ export default function App() {
                     {gamificationState.streak_days > 0 && (
                       <>
                         {' '}
-                        🔥 {gamificationState.streak_days} day
+                        ðŸ”¥ {gamificationState.streak_days} day
                         {gamificationState.streak_days !== 1 ? 's' : ''}
                       </>
                     )}
@@ -783,7 +798,7 @@ export default function App() {
               onClick={toggleTheme}
               className="inline-flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors"
             >
-              {theme === 'dark' ? '🌿 Garden' : '🌘 Dark'}
+              {theme === 'dark' ? 'ðŸŒ¿ Garden' : 'ðŸŒ˜ Dark'}
             </button>
             <button
               onClick={handleLogout}
@@ -874,14 +889,14 @@ export default function App() {
                   {gamificationState.streak_days > 0 && (
                     <>
                       {' '}
-                      🔥 {gamificationState.streak_days} day
+                      ðŸ”¥ {gamificationState.streak_days} day
                       {gamificationState.streak_days !== 1 ? 's' : ''}
                     </>
                   )}
                 </div>
               </>
             ) : (
-              <div className="text-[11px] text-slate-600">Loading…</div>
+              <div className="text-[11px] text-slate-600">Loadingâ€¦</div>
             )}
           </div>
         </div>
@@ -981,10 +996,10 @@ export default function App() {
                         ? new Date(
                             app.date_applied,
                           ).toLocaleDateString()
-                        : '—'}
+                        : 'â€”'}
                     </td>
                     <td className="px-3 py-2 text-slate-300">
-                      {app.contact_person || '—'}
+                      {app.contact_person || 'â€”'}
                     </td>
                     <td className="px-3 py-2">
                       <span
