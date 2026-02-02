@@ -43,23 +43,23 @@ const MILESTONE_TIERS = {
 const MILESTONE_MESSAGES = {
   [MILESTONES.FIRST_APPLICATION]: {
     title: 'First Step!',
-    message: 'You submitted your first application. Keep going!',
+    message: "You submitted your first application. Keep going!",
   },
   [MILESTONES.FIRST_INTERVIEW]: {
     title: 'Interview Secured!',
-    message: 'Your first interview — great progress!',
+    message: "Your first interview — great progress!",
   },
   [MILESTONES.FIRST_OFFER]: {
     title: 'Offer Received!',
-    message: 'You got your first offer. Congratulations!',
+    message: "You got your first offer. Congratulations!",
   },
   [MILESTONES.FIVE_DAY_STREAK]: {
     title: '5-Day Streak!',
-    message: 'Five days of consistent progress. You're on fire!',
+    message: "Five days of consistent progress. You're on fire!",
   },
   [MILESTONES.TEN_APPLICATIONS]: {
     title: '10 Applications!',
-    message: 'You've submitted 10 applications. Momentum is building!',
+    message: "You've submitted 10 applications. Momentum is building!",
   },
   [MILESTONES.RANK_UP]: (rank) => ({
     title: `Rank Up: ${rank}!`,
