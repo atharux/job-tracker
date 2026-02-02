@@ -290,19 +290,7 @@ export function getInitialState() {
 /**
  * Format rank card data for UI
  */
-export function formatRankCardData(state) {
-  const progress = getRankProgress(state.points);
-  const next = getNextRank(state.points);
-  
-  return {
-    rank: state.rank,
-    points: state.points,
-    streak: state.streak_days,
-    progress: Math.round(progress),
-    nextRank: next.name,
-    pointsToNext: next.pointsNeeded,
-  };
-}
+
 export function formatRankCardData(state) {
   const rankThresholds = {
     rookie: 100,
