@@ -74,6 +74,27 @@ export default function App() {
     }
   };
 
+  const calculateRetroactivePoints = (applications) => {
+    let points = 0;
+    
+    // 10 points per application
+    points += applications.length * 10;
+    
+    // 25 points per interview (status = interview, offered, or accepted)
+    const interviews = applications.filter(a => 
+      a.status === 'interview' || a.status === 'offered' || a.status === 'accepted'
+    ).length;
+    points += interviews * 25;
+    
+    // 50 points per offer (status = offered or accepted)
+    const offers = applications.filter(a => 
+      a.status === 'offered' || a.status === 'accepted'
+    ).length;
+    points += offers * 50;
+    
+    return points;
+  };
+
   const loadGamificationState = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -86,8 +107,22 @@ export default function App() {
         .single();
 
       if (error && error.code === 'PGRST116') {
-        // No row exists - create initial state
-        const initialState = gamification.getInitialState();
+        // No row exists - create initial state WITH retroactive credit
+        
+        // Load existing applications to calculate retroactive points
+        const { data: existingApps } = await supabase
+          .from('applications')
+          .select('*');
+        
+        const retroPoints = calculateRetroactivePoints(existingApps || []);
+        const initialRank = gamification.calculateRank(retroPoints);
+        
+        const initialState = {
+          ...gamification.getInitialState(),
+          points: retroPoints,
+          rank: initialRank,
+        };
+        
         const { data: newData, error: insertError } = await supabase
           .from('gamification_state')
           .insert([{ user_id: user.id, ...initialState }])
