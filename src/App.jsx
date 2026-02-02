@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload } from 'lucide-react';
+import {
+  Trash2,
+  Plus,
+  Edit2,
+  X,
+  Check,
+  Download,
+  LogOut,
+  Upload,
+} from 'lucide-react';
 import { supabase } from './supabaseClient';
 import MilestoneToast from './MilestoneToast.jsx';
 import * as gamification from './gamification.js';
@@ -9,39 +18,13 @@ import './animations.css';
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
+
   const [theme, setTheme] = useState('dark'); // 'dark' or 'garden'
-const applyGamification = async (action, actionData = {}) => {
-  if (!gamificationState) return;
-
-  const oldState = gamificationState;
-  const newState = gamification.computeNewState(oldState, action, actionData);
-
-  const milestones = gamification.detectMilestones(
-    oldState,
-    newState,
-    applications
-  );
-
-  setGamificationState(newState);
-
-  await supabase
-    .from('gamification_state')
-    .update(newState)
-    .eq('user_id', user.id);
-
-  if (milestones.length > 0) {
-    if (!activeMilestone) {
-      setActiveMilestone(milestones[0]);
-      setMilestoneQueue(milestones.slice(1));
-    } else {
-      setMilestoneQueue(prev => [...prev, ...milestones]);
-    }
-  }
-};
 
   const [applications, setApplications] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -55,19 +38,55 @@ const applyGamification = async (action, actionData = {}) => {
     date_applied: '',
     contact_person: '',
     status: 'applied',
-    notes: ''
+    notes: '',
   });
 
   const [gamificationState, setGamificationState] = useState(null);
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [milestoneQueue, setMilestoneQueue] = useState([]);
 
+  // Central gamification helper
+  const applyGamification = async (action, actionData = {}) => {
+    if (!gamificationState || !user) return;
+
+    const oldState = gamificationState;
+    const newState = gamification.computeNewState(
+      oldState,
+      action,
+      actionData,
+    );
+
+    const milestones = gamification.detectMilestones(
+      oldState,
+      newState,
+      applications,
+    );
+
+    setGamificationState(newState);
+
+    await supabase
+      .from('gamification_state')
+      .update(newState)
+      .eq('user_id', user.id);
+
+    if (milestones.length > 0) {
+      if (!activeMilestone) {
+        setActiveMilestone(milestones[0]);
+        setMilestoneQueue(milestones.slice(1));
+      } else {
+        setMilestoneQueue(prev => [...prev, ...milestones]);
+      }
+    }
+  };
+
   // Check if user is logged in on mount
   useEffect(() => {
     checkUser();
-    
+
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
@@ -83,6 +102,13 @@ const applyGamification = async (action, actionData = {}) => {
     }
   }, [user]);
 
+  // Streaks (optional): once per load of gamification state
+  useEffect(() => {
+    if (gamificationState && user) {
+      applyGamification('streak_bonus');
+    }
+  }, [gamificationState?.id, user?.id]);
+
   // Milestone queue handler
   useEffect(() => {
     if (milestoneQueue.length > 0 && !activeMilestone) {
@@ -93,7 +119,9 @@ const applyGamification = async (action, actionData = {}) => {
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       setUser(user);
     } catch (error) {
       console.error('Error checking user:', error);
@@ -102,35 +130,42 @@ const applyGamification = async (action, actionData = {}) => {
     }
   };
 
-  const calculateRetroactivePoints = (applications) => {
+  const calculateRetroactivePoints = applications => {
     let points = 0;
-    
+
     // 10 points per application
     points += applications.length * 10;
-    
+
     // 25 points per interview (status = interview, offered, or accepted)
-    const interviews = applications.filter(a => 
-      a.status === 'interview' || a.status === 'offered' || a.status === 'accepted'
+    const interviews = applications.filter(
+      a =>
+        a.status === 'interview' ||
+        a.status === 'offered' ||
+        a.status === 'accepted',
     ).length;
     points += interviews * 25;
-    
+
     // 50 points per offer (status = offered or accepted)
-    const offers = applications.filter(a => 
-      a.status === 'offered' || a.status === 'accepted'
+    const offers = applications.filter(
+      a => a.status === 'offered' || a.status === 'accepted',
     ).length;
     points += offers * 50;
-    
+
     return points;
   };
 
   const loadGamificationState = async () => {
     console.log('[GAMIFICATION] Starting loadGamificationState...');
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
         console.log('[GAMIFICATION] No user found, skipping');
         return;
       }
+
       console.log('[GAMIFICATION] User ID:', user.id);
 
       const { data, error } = await supabase
@@ -142,39 +177,61 @@ const applyGamification = async (action, actionData = {}) => {
       console.log('[GAMIFICATION] Query result:', { data, error });
 
       if (error && error.code === 'PGRST116') {
-        console.log('[GAMIFICATION] No existing state found, creating initial state...');
-        
-        // Load existing applications to calculate retroactive points
+        console.log(
+          '[GAMIFICATION] No existing state found, creating initial state...',
+        );
+
+        // Load existing applications for this user to calculate retro points
         const { data: existingApps } = await supabase
           .from('applications')
-          .select('*');
-        
-        console.log('[GAMIFICATION] Existing apps:', existingApps?.length || 0);
-        
-        const retroPoints = calculateRetroactivePoints(existingApps || []);
+          .select('*')
+          .eq('user_id', user.id);
+
+        console.log(
+          '[GAMIFICATION] Existing apps:',
+          existingApps?.length || 0,
+        );
+
+        const retroPoints = calculateRetroactivePoints(
+          existingApps || [],
+        );
         const initialRank = gamification.calculateRank(retroPoints);
-        
-        console.log('[GAMIFICATION] Retroactive points:', retroPoints, 'Initial rank:', initialRank);
-        
+
+        console.log(
+          '[GAMIFICATION] Retroactive points:',
+          retroPoints,
+          'Initial rank:',
+          initialRank,
+        );
+
         const initialState = {
           ...gamification.getInitialState(),
           points: retroPoints,
           rank: initialRank,
         };
-        
+
         const { data: newData, error: insertError } = await supabase
           .from('gamification_state')
           .insert([{ user_id: user.id, ...initialState }])
           .select()
           .single();
 
-        console.log('[GAMIFICATION] Insert result:', { newData, insertError });
+        console.log('[GAMIFICATION] Insert result:', {
+          newData,
+          insertError,
+        });
 
         if (!insertError) {
           setGamificationState(newData);
-          console.log('[GAMIFICATION] State set successfully:', newData);
+          console.log(
+            '[GAMIFICATION] State set successfully:',
+            newData,
+          );
         } else {
-          console.error('[GAMIFICATION] Insert error:', insertError);
+          console.error(
+            '[GAMIFICATION] Insert error:',
+            insertError,
+          );
         }
       } else if (!error) {
         setGamificationState(data);
@@ -183,14 +240,17 @@ const applyGamification = async (action, actionData = {}) => {
         console.error('[GAMIFICATION] Unexpected error:', error);
       }
     } catch (error) {
-      console.error('[GAMIFICATION] Error in loadGamificationState:', error);
+      console.error(
+        '[GAMIFICATION] Error in loadGamificationState:',
+        error,
+      );
     }
   };
 
-  const handleLogin = async (e) => {
+  const handleLogin = async e => {
     e.preventDefault();
     setAuthError('');
-    
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -198,17 +258,16 @@ const applyGamification = async (action, actionData = {}) => {
       });
 
       if (error) throw error;
-      
       setUser(data.user);
     } catch (error) {
       setAuthError(error.message);
     }
   };
 
-  const handleSignup = async (e) => {
+  const handleSignup = async e => {
     e.preventDefault();
     setAuthError('');
-    
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -216,9 +275,11 @@ const applyGamification = async (action, actionData = {}) => {
       });
 
       if (error) throw error;
-      
+
       if (data.user) {
-        alert('Account created! Please check your email to verify your account.');
+        alert(
+          'Account created! Please check your email to verify your account.',
+        );
       }
     } catch (error) {
       setAuthError(error.message);
@@ -230,21 +291,30 @@ const applyGamification = async (action, actionData = {}) => {
       await supabase.auth.signOut();
       setUser(null);
       setApplications([]);
+      setGamificationState(null);
+      setActiveMilestone(null);
+      setMilestoneQueue([]);
     } catch (error) {
       console.error('Error logging out:', error);
     }
   };
 
   const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'garden' : 'dark');
+    setTheme(prev => (prev === 'dark' ? 'garden' : 'dark'));
   };
 
   const loadApplications = async () => {
     try {
       setIsLoading(true);
+      if (!user) {
+        setApplications([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('applications')
         .select('*')
+        .eq('user_id', user.id)
         .order('date_applied', { ascending: false });
 
       if (error) {
@@ -267,20 +337,20 @@ const applyGamification = async (action, actionData = {}) => {
       date_applied: new Date().toISOString().split('T')[0],
       contact_person: '',
       status: 'applied',
-      notes: ''
+      notes: '',
     });
     setEditingId(null);
     setIsModalOpen(true);
   };
 
-  const handleEdit = (app) => {
+  const handleEdit = app => {
     setFormData({
       company: app.company,
       position: app.position,
       date_applied: app.date_applied,
       contact_person: app.contact_person,
       status: app.status,
-      notes: app.notes
+      notes: app.notes,
     });
     setEditingId(app.id);
     setIsModalOpen(true);
@@ -291,100 +361,67 @@ const applyGamification = async (action, actionData = {}) => {
       alert('Company and position are required');
       return;
     }
-const oldStatus = applications.find(a => a.id === editingId)?.status;
+
+    const oldStatus = applications.find(a => a.id === editingId)?.status;
 
     setIsSyncing(true);
+
     try {
       if (editingId) {
         // Update existing
         const { error } = await supabase
           .from('applications')
           .update(formData)
-          .eq('id', editingId);
+          .eq('id', editingId)
+          .eq('user_id', user.id);
 
         if (error) {
           console.error('Update error:', error);
           alert('Failed to update application');
           return;
         }
+
+        // Status change gamification
+        if (oldStatus && oldStatus !== formData.status) {
+          await applyGamification('update_status', {
+            oldStatus,
+            newStatus: formData.status,
+          });
+        }
       } else {
         // Insert new - with user_id
-        const { data: { user } } = await supabase.auth.getUser();
-        
         const { error } = await supabase
           .from('applications')
-          .insert([{
-            ...formData,
-            user_id: user.id
-          }]);
+          .insert([{ ...formData, user_id: user.id }]);
 
         if (error) {
           console.error('Insert error:', error);
           alert('Failed to save application');
           return;
         }
+
+        // New application gamification
+        await applyGamification('create_application');
       }
-await applyGamification('create_application');
 
       setIsModalOpen(false);
       await loadApplications();
-      
-      // Gamification update
-      if (gamificationState) {
-        const action = editingId ? 'update_status' : 'create_application';
-        const oldApp = editingId ? applications.find(a => a.id === editingId) : null;
-        const actionData = editingId 
-          ? { oldStatus: oldApp?.status, newStatus: formData.status }
-          : {};
-        
-        const newState = gamification.computeNewState(gamificationState, action, actionData);
-        await applyGamification('update_status', {
-  oldStatus,
-  newStatus: formData.status
-});
-
-        // Reload applications to get fresh count for milestone detection
-        const { data: freshApps } = await supabase
-          .from('applications')
-          .select('*')
-          .order('date_applied', { ascending: false });
-        
-        const milestones = gamification.detectMilestones(gamificationState, newState, freshApps || applications);
-        
-        // Update Supabase
-        const { data: { user } } = await supabase.auth.getUser();
-        const { error: updateError } = await supabase
-          .from('gamification_state')
-          .update({
-            points: newState.points,
-            streak_days: newState.streak_days,
-            last_activity: newState.last_activity,
-            rank: newState.rank,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
-        
-        if (!updateError) {
-          setGamificationState(newState);
-          if (milestones.length > 0) {
-            setMilestoneQueue(milestones);
-          }
-        }
-      }
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this application?')) return;
+  const handleDelete = async id => {
+    if (!window.confirm('Delete this application?')) return;
 
     setIsSyncing(true);
+
     try {
       const { error } = await supabase
         .from('applications')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) {
         console.error('Delete error:', error);
@@ -404,14 +441,22 @@ await applyGamification('create_application');
   };
 
   const exportToCSV = () => {
-    const headers = ['Company', 'Position', 'Date Applied', 'Contact Person', 'Status', 'Notes'];
+    const headers = [
+      'Company',
+      'Position',
+      'Date Applied',
+      'Contact Person',
+      'Status',
+      'Notes',
+    ];
+
     const rows = applications.map(app => [
       app.company,
       app.position,
       app.date_applied,
       app.contact_person,
       app.status,
-      app.notes
+      app.notes,
     ]);
 
     const csv = [headers, ...rows]
@@ -420,11 +465,16 @@ await applyGamification('create_application');
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
+
     const a = document.createElement('a');
     a.href = url;
-    a.download = `job-applications-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `job-applications-${new Date()
+      .toISOString()
+      .split('T')[0]}.csv`;
+
     document.body.appendChild(a);
     a.click();
+
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
   };
@@ -432,51 +482,39 @@ await applyGamification('create_application');
   const exportToPDF = () => {
     const printWindow = window.open('', '', 'height=600,width=800');
     const html = `
-      <!DOCTYPE html>
       <html>
-        <head>
-          <title>Job Applications</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; padding: 0; }
-            h1 { text-align: center; margin-bottom: 10px; }
-            .date { text-align: center; color: #666; margin-bottom: 20px; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th { background-color: #f0f0f0; border: 1px solid #ddd; padding: 10px; text-align: left; font-weight: bold; }
-            td { border: 1px solid #ddd; padding: 10px; }
-            tr:nth-child(even) { background-color: #f9f9f9; }
-            .footer { text-align: right; font-size: 11px; color: #666; margin-top: 20px; }
-            @media print { body { margin: 0; padding: 10px; } }
-          </style>
-        </head>
-        <body>
-          <h1>Job Application Tracker</h1>
-          <div class="date">Generated on ${new Date().toLocaleDateString('de-DE')}</div>
-          <table>
-            <thead>
-              <tr>
-                <th>Company</th>
-                <th>Position</th>
-                <th>Date Applied</th>
-                <th>Contact Person</th>
-                <th>Status</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${applications.map(app => `
-                <tr>
-                  <td>${app.company}</td>
-                  <td>${app.position}</td>
-                  <td>${new Date(app.date_applied).toLocaleDateString('de-DE')}</td>
-                  <td>${app.contact_person || 'â€”'}</td>
-                  <td>${app.status}</td>
-                  <td>${app.notes}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div class="footer">Total Applications: ${applications.length}</div>
-        </body>
+      <head>
+        <title>Job Applications</title>
+      </head>
+      <body>
+        <h1>Job Applications</h1>
+        <table border="1" cellspacing="0" cellpadding="4">
+          <tr>
+            <th>Company</th>
+            <th>Position</th>
+            <th>Date Applied</th>
+            <th>Contact Person</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+          ${applications
+            .map(
+              app => `
+            <tr>
+              <td>${app.company}</td>
+              <td>${app.position}</td>
+              <td>${new Date(
+                app.date_applied,
+              ).toLocaleDateString('de-DE')}</td>
+              <td>${app.contact_person || '—'}</td>
+              <td>${app.status}</td>
+              <td>${app.notes || ''}</td>
+            </tr>
+          `,
+            )
+            .join('')}
+        </table>
+      </body>
       </html>
     `;
     printWindow.document.write(html);
@@ -484,456 +522,496 @@ await applyGamification('create_application');
     printWindow.print();
   };
 
-  const parseCSV = (text) => {
-    const lines = text.split('\n').filter(line => line.trim());
-    if (lines.length < 2) return [];
+  const exportToJSON = () => {
+    const json = JSON.stringify(applications, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    const rows = [];
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `job-applications-${new Date()
+      .toISOString()
+      .split('T')[0]}.json`;
 
-    for (let i = 1; i < lines.length; i++) {
-      const values = [];
-      let current = '';
-      let inQuotes = false;
+    document.body.appendChild(a);
+    a.click();
 
-      for (let char of lines[i]) {
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-          values.push(current.trim().replace(/^"|"$/g, ''));
-          current = '';
-        } else {
-          current += char;
-        }
-      }
-      values.push(current.trim().replace(/^"|"$/g, ''));
-
-      if (values.length === headers.length) {
-        const row = {};
-        headers.forEach((header, index) => {
-          row[header.toLowerCase().replace(/ /g, '_')] = values[index];
-        });
-        rows.push(row);
-      }
-    }
-
-    return rows;
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
-  const validateAndFormatCSVData = (rows) => {
-    const validStatuses = ['applied', 'interview', 'offered', 'rejected', 'accepted'];
-    const formatted = [];
-
-    for (const row of rows) {
-      if (!row.company || !row.position) {
-        continue;
-      }
-
-      const status = row.status?.toLowerCase();
-      const formattedRow = {
-        company: row.company,
-        position: row.position,
-        date_applied: row.date_applied || new Date().toISOString().split('T')[0],
-        contact_person: row.contact_person || '',
-        status: validStatuses.includes(status) ? status : 'applied',
-        notes: row.notes || ''
-      };
-
-      formatted.push(formattedRow);
-    }
-
-    return formatted;
-  };
-
-  const findDuplicates = (newData) => {
-    const duplicates = [];
-    
-    for (const newApp of newData) {
-      const isDuplicate = applications.some(existingApp => 
-        existingApp.company.toLowerCase() === newApp.company.toLowerCase() &&
-        existingApp.position.toLowerCase() === newApp.position.toLowerCase()
-      );
-      
-      if (isDuplicate) {
-        duplicates.push(newApp);
-      }
-    }
-
-    return duplicates;
-  };
-
-  const handleCSVUpload = async (event) => {
-    const file = event.target.files[0];
+  const handleFileUpload = async e => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
-    event.target.value = '';
-
-    setIsSyncing(true);
     try {
       const text = await file.text();
-      const parsedData = parseCSV(text);
-      
-      if (parsedData.length === 0) {
-        alert('No valid data found in CSV file. Please check the format.');
+      const imported = JSON.parse(text);
+
+      if (!Array.isArray(imported)) {
+        alert('Invalid JSON format: expected an array of applications.');
         return;
       }
 
-      const validatedData = validateAndFormatCSVData(parsedData);
-      
-      if (validatedData.length === 0) {
-        alert('No valid applications found. Make sure each row has Company and Position.');
-        return;
-      }
+      setIsSyncing(true);
 
-      const duplicates = findDuplicates(validatedData);
-      
-      if (duplicates.length > 0) {
-        const duplicateList = duplicates
-          .map(d => `${d.company} - ${d.position}`)
-          .join('\n');
-        
-        const confirmed = confirm(
-          `Found ${duplicates.length} potential duplicate(s):\n\n${duplicateList}\n\nDo you want to import them anyway?`
-        );
-        
-        if (!confirmed) {
-          return;
-        }
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const dataToInsert = validatedData.map(app => ({
-        ...app,
-        user_id: user.id
+      const rows = imported.map(app => ({
+        company: app.company || '',
+        position: app.position || '',
+        date_applied:
+          app.date_applied ||
+          new Date().toISOString().split('T')[0],
+        contact_person: app.contact_person || '',
+        status: app.status || 'applied',
+        notes: app.notes || '',
+        user_id: user.id,
       }));
 
       const { error } = await supabase
         .from('applications')
-        .insert(dataToInsert);
+        .insert(rows);
 
       if (error) {
-        console.error('CSV upload error:', error);
-        alert('Failed to upload applications. Please try again.');
+        console.error('Import error:', error);
+        alert('Failed to import applications');
         return;
       }
 
-      alert(`Successfully imported ${validatedData.length} application(s)!`);
       await loadApplications();
-    } catch (error) {
-      console.error('CSV processing error:', error);
-      alert('Failed to process CSV file. Please check the format.');
+      alert(`Imported ${rows.length} applications.`);
+    } catch (err) {
+      console.error('Import parse error:', err);
+      alert('Failed to parse JSON file.');
     } finally {
       setIsSyncing(false);
+      e.target.value = '';
     }
   };
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-slate-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Login/Signup screen
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient flex items-center justify-center px-4">
-        <div className="max-w-md w-full">
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-8 shadow-2xl">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-slate-50 mb-2">Application Monitor</h1>
-              <p className="text-slate-400">Track your job applications</p>
-            </div>
-
-            <div className="flex gap-2 mb-6">
-              <button
-                onClick={() => {
-                  setAuthMode('login');
-                  setAuthError('');
-                }}
-                className={`flex-1 py-2 rounded-lg transition-colors ${
-                  authMode === 'login'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
-                }`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => {
-                  setAuthMode('signup');
-                  setAuthError('');
-                }}
-                className={`flex-1 py-2 rounded-lg transition-colors ${
-                  authMode === 'signup'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
-                }`}
-              >
-                Sign Up
-              </button>
-            </div>
-
-            <form onSubmit={authMode === 'login' ? handleLogin : handleSignup}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-slate-300 text-sm mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
-                    required
-                    className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 text-sm mb-2">Password</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                    required
-                    className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {authError && (
-                  <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3">
-                    <p className="text-red-400 text-sm">{authError}</p>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors"
-                >
-                  {authMode === 'login' ? 'Login' : 'Sign Up'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Main app (when logged in)
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-slate-400">Loading your applications...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const filteredApplications = filterStatus === 'all'
-    ? applications
-    : applications.filter(app => app.status === filterStatus);
-
   const statusConfig = {
-    applied: { bg: 'bg-blue-500/10', text: 'text-blue-600', label: 'Applied' },
-    interview: { bg: 'bg-yellow-500/10', text: 'text-yellow-600', label: 'Interview' },
-    offered: { bg: 'bg-green-500/10', text: 'text-green-600', label: 'Offered' },
-    rejected: { bg: 'bg-red-500/10', text: 'text-red-600', label: 'Rejected' },
-    accepted: { bg: 'bg-emerald-500/10', text: 'text-emerald-600', label: 'Accepted' }
+    applied: {
+      label: 'Applied',
+      color: 'bg-blue-500/10 text-blue-400 border-blue-500/40',
+    },
+    interview: {
+      label: 'Interview',
+      color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/40',
+    },
+    offered: {
+      label: 'Offer',
+      color: 'bg-green-500/10 text-green-400 border-green-500/40',
+    },
+    rejected: {
+      label: 'Rejected',
+      color: 'bg-red-500/10 text-red-400 border-red-500/40',
+    },
+    accepted: {
+      label: 'Accepted',
+      color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40',
+    },
   };
+
+  const filteredApplications =
+    filterStatus === 'all'
+      ? applications
+      : applications.filter(app => app.status === filterStatus);
 
   const stats = {
     total: applications.length,
     applied: applications.filter(a => a.status === 'applied').length,
     interview: applications.filter(a => a.status === 'interview').length,
-    offered: applications.filter(a => a.status === 'offered').length
+    offered: applications.filter(a => a.status === 'offered').length,
   };
 
-  return (
-    <div className="min-h-screen bg-gradient" data-theme={theme}>
-      <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="header-row mb-4">
-            <div className="header-title-group">
-              <div className="header-accent"></div>
-              <h1 className="text-3xl font-bold text-slate-50">Application Monitor</h1>
-            </div>
-            <div className="header-actions">
-              <span className="text-slate-400 text-sm">{user.email}</span>
-              <button
-                onClick={toggleTheme}
-                className="theme-toggle px-3 py-2 rounded-lg transition-colors"
-                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-              >
-                {theme === 'dark' ? '☀️' : '🌙'}
-              </button>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-slate-300"
-              >
-                <LogOut size={16} /> Logout
-              </button>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
-            <p className="text-slate-400 text-xs">{isSyncing ? '● Syncing...' : '● Synced to cloud'}</p>
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-2 border-slate-700 border-t-sky-500 rounded-full animate-spin mx-auto" />
+          <div className="text-slate-400 text-sm">
+            Loading your applications...
           </div>
         </div>
+      </div>
+    );
+  }
 
-        {/* Stats Grid */}
-        <div className="stats-grid">
-          <div className="stat-card stat-card-total">
-            <p className="stat-label">Total</p>
-            <p className="stat-value">{stats.total}</p>
-          </div>
-          <div className="stat-card stat-card-applied">
-            <p className="stat-label">Applied</p>
-            <p className="stat-value">{stats.applied}</p>
-          </div>
-          <div className="stat-card stat-card-interview">
-            <p className="stat-label">Interviews</p>
-            <p className="stat-value">{stats.interview}</p>
-          </div>
-          <div className="stat-card stat-card-offered">
-            <p className="stat-label">Offers</p>
-            <p className="stat-value">{stats.offered}</p>
-          </div>
-          {gamificationState && (
-            <div className="stat-card stat-card-total">
-              <p className="stat-label">Rank</p>
-              <p className="stat-value" style={{ fontSize: '1.25rem' }}>{gamificationState.rank}</p>
-              <div className="rank-progress-bar">
-                <div 
-                  className="rank-progress-fill" 
-                  style={{ '--progress-width': `${gamification.getRankProgress(gamificationState.points)}%` }}
-                />
-              </div>
-              <p className="text-xs text-slate-400" style={{ marginTop: '0.5rem' }}>
-                {gamificationState.points} pts
-                {gamificationState.streak_days > 0 && (
-                  <span className="streak-badge" style={{ marginLeft: '0.5rem' }}>
-                    🔥 {gamificationState.streak_days} day{gamificationState.streak_days !== 1 ? 's' : ''}
-                  </span>
-                )}
-              </p>
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
+        <div className="w-full max-w-md p-6 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-sky-500/10">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-xl font-semibold tracking-tight">
+              Track your job applications
+            </h1>
+            <div className="px-2 py-1 rounded-full border border-slate-700 text-[11px] uppercase tracking-wide text-slate-400">
+              Beta
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* Controls */}
-        <div className="controls">
-          <button 
-            onClick={handleAddNew}
-            className="btn-primary"
-            disabled={isSyncing}
-          >
-            <Plus size={18} /> New Application
-          </button>
-
-          <div className="export-buttons">
-            <label 
-              className="btn-upload"
-              title="CSV Format: Company, Position, Date Applied, Contact Person, Status, Notes&#10;&#10;Required: Company and Position&#10;Status must be: applied, interview, offered, rejected, or accepted"
+          <div className="flex mb-4 rounded-full bg-slate-900 p-1 border border-slate-800">
+            <button
+              onClick={() => setAuthMode('login')}
+              className={`flex-1 py-1.5 text-xs rounded-full transition-all ${
+                authMode === 'login'
+                  ? 'bg-slate-100 text-slate-950 font-medium shadow'
+                  : 'text-slate-400'
+              }`}
             >
-              <Upload size={16} /> Import CSV
+              Login
+            </button>
+            <button
+              onClick={() => setAuthMode('signup')}
+              className={`flex-1 py-1.5 text-xs rounded-full transition-all ${
+                authMode === 'signup'
+                  ? 'bg-slate-100 text-slate-950 font-medium shadow'
+                  : 'text-slate-400'
+              }`}
+            >
+              Sign up
+            </button>
+          </div>
+
+          <form
+            className="space-y-4"
+            onSubmit={authMode === 'login' ? handleLogin : handleSignup}
+          >
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-300">
+                Email
+              </label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-300">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {authError && (
+              <div className="text-xs text-red-400 bg-red-950/40 border border-red-900/60 rounded-lg px-3 py-2">
+                {authError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full inline-flex items-center justify-center gap-2 mt-1 px-3 py-2 rounded-lg text-sm font-medium bg-sky-500 text-slate-950 hover:bg-sky-400 transition-colors"
+            >
+              <Check className="w-4 h-4" />
+              {authMode === 'login' ? 'Login' : 'Create account'}
+            </button>
+
+            <p className="text-[11px] text-slate-500 mt-2">
+              Your applications are securely stored in the cloud and synced
+              across devices.
+            </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const themeClasses =
+    theme === 'dark'
+      ? 'bg-slate-950 text-slate-100'
+      : 'bg-emerald-50 text-emerald-950';
+
+  return (
+    <div
+      className={`min-h-screen ${themeClasses} transition-colors duration-300`}
+    >
+      <div className="max-w-5xl mx-auto px-4 py-6">
+        <header className="flex items-center justify-between mb-6">
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold tracking-tight">
+              Track job applications across your pipeline
+            </h1>
+            <div className="flex items-center gap-3 text-[11px] text-slate-500">
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${
+                  isSyncing
+                    ? 'border-yellow-500/40 text-yellow-400'
+                    : 'border-emerald-500/40 text-emerald-400'
+                } bg-slate-900/60`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isSyncing ? 'bg-yellow-400' : 'bg-emerald-400'
+                  }`}
+                />
+                {isSyncing ? 'Syncing...' : 'Synced to cloud'}
+              </span>
+              {gamificationState && (
+                <span className="inline-flex items-center gap-2 text-xs text-slate-400">
+                  Rank{' '}
+                  <span className="px-2 py-0.5 rounded-full border border-slate-700 bg-slate-900/60 text-[10px] uppercase tracking-wide">
+                    {gamificationState.rank}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    {gamificationState.points} pts
+                    {gamificationState.streak_days > 0 && (
+                      <>
+                        {' '}
+                        🔥 {gamificationState.streak_days} day
+                        {gamificationState.streak_days !== 1 ? 's' : ''}
+                      </>
+                    )}
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="inline-flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors"
+            >
+              {theme === 'dark' ? '🌿 Garden' : '🌘 Dark'}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-slate-700 bg-slate-900/80 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors"
+            >
+              <LogOut className="w-3 h-3" />
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-[1fr_auto] gap-4 items-start mb-4">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAddNew}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-sky-500 text-slate-950 hover:bg-sky-400 transition-colors shadow shadow-sky-500/20"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add application
+            </button>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+              <span>Keep track of every role you apply for</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportToCSV}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-slate-700 bg-slate-900/80 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors"
+            >
+              <Download className="w-3 h-3" />
+              CSV
+            </button>
+            <button
+              onClick={exportToJSON}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-slate-700 bg-slate-900/80 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors"
+            >
+              <Download className="w-3 h-3" />
+              JSON
+            </button>
+            <button
+              onClick={exportToPDF}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-slate-700 bg-slate-900/80 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors"
+            >
+              <Download className="w-3 h-3" />
+              PDF
+            </button>
+            <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-slate-700 bg-slate-900/80 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors cursor-pointer">
+              <Upload className="w-3 h-3" />
+              Import
               <input
                 type="file"
-                accept=".csv"
-                onChange={handleCSVUpload}
-                style={{ display: 'none' }}
-                disabled={isSyncing}
+                accept=".json"
+                className="hidden"
+                onChange={handleFileUpload}
               />
             </label>
-            <button 
-              onClick={exportToCSV}
-              className="btn-export"
-              disabled={applications.length === 0}
-            >
-              <Download size={16} /> CSV
-            </button>
-            <button 
-              onClick={exportToPDF}
-              className="btn-export"
-              disabled={applications.length === 0}
-            >
-              <Download size={16} /> PDF
-            </button>
           </div>
-          
-          <div className="filter-buttons">
-            {['all', 'applied', 'interview', 'offered', 'rejected', 'accepted'].map(status => (
+        </div>
+
+        <div className="grid grid-cols-5 gap-3 mb-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+            <div className="text-[11px] text-slate-500 mb-1">Total</div>
+            <div className="text-xl font-semibold">{stats.total}</div>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+            <div className="text-[11px] text-slate-500 mb-1">Applied</div>
+            <div className="text-xl font-semibold">{stats.applied}</div>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+            <div className="text-[11px] text-slate-500 mb-1">Interviews</div>
+            <div className="text-xl font-semibold">{stats.interview}</div>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+            <div className="text-[11px] text-slate-500 mb-1">Offers</div>
+            <div className="text-xl font-semibold">{stats.offered}</div>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+            <div className="text-[11px] text-slate-500 mb-1">Rank</div>
+            {gamificationState ? (
+              <>
+                <div className="text-sm font-semibold">
+                  {gamificationState.rank}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {gamificationState.points} pts
+                  {gamificationState.streak_days > 0 && (
+                    <>
+                      {' '}
+                      🔥 {gamificationState.streak_days} day
+                      {gamificationState.streak_days !== 1 ? 's' : ''}
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="text-[11px] text-slate-600">Loading…</div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex gap-1.5 text-[11px]">
+            {[
+              'all',
+              'applied',
+              'interview',
+              'offered',
+              'rejected',
+              'accepted',
+            ].map(status => (
               <button
                 key={status}
                 onClick={() => setFilterStatus(status)}
-                className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
+                className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
+                  filterStatus === status
+                    ? 'bg-sky-500 text-slate-950 border-sky-500'
+                    : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:bg-slate-800/90'
+                }`}
               >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
+                {status === 'all'
+                  ? 'All'
+                  : statusConfig[status].label}
               </button>
             ))}
           </div>
+          <div className="text-[11px] text-slate-500">
+            Showing {filteredApplications.length} of {applications.length}{' '}
+            applications
+          </div>
         </div>
 
-        {/* Applications Table */}
-        <div className="table-wrapper">
-          <table>
-            <thead>
+        <div className="rounded-xl border border-slate-800 bg-slate-950/70 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/80 border-b border-slate-800">
               <tr>
-                <th>Company</th>
-                <th>Position</th>
-                <th>Applied</th>
-                <th>Contact</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th className="text-left px-3 py-2 text-[11px] font-medium text-slate-400">
+                  Company
+                </th>
+                <th className="text-left px-3 py-2 text-[11px] font-medium text-slate-400">
+                  Position
+                </th>
+                <th className="text-left px-3 py-2 text-[11px] font-medium text-slate-400">
+                  Applied
+                </th>
+                <th className="text-left px-3 py-2 text-[11px] font-medium text-slate-400">
+                  Contact
+                </th>
+                <th className="text-left px-3 py-2 text-[11px] font-medium text-slate-400">
+                  Status
+                </th>
+                <th className="text-right px-3 py-2 text-[11px] font-medium text-slate-400">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredApplications.length === 0 ? (
+              {isLoading ? (
                 <tr>
-                  <td colSpan="6" className="empty-state">
-                    No applications found. {filterStatus !== 'all' && 'Try changing the filter.'}
+                  <td
+                    colSpan={6}
+                    className="px-3 py-6 text-center text-sm text-slate-500"
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              ) : filteredApplications.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-3 py-6 text-center text-sm text-slate-500"
+                  >
+                    No applications found.{` `}
+                    {filterStatus !== 'all' &&
+                      'Try changing the filter.'}
                   </td>
                 </tr>
               ) : (
                 filteredApplications.map(app => (
-                  <tr key={app.id}>
-                    <td className="company-name">{app.company}</td>
-                    <td className="position-name">{app.position}</td>
-                    <td className="date">
-                      {new Date(app.date_applied).toLocaleDateString()}
+                  <tr
+                    key={app.id}
+                    className="border-t border-slate-900/80 hover:bg-slate-900/60"
+                  >
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-slate-100">
+                        {app.company}
+                      </div>
                     </td>
-                    <td className="contact">{app.contact_person || 'â€”'}</td>
-                    <td>
-                      <span className={`status-badge ${statusConfig[app.status].bg} ${statusConfig[app.status].text}`}>
-                        {statusConfig[app.status].label}
+                    <td className="px-3 py-2 text-slate-200">
+                      {app.position}
+                    </td>
+                    <td className="px-3 py-2 text-slate-400">
+                      {app.date_applied
+                        ? new Date(
+                            app.date_applied,
+                          ).toLocaleDateString()
+                        : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-slate-300">
+                      {app.contact_person || '—'}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] ${
+                          statusConfig[app.status]?.color ||
+                          statusConfig.applied.color
+                        }`}
+                      >
+                        {statusConfig[app.status]?.label ||
+                          statusConfig.applied.label}
                       </span>
                     </td>
-                    <td className="action-buttons">
-                      <button
-                        onClick={() => handleEdit(app)}
-                        className="btn-icon"
-                        title="Edit"
-                        disabled={isSyncing}
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(app.id)}
-                        className="btn-icon delete"
-                        title="Delete"
-                        disabled={isSyncing}
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                    <td className="px-3 py-2 text-right">
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleEdit(app)}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-slate-700 bg-slate-900/80 text-slate-300 hover:bg-slate-800/90 transition-colors"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(app.id)}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-red-900/60 bg-red-950/60 text-red-300 hover:bg-red-900/80 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -942,128 +1020,168 @@ await applyGamification('create_application');
           </table>
         </div>
 
-        {/* Footer */}
-        {filteredApplications.length > 0 && (
-          <div className="footer">
-            <p>Showing {filteredApplications.length} of {applications.length} applications</p>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl shadow-sky-500/20 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold">
+                  {editingId ? 'Edit application' : 'New application'}
+                </h2>
+                <button
+                  onClick={handleCancel}
+                  className="w-7 h-7 inline-flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 text-slate-300 hover:bg-slate-800/90 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="block text-xs text-slate-300">
+                    Company
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.company}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        company: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    placeholder="Acme Corp"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs text-slate-300">
+                    Position
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.position}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        position: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    placeholder="Frontend Engineer"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-xs text-slate-300">
+                      Date applied
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.date_applied}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          date_applied: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs text-slate-300">
+                      Status
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          status: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    >
+                      <option value="applied">Applied</option>
+                      <option value="interview">Interview</option>
+                      <option value="offered">Offered</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="accepted">Accepted</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs text-slate-300">
+                    Contact person
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.contact_person}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        contact_person: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    placeholder="Hiring manager, recruiter, etc."
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs text-slate-300">
+                    Notes
+                  </label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        notes: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    rows={3}
+                    placeholder="Anything relevant about this application..."
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  onClick={handleCancel}
+                  className="inline-flex items-center px-3 py-1.5 rounded-full border border-slate-700 bg-slate-900/80 text-xs text-slate-300 hover:bg-slate-800/90 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-500 text-xs font-medium text-slate-950 hover:bg-sky-400 transition-colors"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Save
+                </button>
+              </div>
+            </div>
           </div>
         )}
+
+        {activeMilestone && (
+          <MilestoneToast
+            milestone={activeMilestone}
+            onDismiss={() => {
+              setActiveMilestone(null);
+              if (milestoneQueue.length > 0) {
+                const [next, ...rest] = milestoneQueue;
+                setMilestoneQueue(rest);
+                setActiveMilestone(next);
+              }
+            }}
+          />
+        )}
       </div>
-
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="modal-backdrop" onClick={handleCancel}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                {editingId ? 'Edit Application' : 'New Application'}
-              </h2>
-              <button
-                onClick={handleCancel}
-                className="modal-close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="form-group">
-                <label>Company *</label>
-                <input
-                  type="text"
-                  value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  placeholder="e.g., Acme Corp"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Position *</label>
-                <input
-                  type="text"
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  placeholder="e.g., Senior Engineer"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Date Applied</label>
-                <input
-                  type="date"
-                  value={formData.date_applied}
-                  onChange={(e) => setFormData({ ...formData, date_applied: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Contact Person</label>
-                <input
-                  type="text"
-                  value={formData.contact_person}
-                  onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                  placeholder="e.g., John Doe, Hiring Manager"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                >
-                  <option value="applied">Applied</option>
-                  <option value="interview">Interview</option>
-                  <option value="offered">Offered</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="accepted">Accepted</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Notes</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Interview date, follow-up info, etc."
-                  rows={4}
-                />
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                onClick={handleCancel}
-                className="btn-cancel"
-                disabled={isSyncing}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="btn-save"
-                disabled={isSyncing}
-              >
-                <Check size={18} /> {isSyncing ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-  {activeMilestone && (
-  <MilestoneToast
-    milestone={activeMilestone}
-    onDismiss={() => {
-      setActiveMilestone(null);
-      if (milestoneQueue.length > 0) {
-        const [next, ...rest] = milestoneQueue;
-        setMilestoneQueue(rest);
-        setActiveMilestone(next);
-      }
-    }}
-  />
-)}
     </div>
   );
 }
