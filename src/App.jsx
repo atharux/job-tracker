@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload } from 'lucide-react';
+import {
+  Trash2,
+  Plus,
+  Edit2,
+  X,
+  Check,
+  Download,
+  LogOut,
+  Upload,
+} from 'lucide-react';
 import { supabase } from './supabaseClient';
 import MilestoneToast from './MilestoneToast.jsx';
 import * as gamification from './gamification.js';
@@ -36,13 +45,22 @@ export default function App() {
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [milestoneQueue, setMilestoneQueue] = useState([]);
 
-  // ------ NEW: central gamification helper ------
+  // Central gamification helper
   const applyGamification = async (action, actionData = {}) => {
     if (!gamificationState || !user) return;
 
     const oldState = gamificationState;
-    const newState = gamification.computeNewState(oldState, action, actionData);
-    const milestones = gamification.detectMilestones(oldState, newState, applications);
+    const newState = gamification.computeNewState(
+      oldState,
+      action,
+      actionData,
+    );
+
+    const milestones = gamification.detectMilestones(
+      oldState,
+      newState,
+      applications,
+    );
 
     setGamificationState(newState);
 
@@ -60,7 +78,6 @@ export default function App() {
       }
     }
   };
-  // ---------------------------------------------
 
   // Check if user is logged in on mount
   useEffect(() => {
@@ -77,20 +94,15 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load applications & gamification when user logs in
+  // Load applications when user logs in
   useEffect(() => {
     if (user) {
       loadApplications();
       loadGamificationState();
-    } else {
-      setApplications([]);
-      setGamificationState(null);
-      setActiveMilestone(null);
-      setMilestoneQueue([]);
     }
   }, [user]);
 
-  // Optional streaks: once per day after login (simple implementation)
+  // Streaks (optional): once per load of gamification state
   useEffect(() => {
     if (gamificationState && user) {
       applyGamification('streak_bonus');
@@ -148,6 +160,7 @@ export default function App() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       if (!user) {
         console.log('[GAMIFICATION] No user found, skipping');
         return;
@@ -168,7 +181,7 @@ export default function App() {
           '[GAMIFICATION] No existing state found, creating initial state...',
         );
 
-        // Load existing applications to calculate retroactive points
+        // Load existing applications for this user to calculate retro points
         const { data: existingApps } = await supabase
           .from('applications')
           .select('*')
@@ -179,7 +192,9 @@ export default function App() {
           existingApps?.length || 0,
         );
 
-        const retroPoints = calculateRetroactivePoints(existingApps || []);
+        const retroPoints = calculateRetroactivePoints(
+          existingApps || [],
+        );
         const initialRank = gamification.calculateRank(retroPoints);
 
         console.log(
@@ -189,9 +204,8 @@ export default function App() {
           initialRank,
         );
 
-        const baseInitial = gamification.getInitialState();
         const initialState = {
-          ...baseInitial,
+          ...gamification.getInitialState(),
           points: retroPoints,
           rank: initialRank,
         };
@@ -277,6 +291,9 @@ export default function App() {
       await supabase.auth.signOut();
       setUser(null);
       setApplications([]);
+      setGamificationState(null);
+      setActiveMilestone(null);
+      setMilestoneQueue([]);
     } catch (error) {
       console.error('Error logging out:', error);
     }
@@ -289,6 +306,10 @@ export default function App() {
   const loadApplications = async () => {
     try {
       setIsLoading(true);
+      if (!user) {
+        setApplications([]);
+        return;
+      }
 
       const { data, error } = await supabase
         .from('applications')
@@ -456,6 +477,49 @@ export default function App() {
 
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+  };
+
+  const exportToPDF = () => {
+    const printWindow = window.open('', '', 'height=600,width=800');
+    const html = `
+      <html>
+      <head>
+        <title>Job Applications</title>
+      </head>
+      <body>
+        <h1>Job Applications</h1>
+        <table border="1" cellspacing="0" cellpadding="4">
+          <tr>
+            <th>Company</th>
+            <th>Position</th>
+            <th>Date Applied</th>
+            <th>Contact Person</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+          ${applications
+            .map(
+              app => `
+            <tr>
+              <td>${app.company}</td>
+              <td>${app.position}</td>
+              <td>${new Date(
+                app.date_applied,
+              ).toLocaleDateString('de-DE')}</td>
+              <td>${app.contact_person || '—'}</td>
+              <td>${app.status}</td>
+              <td>${app.notes || ''}</td>
+            </tr>
+          `,
+            )
+            .join('')}
+        </table>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const exportToJSON = () => {
@@ -761,6 +825,13 @@ export default function App() {
               <Download className="w-3 h-3" />
               JSON
             </button>
+            <button
+              onClick={exportToPDF}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-slate-700 bg-slate-900/80 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors"
+            >
+              <Download className="w-3 h-3" />
+              PDF
+            </button>
             <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-slate-700 bg-slate-900/80 text-[11px] text-slate-300 hover:bg-slate-800/90 transition-colors cursor-pointer">
               <Upload className="w-3 h-3" />
               Import
@@ -774,7 +845,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-5 gap-3 mb-4">
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
             <div className="text-[11px] text-slate-500 mb-1">Total</div>
             <div className="text-xl font-semibold">{stats.total}</div>
@@ -791,27 +862,54 @@ export default function App() {
             <div className="text-[11px] text-slate-500 mb-1">Offers</div>
             <div className="text-xl font-semibold">{stats.offered}</div>
           </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+            <div className="text-[11px] text-slate-500 mb-1">Rank</div>
+            {gamificationState ? (
+              <>
+                <div className="text-sm font-semibold">
+                  {gamificationState.rank}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {gamificationState.points} pts
+                  {gamificationState.streak_days > 0 && (
+                    <>
+                      {' '}
+                      🔥 {gamificationState.streak_days} day
+                      {gamificationState.streak_days !== 1 ? 's' : ''}
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="text-[11px] text-slate-600">Loading…</div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between mb-2">
           <div className="flex gap-1.5 text-[11px]">
-            {['all', 'applied', 'interview', 'offered', 'rejected', 'accepted'].map(
-              status => (
-                <button
-                  key={status}
-                  onClick={() => setFilterStatus(status)}
-                  className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
-                    filterStatus === status
-                      ? 'bg-sky-500 text-slate-950 border-sky-500'
-                      : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:bg-slate-800/90'
-                  }`}
-                >
-                  {status === 'all'
-                    ? 'All'
-                    : statusConfig[status].label}
-                </button>
-              ),
-            )}
+            {[
+              'all',
+              'applied',
+              'interview',
+              'offered',
+              'rejected',
+              'accepted',
+            ].map(status => (
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status)}
+                className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
+                  filterStatus === status
+                    ? 'bg-sky-500 text-slate-950 border-sky-500'
+                    : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:bg-slate-800/90'
+                }`}
+              >
+                {status === 'all'
+                  ? 'All'
+                  : statusConfig[status].label}
+              </button>
+            ))}
           </div>
           <div className="text-[11px] text-slate-500">
             Showing {filteredApplications.length} of {applications.length}{' '}
@@ -1070,7 +1168,6 @@ export default function App() {
           </div>
         )}
 
-        {/* NEW: render milestone toast near bottom of main app */}
         {activeMilestone && (
           <MilestoneToast
             milestone={activeMilestone}
