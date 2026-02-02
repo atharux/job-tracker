@@ -303,3 +303,28 @@ export function formatRankCardData(state) {
     pointsToNext: next.pointsNeeded,
   };
 }
+export function formatRankCardData(state) {
+  const rankThresholds = {
+    rookie: 100,
+    junior: 300,
+    mid: 700,
+    senior: 1500,
+    principal: 3000,
+  };
+
+  const nextRankPoints =
+    rankThresholds[state.rank] ?? rankThresholds.rookie;
+
+  const progressPercent = Math.min(
+    100,
+    Math.round((state.points / nextRankPoints) * 100)
+  );
+
+  return {
+    currentRank: state.rank,
+    currentPoints: state.points,
+    nextRankPoints,
+    progressPercent,
+    streakDays: state.streak_days || 0,
+  };
+}
