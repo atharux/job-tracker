@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload } from 'lucide-react';
 import { supabase } from './supabaseClient';
+import MilestoneToast from './MilestoneToast';
+import * as gamification from './gamification';
 import './App.css';
+import './animations.css';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -27,6 +30,10 @@ export default function App() {
     notes: ''
   });
 
+  const [gamificationState, setGamificationState] = useState(null);
+  const [activeMilestone, setActiveMilestone] = useState(null);
+  const [milestoneQueue, setMilestoneQueue] = useState([]);
+
   // Check if user is logged in on mount
   useEffect(() => {
     checkUser();
@@ -44,8 +51,17 @@ export default function App() {
   useEffect(() => {
     if (user) {
       loadApplications();
+      loadGamificationState();
     }
   }, [user]);
+
+  // Milestone queue handler
+  useEffect(() => {
+    if (milestoneQueue.length > 0 && !activeMilestone) {
+      setActiveMilestone(milestoneQueue[0]);
+      setMilestoneQueue(prev => prev.slice(1));
+    }
+  }, [milestoneQueue, activeMilestone]);
 
   const checkUser = async () => {
     try {
@@ -55,6 +71,37 @@ export default function App() {
       console.error('Error checking user:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGamificationState = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('gamification_state')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        // No row exists - create initial state
+        const initialState = gamification.getInitialState();
+        const { data: newData, error: insertError } = await supabase
+          .from('gamification_state')
+          .insert([{ user_id: user.id, ...initialState }])
+          .select()
+          .single();
+
+        if (!insertError) {
+          setGamificationState(newData);
+        }
+      } else if (!error) {
+        setGamificationState(data);
+      }
+    } catch (error) {
+      console.error('Error loading gamification state:', error);
     }
   };
 
@@ -197,6 +244,45 @@ export default function App() {
 
       setIsModalOpen(false);
       await loadApplications();
+      
+      // Gamification update
+      if (gamificationState) {
+        const action = editingId ? 'update_status' : 'create_application';
+        const oldApp = editingId ? applications.find(a => a.id === editingId) : null;
+        const actionData = editingId 
+          ? { oldStatus: oldApp?.status, newStatus: formData.status }
+          : {};
+        
+        const newState = gamification.computeNewState(gamificationState, action, actionData);
+        
+        // Reload applications to get fresh count for milestone detection
+        const { data: freshApps } = await supabase
+          .from('applications')
+          .select('*')
+          .order('date_applied', { ascending: false });
+        
+        const milestones = gamification.detectMilestones(gamificationState, newState, freshApps || applications);
+        
+        // Update Supabase
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error: updateError } = await supabase
+          .from('gamification_state')
+          .update({
+            points: newState.points,
+            streak_days: newState.streak_days,
+            last_activity: newState.last_activity,
+            rank: newState.rank,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id);
+        
+        if (!updateError) {
+          setGamificationState(newState);
+          if (milestones.length > 0) {
+            setMilestoneQueue(milestones);
+          }
+        }
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -634,6 +720,26 @@ export default function App() {
             <p className="stat-label">Offers</p>
             <p className="stat-value">{stats.offered}</p>
           </div>
+          {gamificationState && (
+            <div className="stat-card stat-card-total">
+              <p className="stat-label">Rank</p>
+              <p className="stat-value" style={{ fontSize: '1.25rem' }}>{gamificationState.rank}</p>
+              <div className="rank-progress-bar">
+                <div 
+                  className="rank-progress-fill" 
+                  style={{ '--progress-width': `${gamification.getRankProgress(gamificationState.points)}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-400" style={{ marginTop: '0.5rem' }}>
+                {gamificationState.points} pts
+                {gamificationState.streak_days > 0 && (
+                  <span className="streak-badge" style={{ marginLeft: '0.5rem' }}>
+                    🔥 {gamificationState.streak_days} day{gamificationState.streak_days !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Controls */}
@@ -697,7 +803,7 @@ export default function App() {
                 <th>Company</th>
                 <th>Position</th>
                 <th>Applied</th>
-                <th>Link</th>
+                <th>Contact</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -855,6 +961,13 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeMilestone && (
+        <MilestoneToast
+          milestone={activeMilestone}
+          onDismiss={() => setActiveMilestone(null)}
+        />
       )}
     </div>
   );
