@@ -102,12 +102,7 @@ export default function App() {
     }
   }, [user]);
 
-  // Streaks (optional): once per load of gamification state AND applications
-  useEffect(() => {
-    if (gamificationState && user && applications.length >= 0) {
-      applyGamification('streak_bonus');
-    }
-  }, [gamificationState?.id, user?.id]);
+
 
   // Milestone queue handler
   useEffect(() => {
@@ -733,7 +728,7 @@ export default function App() {
             </button>
 
             <p className="text-[11px] text-slate-500 mt-2">
-              Your applications are securely stored in the cloud and synced
+              Your job applications are securely stored in the cloud and synced
               across devices.
             </p>
           </form>
@@ -746,6 +741,9 @@ export default function App() {
     theme === 'dark'
       ? 'bg-slate-950 text-slate-100'
       : 'bg-emerald-50 text-emerald-950';
+  const rankUI = gamificationState
+  ? gamification.formatRankCardData(gamificationState)
+  : null;
 
   return (
     <div
@@ -877,28 +875,38 @@ export default function App() {
             <div className="text-[11px] text-slate-500 mb-1">Offers</div>
             <div className="text-xl font-semibold">{stats.offered}</div>
           </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-            <div className="text-[11px] text-slate-500 mb-1">Rank</div>
-            {gamificationState ? (
-              <>
-                <div className="text-sm font-semibold">
-                  {gamificationState.rank}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  {gamificationState.points} pts
-                  {gamificationState.streak_days > 0 && (
-                    <>
-                      {' '}
-                      ðŸ”¥ {gamificationState.streak_days} day
-                      {gamificationState.streak_days !== 1 ? 's' : ''}
-                    </>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="text-[11px] text-slate-600">Loadingâ€¦</div>
-            )}
-          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 relative overflow-hidden">
+  <div className="text-[11px] text-slate-500 mb-1">Rank</div>
+
+  {rankUI ? (
+    <>
+      <div className="text-sm font-semibold">
+        {rankUI.currentRank}
+      </div>
+
+      <div className="mt-1 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-sky-500 transition-all duration-700"
+          style={{ width: `${rankUI.progressPercent}%` }}
+        />
+      </div>
+
+      <div className="mt-1 text-[11px] text-slate-500">
+        {rankUI.currentPoints} / {rankUI.nextRankPoints} pts
+        {rankUI.streakDays > 0 && (
+          <>
+            {' '}
+            🔥 {rankUI.streakDays} day
+            {rankUI.streakDays !== 1 ? 's' : ''}
+          </>
+        )}
+      </div>
+    </>
+  ) : (
+    <div className="text-[11px] text-slate-600">Loading…</div>
+  )}
+</div>
+
         </div>
 
         <div className="flex items-center justify-between mb-2">
