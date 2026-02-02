@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload } from 'lucide-react';
 import { supabase } from './supabaseClient';
@@ -96,9 +97,14 @@ export default function App() {
   };
 
   const loadGamificationState = async () => {
+    console.log('[GAMIFICATION] Starting loadGamificationState...');
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('[GAMIFICATION] No user found, skipping');
+        return;
+      }
+      console.log('[GAMIFICATION] User ID:', user.id);
 
       const { data, error } = await supabase
         .from('gamification_state')
@@ -106,16 +112,22 @@ export default function App() {
         .eq('user_id', user.id)
         .single();
 
+      console.log('[GAMIFICATION] Query result:', { data, error });
+
       if (error && error.code === 'PGRST116') {
-        // No row exists - create initial state WITH retroactive credit
+        console.log('[GAMIFICATION] No existing state found, creating initial state...');
         
         // Load existing applications to calculate retroactive points
         const { data: existingApps } = await supabase
           .from('applications')
           .select('*');
         
+        console.log('[GAMIFICATION] Existing apps:', existingApps?.length || 0);
+        
         const retroPoints = calculateRetroactivePoints(existingApps || []);
         const initialRank = gamification.calculateRank(retroPoints);
+        
+        console.log('[GAMIFICATION] Retroactive points:', retroPoints, 'Initial rank:', initialRank);
         
         const initialState = {
           ...gamification.getInitialState(),
@@ -129,14 +141,22 @@ export default function App() {
           .select()
           .single();
 
+        console.log('[GAMIFICATION] Insert result:', { newData, insertError });
+
         if (!insertError) {
           setGamificationState(newData);
+          console.log('[GAMIFICATION] State set successfully:', newData);
+        } else {
+          console.error('[GAMIFICATION] Insert error:', insertError);
         }
       } else if (!error) {
         setGamificationState(data);
+        console.log('[GAMIFICATION] Loaded existing state:', data);
+      } else {
+        console.error('[GAMIFICATION] Unexpected error:', error);
       }
     } catch (error) {
-      console.error('Error loading gamification state:', error);
+      console.error('[GAMIFICATION] Error in loadGamificationState:', error);
     }
   };
 
