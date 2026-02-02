@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload } from 'lucide-react';
 import { supabase } from './supabaseClient';
-import MilestoneToast from './MilestoneToast';
-import * as gamification from './gamification';
+import MilestoneToast from './MilestoneToast.jsx';
+import * as gamification from './gamification.js';
 import './App.css';
 import './animations.css';
 
