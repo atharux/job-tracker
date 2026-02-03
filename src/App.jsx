@@ -1,14 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Trash2,
-  Plus,
-  Edit2,
-  X,
-  Check,
-  Download,
-  LogOut,
-  Upload,
-} from 'lucide-react';
+import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import MilestoneToast from './MilestoneToast.jsx';
 import * as gamification from './gamification.js';
@@ -18,13 +9,39 @@ import './animations.css';
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
-
   const [theme, setTheme] = useState('dark'); // 'dark' or 'garden'
+const applyGamification = async (action, actionData = {}) => {
+  if (!gamificationState) return;
+
+  const oldState = gamificationState;
+  const newState = gamification.computeNewState(oldState, action, actionData);
+
+  const milestones = gamification.detectMilestones(
+    oldState,
+    newState,
+    applications
+  );
+
+  setGamificationState(newState);
+
+  await supabase
+    .from('gamification_state')
+    .update(newState)
+    .eq('user_id', user.id);
+
+  if (milestones.length > 0) {
+    if (!activeMilestone) {
+      setActiveMilestone(milestones[0]);
+      setMilestoneQueue(milestones.slice(1));
+    } else {
+      setMilestoneQueue(prev => [...prev, ...milestones]);
+    }
+  }
+};
 
   const [applications, setApplications] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -38,55 +55,19 @@ export default function App() {
     date_applied: '',
     contact_person: '',
     status: 'applied',
-    notes: '',
+    notes: ''
   });
 
   const [gamificationState, setGamificationState] = useState(null);
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [milestoneQueue, setMilestoneQueue] = useState([]);
 
-  // Central gamification helper
-  const applyGamification = async (action, actionData = {}, freshApplications = null) => {
-    if (!gamificationState || !user) return;
-
-    const oldState = gamificationState;
-    const newState = gamification.computeNewState(
-      oldState,
-      action,
-      actionData,
-    );
-
-    const milestones = gamification.detectMilestones(
-      oldState,
-      newState,
-      freshApplications || applications,
-    );
-
-    setGamificationState(newState);
-
-    await supabase
-      .from('gamification_state')
-      .update(newState)
-      .eq('user_id', user.id);
-
-    if (milestones.length > 0) {
-      if (!activeMilestone) {
-        setActiveMilestone(milestones[0]);
-        setMilestoneQueue(milestones.slice(1));
-      } else {
-        setMilestoneQueue(prev => [...prev, ...milestones]);
-      }
-    }
-  };
-
   // Check if user is logged in on mount
   useEffect(() => {
     checkUser();
-
+    
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
@@ -102,8 +83,6 @@ export default function App() {
     }
   }, [user]);
 
-
-
   // Milestone queue handler
   useEffect(() => {
     if (milestoneQueue.length > 0 && !activeMilestone) {
@@ -114,9 +93,7 @@ export default function App() {
 
   const checkUser = async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
     } catch (error) {
       console.error('Error checking user:', error);
@@ -125,42 +102,35 @@ export default function App() {
     }
   };
 
-  const calculateRetroactivePoints = applications => {
+  const calculateRetroactivePoints = (applications) => {
     let points = 0;
-
+    
     // 10 points per application
     points += applications.length * 10;
-
+    
     // 25 points per interview (status = interview, offered, or accepted)
-    const interviews = applications.filter(
-      a =>
-        a.status === 'interview' ||
-        a.status === 'offered' ||
-        a.status === 'accepted',
+    const interviews = applications.filter(a => 
+      a.status === 'interview' || a.status === 'offered' || a.status === 'accepted'
     ).length;
     points += interviews * 25;
-
+    
     // 50 points per offer (status = offered or accepted)
-    const offers = applications.filter(
-      a => a.status === 'offered' || a.status === 'accepted',
+    const offers = applications.filter(a => 
+      a.status === 'offered' || a.status === 'accepted'
     ).length;
     points += offers * 50;
-
+    
     return points;
   };
 
   const loadGamificationState = async () => {
     console.log('[GAMIFICATION] Starting loadGamificationState...');
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         console.log('[GAMIFICATION] No user found, skipping');
         return;
       }
-
       console.log('[GAMIFICATION] User ID:', user.id);
 
       const { data, error } = await supabase
@@ -172,61 +142,39 @@ export default function App() {
       console.log('[GAMIFICATION] Query result:', { data, error });
 
       if (error && error.code === 'PGRST116') {
-        console.log(
-          '[GAMIFICATION] No existing state found, creating initial state...',
-        );
-
-        // Load existing applications for this user to calculate retro points
+        console.log('[GAMIFICATION] No existing state found, creating initial state...');
+        
+        // Load existing applications to calculate retroactive points
         const { data: existingApps } = await supabase
           .from('applications')
-          .select('*')
-          .eq('user_id', user.id);
-
-        console.log(
-          '[GAMIFICATION] Existing apps:',
-          existingApps?.length || 0,
-        );
-
-        const retroPoints = calculateRetroactivePoints(
-          existingApps || [],
-        );
+          .select('*');
+        
+        console.log('[GAMIFICATION] Existing apps:', existingApps?.length || 0);
+        
+        const retroPoints = calculateRetroactivePoints(existingApps || []);
         const initialRank = gamification.calculateRank(retroPoints);
-
-        console.log(
-          '[GAMIFICATION] Retroactive points:',
-          retroPoints,
-          'Initial rank:',
-          initialRank,
-        );
-
+        
+        console.log('[GAMIFICATION] Retroactive points:', retroPoints, 'Initial rank:', initialRank);
+        
         const initialState = {
           ...gamification.getInitialState(),
           points: retroPoints,
           rank: initialRank,
         };
-
+        
         const { data: newData, error: insertError } = await supabase
           .from('gamification_state')
           .insert([{ user_id: user.id, ...initialState }])
           .select()
           .single();
 
-        console.log('[GAMIFICATION] Insert result:', {
-          newData,
-          insertError,
-        });
+        console.log('[GAMIFICATION] Insert result:', { newData, insertError });
 
         if (!insertError) {
           setGamificationState(newData);
-          console.log(
-            '[GAMIFICATION] State set successfully:',
-            newData,
-          );
+          console.log('[GAMIFICATION] State set successfully:', newData);
         } else {
-          console.error(
-            '[GAMIFICATION] Insert error:',
-            insertError,
-          );
+          console.error('[GAMIFICATION] Insert error:', insertError);
         }
       } else if (!error) {
         setGamificationState(data);
@@ -235,17 +183,14 @@ export default function App() {
         console.error('[GAMIFICATION] Unexpected error:', error);
       }
     } catch (error) {
-      console.error(
-        '[GAMIFICATION] Error in loadGamificationState:',
-        error,
-      );
+      console.error('[GAMIFICATION] Error in loadGamificationState:', error);
     }
   };
 
-  const handleLogin = async e => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
-
+    
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -253,17 +198,17 @@ export default function App() {
       });
 
       if (error) throw error;
-
+      
       setUser(data.user);
     } catch (error) {
       setAuthError(error.message);
     }
   };
 
-  const handleSignup = async e => {
+  const handleSignup = async (e) => {
     e.preventDefault();
     setAuthError('');
-
+    
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -271,11 +216,9 @@ export default function App() {
       });
 
       if (error) throw error;
-
+      
       if (data.user) {
-        alert(
-          'Account created! Please check your email to verify your account.',
-        );
+        alert('Account created! Please check your email to verify your account.');
       }
     } catch (error) {
       setAuthError(error.message);
@@ -287,31 +230,31 @@ export default function App() {
       await supabase.auth.signOut();
       setUser(null);
       setApplications([]);
-      setGamificationState(null);
     } catch (error) {
       console.error('Error logging out:', error);
     }
   };
 
   const toggleTheme = () => {
-    setTheme(prev => (prev === 'dark' ? 'garden' : 'dark'));
+    setTheme(prev => prev === 'dark' ? 'garden' : 'dark');
   };
 
   const loadApplications = async () => {
     try {
       setIsLoading(true);
-
       const { data, error } = await supabase
         .from('applications')
         .select('*')
-        .eq('user_id', user.id)
         .order('date_applied', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Load error:', error);
+        return;
+      }
 
       setApplications(data || []);
-    } catch (error) {
-      console.error('Error loading applications:', error);
+    } catch (e) {
+      console.error('Failed to load:', e);
     } finally {
       setIsLoading(false);
     }
@@ -324,109 +267,132 @@ export default function App() {
       date_applied: new Date().toISOString().split('T')[0],
       contact_person: '',
       status: 'applied',
-      notes: '',
+      notes: ''
     });
     setEditingId(null);
     setIsModalOpen(true);
   };
 
-  const handleEdit = app => {
+  const handleEdit = (app) => {
     setFormData({
       company: app.company,
       position: app.position,
-      date_applied: app.date_applied || '',
-      contact_person: app.contact_person || '',
+      date_applied: app.date_applied,
+      contact_person: app.contact_person,
       status: app.status,
-      notes: app.notes || '',
+      notes: app.notes
     });
     setEditingId(app.id);
     setIsModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!formData.company?.trim() || !formData.position?.trim()) {
-      alert('Company and Position are required.');
+    if (!formData.company.trim() || !formData.position.trim()) {
+      alert('Company and position are required');
       return;
     }
+const oldStatus = applications.find(a => a.id === editingId)?.status;
 
+    setIsSyncing(true);
     try {
-      setIsSyncing(true);
-
-      const dataToSave = {
-        company: formData.company.trim(),
-        position: formData.position.trim(),
-        date_applied: formData.date_applied || null,
-        contact_person: formData.contact_person?.trim() || null,
-        status: formData.status,
-        notes: formData.notes?.trim() || null,
-        user_id: user.id,
-      };
-
       if (editingId) {
+        // Update existing
         const { error } = await supabase
           .from('applications')
-          .update(dataToSave)
-          .eq('id', editingId)
-          .eq('user_id', user.id);
+          .update(formData)
+          .eq('id', editingId);
 
-        if (error) throw error;
-
-        // Gamification: status_change
-        const oldApp = applications.find(a => a.id === editingId);
-        if (oldApp && oldApp.status !== formData.status) {
-          await applyGamification('status_change', {
-            from: oldApp.status,
-            to: formData.status,
-          });
+        if (error) {
+          console.error('Update error:', error);
+          alert('Failed to update application');
+          return;
         }
       } else {
+        // Insert new - with user_id
+        const { data: { user } } = await supabase.auth.getUser();
+        
         const { error } = await supabase
           .from('applications')
-          .insert([dataToSave]);
+          .insert([{
+            ...formData,
+            user_id: user.id
+          }]);
 
-        if (error) throw error;
-
-        // Gamification: new_application
-        await applyGamification('new_application');
+        if (error) {
+          console.error('Insert error:', error);
+          alert('Failed to save application');
+          return;
+        }
       }
+await applyGamification('create_application');
 
-      await loadApplications();
       setIsModalOpen(false);
-      setEditingId(null);
-      setFormData({
-        company: '',
-        position: '',
-        date_applied: '',
-        contact_person: '',
-        status: 'applied',
-        notes: '',
-      });
-    } catch (error) {
-      console.error('Error saving application:', error);
-      alert('Failed to save application. Please try again.');
+      await loadApplications();
+      
+      // Gamification update
+      if (gamificationState) {
+        const action = editingId ? 'update_status' : 'create_application';
+        const oldApp = editingId ? applications.find(a => a.id === editingId) : null;
+        const actionData = editingId 
+          ? { oldStatus: oldApp?.status, newStatus: formData.status }
+          : {};
+        
+        const newState = gamification.computeNewState(gamificationState, action, actionData);
+        await applyGamification('update_status', {
+  oldStatus,
+  newStatus: formData.status
+});
+
+        // Reload applications to get fresh count for milestone detection
+        const { data: freshApps } = await supabase
+          .from('applications')
+          .select('*')
+          .order('date_applied', { ascending: false });
+        
+        const milestones = gamification.detectMilestones(gamificationState, newState, freshApps || applications);
+        
+        // Update Supabase
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error: updateError } = await supabase
+          .from('gamification_state')
+          .update({
+            points: newState.points,
+            streak_days: newState.streak_days,
+            last_activity: newState.last_activity,
+            rank: newState.rank,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id);
+        
+        if (!updateError) {
+          setGamificationState(newState);
+          if (milestones.length > 0) {
+            setMilestoneQueue(milestones);
+          }
+        }
+      }
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const handleDelete = async id => {
-    if (!confirm('Are you sure you want to delete this application?'))
-      return;
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this application?')) return;
 
+    setIsSyncing(true);
     try {
-      setIsSyncing(true);
       const { error } = await supabase
         .from('applications')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Delete error:', error);
+        alert('Failed to delete application');
+        return;
+      }
 
       await loadApplications();
-    } catch (error) {
-      console.error('Error deleting application:', error);
-      alert('Failed to delete application. Please try again.');
     } finally {
       setIsSyncing(false);
     }
@@ -435,308 +401,319 @@ export default function App() {
   const handleCancel = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setFormData({
-      company: '',
-      position: '',
-      date_applied: '',
-      contact_person: '',
-      status: 'applied',
-      notes: '',
-    });
   };
 
   const exportToCSV = () => {
-    if (applications.length === 0) return;
-
-    const headers = [
-      'Company',
-      'Position',
-      'Date Applied',
-      'Contact Person',
-      'Status',
-      'Notes',
-    ];
+    const headers = ['Company', 'Position', 'Date Applied', 'Contact Person', 'Status', 'Notes'];
     const rows = applications.map(app => [
       app.company,
       app.position,
-      app.date_applied || '',
-      app.contact_person || '',
+      app.date_applied,
+      app.contact_person,
       app.status,
-      app.notes || '',
+      app.notes
     ]);
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row =>
-        row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','),
-      ),
-    ].join('\n');
+    const csv = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell || ''}"`).join(','))
+      .join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `job-applications-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
-  const handleCSVUpload = async e => {
-    const file = e.target.files?.[0];
+  const exportToPDF = () => {
+    const printWindow = window.open('', '', 'height=600,width=800');
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Job Applications</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; padding: 0; }
+            h1 { text-align: center; margin-bottom: 10px; }
+            .date { text-align: center; color: #666; margin-bottom: 20px; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th { background-color: #f0f0f0; border: 1px solid #ddd; padding: 10px; text-align: left; font-weight: bold; }
+            td { border: 1px solid #ddd; padding: 10px; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .footer { text-align: right; font-size: 11px; color: #666; margin-top: 20px; }
+            @media print { body { margin: 0; padding: 10px; } }
+          </style>
+        </head>
+        <body>
+          <h1>Job Application Tracker</h1>
+          <div class="date">Generated on ${new Date().toLocaleDateString('de-DE')}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Position</th>
+                <th>Date Applied</th>
+                <th>Contact Person</th>
+                <th>Status</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${applications.map(app => `
+                <tr>
+                  <td>${app.company}</td>
+                  <td>${app.position}</td>
+                  <td>${new Date(app.date_applied).toLocaleDateString('de-DE')}</td>
+                  <td>${app.contact_person || 'â€”'}</td>
+                  <td>${app.status}</td>
+                  <td>${app.notes}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="footer">Total Applications: ${applications.length}</div>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const parseCSV = (text) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const rows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let char of lines[i]) {
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          values.push(current.trim().replace(/^"|"$/g, ''));
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      values.push(current.trim().replace(/^"|"$/g, ''));
+
+      if (values.length === headers.length) {
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header.toLowerCase().replace(/ /g, '_')] = values[index];
+        });
+        rows.push(row);
+      }
+    }
+
+    return rows;
+  };
+
+  const validateAndFormatCSVData = (rows) => {
+    const validStatuses = ['applied', 'interview', 'offered', 'rejected', 'accepted'];
+    const formatted = [];
+
+    for (const row of rows) {
+      if (!row.company || !row.position) {
+        continue;
+      }
+
+      const status = row.status?.toLowerCase();
+      const formattedRow = {
+        company: row.company,
+        position: row.position,
+        date_applied: row.date_applied || new Date().toISOString().split('T')[0],
+        contact_person: row.contact_person || '',
+        status: validStatuses.includes(status) ? status : 'applied',
+        notes: row.notes || ''
+      };
+
+      formatted.push(formattedRow);
+    }
+
+    return formatted;
+  };
+
+  const findDuplicates = (newData) => {
+    const duplicates = [];
+    
+    for (const newApp of newData) {
+      const isDuplicate = applications.some(existingApp => 
+        existingApp.company.toLowerCase() === newApp.company.toLowerCase() &&
+        existingApp.position.toLowerCase() === newApp.position.toLowerCase()
+      );
+      
+      if (isDuplicate) {
+        duplicates.push(newApp);
+      }
+    }
+
+    return duplicates;
+  };
+
+  const handleCSVUpload = async (event) => {
+    const file = event.target.files[0];
     if (!file) return;
 
+    event.target.value = '';
+
+    setIsSyncing(true);
     try {
-      setIsSyncing(true);
       const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim());
-
-      if (lines.length < 2) {
-        alert('CSV file is empty or invalid.');
+      const parsedData = parseCSV(text);
+      
+      if (parsedData.length === 0) {
+        alert('No valid data found in CSV file. Please check the format.');
         return;
       }
 
-      const dataLines = lines.slice(1);
-      const imported = [];
-
-      for (const line of dataLines) {
-        const match = line.match(
-          /(?:^|,)("(?:[^"]|"")*"|[^,]*)/g,
-        );
-        if (!match || match.length < 2) continue;
-
-        const cells = match
-          .map(cell =>
-            cell
-              .replace(/^,/, '')
-              .replace(/^"|"$/g, '')
-              .replace(/""/g, '"')
-              .trim(),
-          )
-          .filter(Boolean);
-
-        if (cells.length < 2) continue;
-
-        const [company, position, date_applied, contact_person, status, notes] =
-          cells;
-
-        if (!company || !position) continue;
-
-        const validStatuses = [
-          'applied',
-          'interview',
-          'offered',
-          'rejected',
-          'accepted',
-        ];
-        const finalStatus = validStatuses.includes(status?.toLowerCase())
-          ? status.toLowerCase()
-          : 'applied';
-
-        imported.push({
-          company,
-          position,
-          date_applied: date_applied || null,
-          contact_person: contact_person || null,
-          status: finalStatus,
-          notes: notes || null,
-          user_id: user.id,
-        });
-      }
-
-      if (imported.length === 0) {
-        alert(
-          'No valid rows found in CSV. Make sure you have Company and Position columns.',
-        );
+      const validatedData = validateAndFormatCSVData(parsedData);
+      
+      if (validatedData.length === 0) {
+        alert('No valid applications found. Make sure each row has Company and Position.');
         return;
       }
+
+      const duplicates = findDuplicates(validatedData);
+      
+      if (duplicates.length > 0) {
+        const duplicateList = duplicates
+          .map(d => `${d.company} - ${d.position}`)
+          .join('\n');
+        
+        const confirmed = confirm(
+          `Found ${duplicates.length} potential duplicate(s):\n\n${duplicateList}\n\nDo you want to import them anyway?`
+        );
+        
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const dataToInsert = validatedData.map(app => ({
+        ...app,
+        user_id: user.id
+      }));
 
       const { error } = await supabase
         .from('applications')
-        .insert(imported);
+        .insert(dataToInsert);
 
-      if (error) throw error;
+      if (error) {
+        console.error('CSV upload error:', error);
+        alert('Failed to upload applications. Please try again.');
+        return;
+      }
 
+      alert(`Successfully imported ${validatedData.length} application(s)!`);
       await loadApplications();
-
-      // Gamification: bulk import
-      await applyGamification('bulk_import', { count: imported.length });
-
-      alert(`Successfully imported ${imported.length} applications!`);
     } catch (error) {
-      console.error('Error importing CSV:', error);
-      alert('Failed to import CSV. Please check the file format.');
+      console.error('CSV processing error:', error);
+      alert('Failed to process CSV file. Please check the format.');
     } finally {
       setIsSyncing(false);
-      e.target.value = '';
     }
   };
 
-  const exportToPDF = async () => {
-    if (applications.length === 0) return;
-
-    try {
-      const { jsPDF } = await import('jspdf');
-      await import('jspdf-autotable');
-
-      const doc = new jsPDF();
-
-      doc.setFontSize(18);
-      doc.text('Job Applications Tracker', 14, 20);
-
-      doc.setFontSize(10);
-      doc.text(
-        `Generated on ${new Date().toLocaleDateString()}`,
-        14,
-        28,
-      );
-
-      const tableData = applications.map(app => [
-        app.company,
-        app.position,
-        app.date_applied
-          ? new Date(app.date_applied).toLocaleDateString()
-          : 'â€"',
-        app.contact_person || 'â€"',
-        app.status.charAt(0).toUpperCase() + app.status.slice(1),
-      ]);
-
-      doc.autoTable({
-        head: [['Company', 'Position', 'Applied', 'Contact', 'Status']],
-        body: tableData,
-        startY: 35,
-        styles: { fontSize: 9 },
-        headStyles: { fillColor: [59, 130, 246] },
-      });
-
-      doc.save(
-        `job-applications-${new Date().toISOString().split('T')[0]}.pdf`,
-      );
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    }
-  };
-
-  const statusConfig = {
-    applied: {
-      label: 'Applied',
-      bg: 'bg-blue-500/10',
-      text: 'text-blue-400',
-      color: 'border-blue-500/50 bg-blue-500/10 text-blue-400',
-    },
-    interview: {
-      label: 'Interview',
-      bg: 'bg-yellow-500/10',
-      text: 'text-yellow-400',
-      color: 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400',
-    },
-    offered: {
-      label: 'Offered',
-      bg: 'bg-green-500/10',
-      text: 'text-green-400',
-      color: 'border-green-500/50 bg-green-500/10 text-green-400',
-    },
-    rejected: {
-      label: 'Rejected',
-      bg: 'bg-red-500/10',
-      text: 'text-red-400',
-      color: 'border-red-500/50 bg-red-500/10 text-red-400',
-    },
-    accepted: {
-      label: 'Accepted',
-      bg: 'bg-purple-500/10',
-      text: 'text-purple-400',
-      color: 'border-purple-500/50 bg-purple-500/10 text-purple-400',
-    },
-  };
-
-  const filteredApplications =
-    filterStatus === 'all'
-      ? applications
-      : applications.filter(app => app.status === filterStatus);
-
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-slate-400">Loading...</div>
+      <div className="min-h-screen bg-gradient flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-400">Loading...</p>
+        </div>
       </div>
     );
   }
 
+  // Login/Signup screen
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-slate-100 mb-2">
-              Job Tracker
-            </h1>
-            <p className="text-slate-400">
-              Track your job applications in one place
-            </p>
-          </div>
+      <div className="min-h-screen bg-gradient flex items-center justify-center px-4">
+        <div className="max-w-md w-full">
+          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-8 shadow-2xl">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-slate-50 mb-2">Application Monitor</h1>
+              <p className="text-slate-400">Track your job applications</p>
+            </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
             <div className="flex gap-2 mb-6">
               <button
-                onClick={() => setAuthMode('login')}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                onClick={() => {
+                  setAuthMode('login');
+                  setAuthError('');
+                }}
+                className={`flex-1 py-2 rounded-lg transition-colors ${
                   authMode === 'login'
-                    ? 'bg-sky-500 text-slate-950'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
                 }`}
               >
                 Login
               </button>
               <button
-                onClick={() => setAuthMode('signup')}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                onClick={() => {
+                  setAuthMode('signup');
+                  setAuthError('');
+                }}
+                className={`flex-1 py-2 rounded-lg transition-colors ${
                   authMode === 'signup'
-                    ? 'bg-sky-500 text-slate-950'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
                 }`}
               >
                 Sign Up
               </button>
             </div>
 
-            <form
-              onSubmit={authMode === 'login' ? handleLogin : handleSignup}
-            >
+            <form onSubmit={authMode === 'login' ? handleLogin : handleSignup}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-slate-300 mb-1">
-                    Email
-                  </label>
+                  <label className="block text-slate-300 text-sm mb-2">Email</label>
                   <input
                     type="email"
                     value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
                     required
+                    className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-slate-300 mb-1">
-                    Password
-                  </label>
+                  <label className="block text-slate-300 text-sm mb-2">Password</label>
                   <input
                     type="password"
                     value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                     required
+                    className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
                 {authError && (
-                  <div className="text-red-400 text-sm">{authError}</div>
+                  <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3">
+                    <p className="text-red-400 text-sm">{authError}</p>
+                  </div>
                 )}
 
                 <button
                   type="submit"
-                  className="w-full py-2 bg-sky-500 text-slate-950 rounded-lg font-medium hover:bg-sky-400 transition-colors"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors"
                 >
                   {authMode === 'login' ? 'Login' : 'Sign Up'}
                 </button>
@@ -748,62 +725,100 @@ export default function App() {
     );
   }
 
+  // Main app (when logged in)
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-400">Loading your applications...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const filteredApplications = filterStatus === 'all'
+    ? applications
+    : applications.filter(app => app.status === filterStatus);
+
+  const statusConfig = {
+    applied: { bg: 'bg-blue-500/10', text: 'text-blue-600', label: 'Applied' },
+    interview: { bg: 'bg-yellow-500/10', text: 'text-yellow-600', label: 'Interview' },
+    offered: { bg: 'bg-green-500/10', text: 'text-green-600', label: 'Offered' },
+    rejected: { bg: 'bg-red-500/10', text: 'text-red-600', label: 'Rejected' },
+    accepted: { bg: 'bg-emerald-500/10', text: 'text-emerald-600', label: 'Accepted' }
+  };
+
+  const stats = {
+    total: applications.length,
+    applied: applications.filter(a => a.status === 'applied').length,
+    interview: applications.filter(a => a.status === 'interview').length,
+    offered: applications.filter(a => a.status === 'offered').length
+  };
+
   return (
-    <div className={`app ${theme === 'garden' ? 'garden' : ''}`}>
-      <div className="container">
+    <div className="min-h-screen bg-gradient" data-theme={theme}>
+      <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
+
+      <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="header">
-          <div className="header-left">
-            <h1 className="title">Job Application Tracker</h1>
-            <button
-              onClick={toggleTheme}
-              className="theme-toggle"
-              title={theme === 'dark' ? 'Garden theme' : 'Dark theme'}
-            >
-              {theme === 'dark' ? '🌸' : '🌙'}
-            </button>
+        <div className="mb-8">
+          <div className="header-row mb-4">
+            <div className="header-title-group">
+              <div className="header-accent"></div>
+              <h1 className="text-3xl font-bold text-slate-50">Application Monitor</h1>
+            </div>
+            <div className="header-actions">
+              <span className="text-slate-400 text-sm">{user.email}</span>
+              <button
+                onClick={toggleTheme}
+                className="theme-toggle px-3 py-2 rounded-lg transition-colors"
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+              >
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-slate-300"
+              >
+                <LogOut size={16} /> Logout
+              </button>
+            </div>
           </div>
-          <div className="header-actions">
-            <button onClick={handleLogout} className="btn-logout">
-              <LogOut size={16} /> Logout
-            </button>
+          <div className="flex items-center justify-between">
+            <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
+            <p className="text-slate-400 text-xs">{isSyncing ? '● Syncing...' : '● Synced to cloud'}</p>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="stats">
-          <div className="stat-card">
-            <div className="stat-value">{applications.length}</div>
-            <div className="stat-label">Total Apps</div>
+        {/* Stats Grid */}
+        <div className="stats-grid">
+          <div className="stat-card stat-card-total">
+            <p className="stat-label">Total</p>
+            <p className="stat-value">{stats.total}</p>
           </div>
-          <div className="stat-card">
-            <div className="stat-value">
-              {applications.filter(a => a.status === 'applied').length}
-            </div>
-            <div className="stat-label">Applied</div>
+          <div className="stat-card stat-card-applied">
+            <p className="stat-label">Applied</p>
+            <p className="stat-value">{stats.applied}</p>
           </div>
-          <div className="stat-card">
-            <div className="stat-value">
-              {applications.filter(a => a.status === 'interview').length}
-            </div>
-            <div className="stat-label">Interview</div>
+          <div className="stat-card stat-card-interview">
+            <p className="stat-label">Interviews</p>
+            <p className="stat-value">{stats.interview}</p>
           </div>
-          <div className="stat-card">
-            <div className="stat-value">
-              {applications.filter(a => a.status === 'offered').length}
-            </div>
-            <div className="stat-label">Offered</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">
-              {applications.filter(a => a.status === 'accepted').length}
-            </div>
-            <div className="stat-label">Accepted</div>
+          <div className="stat-card stat-card-offered">
+            <p className="stat-label">Offers</p>
+            <p className="stat-value">{stats.offered}</p>
           </div>
           {gamificationState && (
-            <div className="stat-card gamification">
-              <div className="stat-value">{gamificationState.rank}</div>
-              <p className="stat-label">
+            <div className="stat-card stat-card-total">
+              <p className="stat-label">Rank</p>
+              <p className="stat-value" style={{ fontSize: '1.25rem' }}>{gamificationState.rank}</p>
+              <div className="rank-progress-bar">
+                <div 
+                  className="rank-progress-fill" 
+                  style={{ '--progress-width': `${gamification.getRankProgress(gamificationState.points)}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-400" style={{ marginTop: '0.5rem' }}>
                 {gamificationState.points} pts
                 {gamificationState.streak_days > 0 && (
                   <span className="streak-badge" style={{ marginLeft: '0.5rem' }}>
@@ -894,11 +909,9 @@ export default function App() {
                     <td className="company-name">{app.company}</td>
                     <td className="position-name">{app.position}</td>
                     <td className="date">
-                      {app.date_applied
-                        ? new Date(app.date_applied).toLocaleDateString()
-                        : 'â€"'}
+                      {new Date(app.date_applied).toLocaleDateString()}
                     </td>
-                    <td className="contact">{app.contact_person || 'â€"'}</td>
+                    <td className="contact">{app.contact_person || 'â€”'}</td>
                     <td>
                       <span className={`status-badge ${statusConfig[app.status].bg} ${statusConfig[app.status].text}`}>
                         {statusConfig[app.status].label}
@@ -1038,19 +1051,19 @@ export default function App() {
         </div>
       )}
 
-      {activeMilestone && (
-        <MilestoneToast
-          milestone={activeMilestone}
-          onDismiss={() => {
-            setActiveMilestone(null);
-            if (milestoneQueue.length > 0) {
-              const [next, ...rest] = milestoneQueue;
-              setMilestoneQueue(rest);
-              setActiveMilestone(next);
-            }
-          }}
-        />
-      )}
+  {activeMilestone && (
+  <MilestoneToast
+    milestone={activeMilestone}
+    onDismiss={() => {
+      setActiveMilestone(null);
+      if (milestoneQueue.length > 0) {
+        const [next, ...rest] = milestoneQueue;
+        setMilestoneQueue(rest);
+        setActiveMilestone(next);
+      }
+    }}
+  />
+)}
     </div>
   );
 }
