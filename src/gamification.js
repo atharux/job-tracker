@@ -291,14 +291,7 @@ export function getInitialState() {
  * Format rank card data for UI
  */
 
-export function formatRankCardData(state) {
-  const rankThresholds = {
-    rookie: 100,
-    junior: 300,
-    mid: 700,
-    senior: 1500,
-    principal: 3000,
-  };
+
 
   const nextRankPoints =
     rankThresholds[state.rank] ?? rankThresholds.rookie;
