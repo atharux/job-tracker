@@ -256,6 +256,29 @@ const applyGamification = async (action, actionData = {}) => {
       }
 
       setApplications(data || []);
+        
+    // 🔁 Retroactively normalize rank based on existing points
+    setGamificationState(prev => {
+      if (!prev) return prev;
+
+      const recalculatedRank = gamification.calculateRank(
+        prev.points ?? 0
+      );
+
+      if (prev.rank === recalculatedRank) return prev;
+
+      const updated = {
+        ...prev,
+        rank: recalculatedRank
+      };
+
+      supabase
+        .from('gamification_state')
+        .update({ rank: recalculatedRank })
+        .eq('user_id', user.id);
+
+      return updated;
+    });
     } catch (e) {
       console.error('Failed to load:', e);
     } finally {
@@ -1082,4 +1105,3 @@ const newState = gamification.computeNewState(
     </div>
   );
 }
-
