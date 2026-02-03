@@ -58,7 +58,10 @@ const applyGamification = async (action, actionData = {}) => {
     notes: ''
   });
 
-  const [gamificationState, setGamificationState] = useState(null);
+  const [gamificationState, setGamificationState] = useState(
+  gamification.getInitialState()
+);
+
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [milestoneQueue, setMilestoneQueue] = useState([]);
 
@@ -337,7 +340,19 @@ await applyGamification('create_application');
           ? { oldStatus: oldApp?.status, newStatus: formData.status }
           : {};
         
-        const newState = gamification.computeNewState(gamificationState, action, actionData);
+        const safeState = {
+  points: gamificationState?.points ?? 0,
+  streak_days: gamificationState?.streak_days ?? 0,
+  last_activity: gamificationState?.last_activity ?? null,
+  rank: gamificationState?.rank ?? 'Newcomer',
+};
+
+const newState = gamification.computeNewState(
+  safeState,
+  action,
+  actionData
+);
+
         await applyGamification('update_status', {
   oldStatus,
   newStatus: formData.status
