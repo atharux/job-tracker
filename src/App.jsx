@@ -126,69 +126,78 @@ const applyGamification = async (action, actionData = {}) => {
     return points;
   };
 
-  const loadGamificationState = async () => {
-    console.log('[GAMIFICATION] Starting loadGamificationState...');
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('[GAMIFICATION] No user found, skipping');
-        return;
-      }
-      console.log('[GAMIFICATION] User ID:', user.id);
+  const loadGamificationState = async () => const loadGamificationState = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const { data, error } = await supabase
+    // 1️⃣ Load applications first
+    const { data: apps } = await supabase
+      .from('applications')
+      .select('*');
+
+    const applications = apps || [];
+
+    // 2️⃣ Compute retroactive points
+    const retroPoints = calculateRetroactivePoints(applications);
+    const retroRank = gamification.calculateRank(retroPoints);
+
+    // 3️⃣ Load existing gamification row
+    const { data, error } = await supabase
+      .from('gamification_state')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    // 4️⃣ If no row exists → create one with correct values
+    if (error && error.code === 'PGRST116') {
+      const initialState = {
+        ...gamification.getInitialState(),
+        points: retroPoints,
+        rank: retroRank,
+        user_id: user.id
+      };
+
+      const { data: inserted } = await supabase
         .from('gamification_state')
-        .select('*')
-        .eq('user_id', user.id)
+        .insert([initialState])
+        .select()
         .single();
 
-      console.log('[GAMIFICATION] Query result:', { data, error });
-
-      if (error && error.code === 'PGRST116') {
-        console.log('[GAMIFICATION] No existing state found, creating initial state...');
-        
-        // Load existing applications to calculate retroactive points
-        const { data: existingApps } = await supabase
-          .from('applications')
-          .select('*');
-        
-        console.log('[GAMIFICATION] Existing apps:', existingApps?.length || 0);
-        
-        const retroPoints = calculateRetroactivePoints(existingApps || []);
-        const initialRank = gamification.calculateRank(retroPoints);
-        
-        console.log('[GAMIFICATION] Retroactive points:', retroPoints, 'Initial rank:', initialRank);
-        
-        const initialState = {
-          ...gamification.getInitialState(),
-          points: retroPoints,
-          rank: initialRank,
-        };
-        
-        const { data: newData, error: insertError } = await supabase
-          .from('gamification_state')
-          .insert([{ user_id: user.id, ...initialState }])
-          .select()
-          .single();
-
-        console.log('[GAMIFICATION] Insert result:', { newData, insertError });
-
-        if (!insertError) {
-          setGamificationState(newData);
-          console.log('[GAMIFICATION] State set successfully:', newData);
-        } else {
-          console.error('[GAMIFICATION] Insert error:', insertError);
-        }
-      } else if (!error) {
-        setGamificationState(data);
-        console.log('[GAMIFICATION] Loaded existing state:', data);
-      } else {
-        console.error('[GAMIFICATION] Unexpected error:', error);
-      }
-    } catch (error) {
-      console.error('[GAMIFICATION] Error in loadGamificationState:', error);
+      setGamificationState(inserted);
+      return;
     }
-  };
+
+    // 5️⃣ If row exists but points/rank are wrong → normalize
+    const needsUpdate =
+      data.points !== retroPoints ||
+      data.rank !== retroRank;
+
+    if (needsUpdate) {
+      const updated = {
+        ...data,
+        points: retroPoints,
+        rank: retroRank
+      };
+
+      await supabase
+        .from('gamification_state')
+        .update({
+          points: retroPoints,
+          rank: retroRank
+        })
+        .eq('user_id', user.id);
+
+      setGamificationState(updated);
+    } else {
+      setGamificationState(data);
+    }
+
+  } catch (error) {
+    console.error('[GAMIFICATION] load error:', error);
+  }
+};
+
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -257,28 +266,6 @@ const applyGamification = async (action, actionData = {}) => {
 
       setApplications(data || []);
         
-    // 🔁 Retroactively normalize rank based on existing points
-    setGamificationState(prev => {
-      if (!prev) return prev;
-
-      const recalculatedRank = gamification.calculateRank(
-        prev.points ?? 0
-      );
-
-      if (prev.rank === recalculatedRank) return prev;
-
-      const updated = {
-        ...prev,
-        rank: recalculatedRank
-      };
-
-      supabase
-        .from('gamification_state')
-        .update({ rank: recalculatedRank })
-        .eq('user_id', user.id);
-
-      return updated;
-    });
     } catch (e) {
       console.error('Failed to load:', e);
     } finally {
