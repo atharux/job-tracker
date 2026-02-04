@@ -126,19 +126,24 @@ const applyGamification = async (action, actionData = {}) => {
     return points;
   };
 
-  const loadGamificationState = async () => const loadGamificationState = async () => {
+  const loadGamificationState = async () => {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     // 1️⃣ Load applications first
-    const { data: apps } = await supabase
+    const { data: apps, error: appsError } = await supabase
       .from('applications')
       .select('*');
 
+    if (appsError) {
+      console.error('Failed to load applications for gamification:', appsError);
+      return;
+    }
+
     const applications = apps || [];
 
-    // 2️⃣ Compute retroactive points
+    // 2️⃣ Compute retroactive points + rank
     const retroPoints = calculateRetroactivePoints(applications);
     const retroRank = gamification.calculateRank(retroPoints);
 
@@ -153,22 +158,27 @@ const applyGamification = async (action, actionData = {}) => {
     if (error && error.code === 'PGRST116') {
       const initialState = {
         ...gamification.getInitialState(),
+        user_id: user.id,
         points: retroPoints,
-        rank: retroRank,
-        user_id: user.id
+        rank: retroRank
       };
 
-      const { data: inserted } = await supabase
+      const { data: inserted, error: insertError } = await supabase
         .from('gamification_state')
         .insert([initialState])
         .select()
         .single();
 
+      if (insertError) {
+        console.error('Failed to insert gamification state:', insertError);
+        return;
+      }
+
       setGamificationState(inserted);
       return;
     }
 
-    // 5️⃣ If row exists but points/rank are wrong → normalize
+    // 5️⃣ Normalize existing row if needed
     const needsUpdate =
       data.points !== retroPoints ||
       data.rank !== retroRank;
@@ -180,13 +190,18 @@ const applyGamification = async (action, actionData = {}) => {
         rank: retroRank
       };
 
-      await supabase
+      const { error: updateError } = await supabase
         .from('gamification_state')
         .update({
           points: retroPoints,
           rank: retroRank
         })
         .eq('user_id', user.id);
+
+      if (updateError) {
+        console.error('Failed to update gamification state:', updateError);
+        return;
+      }
 
       setGamificationState(updated);
     } else {
@@ -197,6 +212,7 @@ const applyGamification = async (action, actionData = {}) => {
     console.error('[GAMIFICATION] load error:', error);
   }
 };
+
 
 
   const handleLogin = async (e) => {
