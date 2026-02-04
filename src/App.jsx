@@ -320,7 +320,11 @@ const applyGamification = async (action, actionData = {}) => {
       alert('Company and position are required');
       return;
     }
-const oldStatus = applications.find(a => a.id === editingId)?.status;
+
+    // Capture oldStatus BEFORE any database operation
+    const oldStatus = editingId 
+      ? applications.find(a => a.id === editingId)?.status 
+      : null;
 
     setIsSyncing(true);
     try {
@@ -353,64 +357,17 @@ const oldStatus = applications.find(a => a.id === editingId)?.status;
           return;
         }
       }
-await applyGamification('create_application');
-
-      setIsModalOpen(false);
+setIsModalOpen(false);
       await loadApplications();
       
-      // Gamification update
+      // Gamification update - SINGLE CALL ONLY
       if (gamificationState) {
         const action = editingId ? 'update_status' : 'create_application';
-        const oldApp = editingId ? applications.find(a => a.id === editingId) : null;
         const actionData = editingId 
-          ? { oldStatus: oldApp?.status, newStatus: formData.status }
+          ? { oldStatus, newStatus: formData.status }
           : {};
         
-        const safeState = {
-  points: gamificationState?.points ?? 0,
-  streak_days: gamificationState?.streak_days ?? 0,
-  last_activity: gamificationState?.last_activity ?? null,
-  rank: gamificationState?.rank ?? 'Newcomer',
-};
-
-const newState = gamification.computeNewState(
-  safeState,
-  action,
-  actionData
-);
-
-        await applyGamification('update_status', {
-  oldStatus,
-  newStatus: formData.status
-});
-
-        // Reload applications to get fresh count for milestone detection
-        const { data: freshApps } = await supabase
-          .from('applications')
-          .select('*')
-          .order('date_applied', { ascending: false });
-        
-        const milestones = gamification.detectMilestones(gamificationState, newState, freshApps || applications);
-        
-        // Update Supabase
-        const { data: { user } } = await supabase.auth.getUser();
-        const { error: updateError } = await supabase
-          .from('gamification_state')
-          .update({
-            points: newState.points,
-            streak_days: newState.streak_days,
-            last_activity: newState.last_activity,
-            rank: newState.rank,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
-        
-        if (!updateError) {
-          setGamificationState(newState);
-          if (milestones.length > 0) {
-            setMilestoneQueue(milestones);
-          }
-        }
+        await applyGamification(action, actionData);
       }
     } finally {
       setIsSyncing(false);
