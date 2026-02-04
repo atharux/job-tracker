@@ -290,9 +290,7 @@ export function getInitialState() {
 /**
  * Format rank card data for UI
  */
-
-
-
+export function formatRankCard(state) {
   const nextRankPoints =
     rankThresholds[state.rank] ?? rankThresholds.rookie;
 
