@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Edit3, Trash2, Download, Eye, X, Save, Plus, Upload } from 'lucide-react';
+import { FileText, Edit3, Trash2, Download, Eye, X, Save, Plus, Upload, FilePlus } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { extractTextFromFile } from '../utils/smartResumeParser';
+import jsPDF from 'jspdf';
 
 export default function ResumeManager({ user }) {
   const [versions, setVersions] = useState([]);
@@ -133,6 +134,203 @@ export default function ResumeManager({ user }) {
     URL.revokeObjectURL(url);
   };
 
+  const downloadPDF = (content, filename) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const maxWidth = pageWidth - (margin * 2);
+    let yPosition = margin;
+
+    // Parse content into sections
+    const sections = parseResumeContent(content);
+
+    // Title/Name (if exists)
+    if (sections.header) {
+      doc.setFontSize(16);
+      doc.setFont(undefined, 'bold');
+      const headerLines = doc.splitTextToSize(sections.header, maxWidth);
+      headerLines.forEach(line => {
+        if (yPosition > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        doc.text(line, margin, yPosition);
+        yPosition += 7;
+      });
+      yPosition += 5;
+    }
+
+    // Render each section
+    Object.entries(sections).forEach(([key, value]) => {
+      if (key === 'header' || !value) return;
+
+      // Section title
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      if (yPosition > pageHeight - margin) {
+        doc.addPage();
+        yPosition = margin;
+      }
+      doc.text(key.toUpperCase(), margin, yPosition);
+      yPosition += 7;
+
+      // Section content
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      const lines = doc.splitTextToSize(value, maxWidth);
+      lines.forEach(line => {
+        if (yPosition > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        doc.text(line, margin, yPosition);
+        yPosition += 5;
+      });
+      yPosition += 5;
+    });
+
+    doc.save(filename);
+  };
+
+  const parseResumeContent = (content) => {
+    const sections = {};
+    const lines = content.split('\n');
+    let currentSection = 'header';
+    let sectionContent = [];
+
+    // Common section headers
+    const sectionKeywords = [
+      'experience', 'work experience', 'employment', 'professional experience',
+      'education', 'academic', 'qualifications',
+      'skills', 'technical skills', 'core competencies', 'expertise',
+      'projects', 'portfolio',
+      'certifications', 'certificates', 'licenses',
+      'achievements', 'awards', 'honors',
+      'summary', 'profile', 'objective', 'about',
+      'contact', 'personal information'
+    ];
+
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+      const lowerLine = trimmedLine.toLowerCase();
+
+      // Check if this line is a section header
+      const matchedKeyword = sectionKeywords.find(keyword => 
+        lowerLine === keyword || 
+        lowerLine.startsWith(keyword + ':') ||
+        lowerLine.startsWith(keyword + ' -') ||
+        (lowerLine.length < 30 && lowerLine.includes(keyword))
+      );
+
+      if (matchedKeyword && trimmedLine.length < 50) {
+        // Save previous section
+        if (sectionContent.length > 0) {
+          sections[currentSection] = sectionContent.join('\n').trim();
+        }
+        // Start new section
+        currentSection = matchedKeyword.replace(/[:\-]/g, '').trim();
+        sectionContent = [];
+      } else if (trimmedLine) {
+        sectionContent.push(line);
+      } else if (sectionContent.length > 0) {
+        sectionContent.push(''); // Preserve blank lines within sections
+      }
+    });
+
+    // Save last section
+    if (sectionContent.length > 0) {
+      sections[currentSection] = sectionContent.join('\n').trim();
+    }
+
+    return sections;
+  };
+
+  const formatResumeContent = (content) => {
+    const sections = parseResumeContent(content);
+    
+    return (
+      <div className="rm-formatted-content">
+        {Object.entries(sections).map(([key, value]) => (
+          <div key={key} className="rm-section">
+            {key !== 'header' && (
+              <div className="rm-section-title">{key.toUpperCase()}</div>
+            )}
+            <div className={key === 'header' ? 'rm-section-header' : 'rm-section-content'}>
+              {value.split('\n').map((line, i) => (
+                <div key={i} className="rm-line">{line || '\u00A0'}</div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const createBlankTemplate = async () => {
+    const template = `[Your Name]
+[Your Email] | [Your Phone] | [Your Location]
+[LinkedIn] | [Portfolio/Website]
+
+PROFESSIONAL SUMMARY
+[2-3 sentences describing your professional background, key skills, and career objectives]
+
+EXPERIENCE
+
+[Job Title] | [Company Name]
+[Start Date] - [End Date] | [Location]
+• [Achievement or responsibility with quantifiable results]
+• [Achievement or responsibility with quantifiable results]
+• [Achievement or responsibility with quantifiable results]
+
+[Job Title] | [Company Name]
+[Start Date] - [End Date] | [Location]
+• [Achievement or responsibility with quantifiable results]
+• [Achievement or responsibility with quantifiable results]
+• [Achievement or responsibility with quantifiable results]
+
+EDUCATION
+
+[Degree] in [Field of Study]
+[University Name] | [Graduation Year]
+• [Relevant coursework, honors, or achievements]
+
+SKILLS
+
+Technical Skills: [Skill 1], [Skill 2], [Skill 3], [Skill 4]
+Tools & Technologies: [Tool 1], [Tool 2], [Tool 3]
+Soft Skills: [Skill 1], [Skill 2], [Skill 3]
+
+PROJECTS
+
+[Project Name]
+[Brief description of the project, technologies used, and your role]
+• [Key achievement or outcome]
+• [Key achievement or outcome]
+
+CERTIFICATIONS
+• [Certification Name] - [Issuing Organization] ([Year])
+• [Certification Name] - [Issuing Organization] ([Year])`;
+
+    try {
+      const { error } = await supabase
+        .from('resume_versions')
+        .insert([{
+          user_id: user.id,
+          name: `Blank Template - ${new Date().toLocaleDateString()}`,
+          content: template,
+          updated_at: new Date().toISOString()
+        }]);
+
+      if (error) throw error;
+      await loadVersions();
+      alert('Blank template created! Find it in your resume list.');
+    } catch (err) {
+      console.error('Failed to create template:', err);
+      alert('Failed to create template');
+    }
+  };
+
   const handleUploadResume = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -225,9 +423,17 @@ export default function ResumeManager({ user }) {
                 </button>
                 <button
                   className="rm-btn rm-btn-ghost"
-                  onClick={() => downloadTXT(version.content, `${version.name}.txt`)}
+                  onClick={() => downloadPDF(version.content, `${version.name}.pdf`)}
+                  title="Download as PDF"
                 >
-                  <Download size={14} /> Download
+                  <Download size={14} /> PDF
+                </button>
+                <button
+                  className="rm-btn rm-btn-ghost"
+                  onClick={() => downloadTXT(version.content, `${version.name}.txt`)}
+                  title="Download as TXT"
+                >
+                  <Download size={14} /> TXT
                 </button>
                 <button className="rm-btn rm-btn-ghost" onClick={() => handleClose(panel)}>
                   <X size={14} /> Close
@@ -253,7 +459,7 @@ export default function ResumeManager({ user }) {
             onChange={(e) => setContent(e.target.value)}
           />
         ) : (
-          <div className="rm-preview">{version.content}</div>
+          <div className="rm-preview">{formatResumeContent(version.content)}</div>
         )}
       </div>
     );
@@ -340,6 +546,29 @@ export default function ResumeManager({ user }) {
         .rm-upload-btn:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+        }
+
+        .rm-template-btn {
+          width: 100%;
+          padding: 12px 16px;
+          border-radius: 10px;
+          border: 1px dashed rgba(168,85,247,0.3);
+          background: rgba(168,85,247,0.05);
+          color: #a855f7;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          margin-bottom: 16px;
+        }
+
+        .rm-template-btn:hover {
+          background: rgba(168,85,247,0.1);
+          border-color: #a855f7;
         }
 
         .rm-upload-error {
@@ -601,10 +830,44 @@ export default function ResumeManager({ user }) {
           font-size: 12px;
           line-height: 1.7;
           color: #cbd5e1;
-          white-space: pre-wrap;
-          word-break: break-word;
           max-height: 550px;
           overflow-y: auto;
+        }
+
+        .rm-formatted-content {
+          font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        .rm-section {
+          margin-bottom: 24px;
+        }
+
+        .rm-section-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: #6ee7b7;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 12px;
+          padding-bottom: 6px;
+          border-bottom: 2px solid rgba(110,231,183,0.3);
+        }
+
+        .rm-section-header {
+          font-size: 16px;
+          font-weight: 700;
+          color: #e2e8f0;
+          margin-bottom: 16px;
+          line-height: 1.4;
+        }
+
+        .rm-section-content {
+          color: #cbd5e1;
+          line-height: 1.7;
+        }
+
+        .rm-line {
+          margin-bottom: 4px;
         }
 
         .rm-preview::-webkit-scrollbar {
@@ -674,6 +937,15 @@ export default function ResumeManager({ user }) {
               Upload Resume
             </>
           )}
+        </button>
+
+        <button
+          className="rm-template-btn"
+          onClick={createBlankTemplate}
+          title="Create a blank resume template to fill in"
+        >
+          <FilePlus size={16} />
+          New Blank Template
         </button>
 
         {uploadError && (

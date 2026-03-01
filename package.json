@@ -14,8 +14,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@supabase/supabase-js": "^2.48.0",
-    "jspdf": "^4.1.0",
-    "jspdf-autotable": "^5.0.7",
+    "jspdf": "^2.5.2",
     "lucide-react": "^0.469.0",
     "mammoth": "^1.11.0",
     "pdfjs-dist": "^3.11.174",
