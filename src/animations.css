@@ -1,0 +1,909 @@
+/* ===== MILESTONE ANIMATIONS - FUTURISTIC CYBERPUNK ===== */
+/* Pure keyframes only - no layout, no component coupling */
+/* Tier system matches gamification.js MILESTONE_TIERS output */
+
+/* ===== Tier 1: Rank Up (most impactful) ===== */
+@keyframes milestone-rank-up {
+  0% {
+    transform: scale(0.8) translateY(30px);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.1) translateY(0);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1) translateY(0);
+  }
+  85% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9) translateY(-20px);
+    opacity: 0;
+  }
+}
+
+@keyframes milestone-rank-up-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 217, 255, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(0, 217, 255, 0.8),
+                0 0 60px rgba(139, 92, 246, 0.6),
+                0 0 80px rgba(255, 0, 110, 0.4);
+  }
+}
+
+@keyframes milestone-rank-up-particles {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--particle-x, 0), var(--particle-y, -100px)) scale(0);
+    opacity: 0;
+  }
+}
+
+/* ===== Tier 2: Achievement (medium impact) ===== */
+@keyframes milestone-achievement {
+  0% {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  10% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  90% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-15px);
+    opacity: 0;
+  }
+}
+
+@keyframes milestone-achievement-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.7),
+                0 0 45px rgba(0, 217, 255, 0.4);
+  }
+}
+
+/* ===== Tier 3: Standard (subtle) ===== */
+@keyframes milestone-standard {
+  0% {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  10% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  90% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+}
+
+@keyframes milestone-standard-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* ===== Progress bar fill animation ===== */
+@keyframes rank-progress-fill {
+  from {
+    width: 0;
+  }
+  to {
+    width: var(--progress-width, 0%);
+  }
+}
+
+/* ===== Streak counter pulse ===== */
+@keyframes streak-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ===== TOAST COMPONENT CLASSES - FUTURISTIC STYLE ===== */
+/* These are applied by MilestoneToast.jsx based on tier prop */
+
+.milestone-toast {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  z-index: 9999;
+  background: rgba(10, 14, 26, 0.95);
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  min-width: 320px;
+  max-width: 400px;
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+.milestone-toast::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 217, 255, 0.8), transparent);
+}
+
+.milestone-toast.tier-rank-up {
+  animation: milestone-rank-up 4s ease-out forwards,
+             milestone-rank-up-glow 4s ease-in-out;
+  border-color: #00d9ff;
+  background: linear-gradient(135deg, rgba(0, 217, 255, 0.2), rgba(10, 14, 26, 0.95));
+}
+
+.milestone-toast.tier-rank-up::before {
+  background: linear-gradient(90deg, transparent, #00d9ff, #8b5cf6, #ff006e, transparent);
+  animation: border-flow 2s linear infinite;
+}
+
+@keyframes border-flow {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.milestone-toast.tier-achievement {
+  animation: milestone-achievement 4s ease-out forwards,
+             milestone-achievement-glow 4s ease-in-out;
+  border-color: #8b5cf6;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(10, 14, 26, 0.95));
+}
+
+.milestone-toast.tier-standard {
+  animation: milestone-standard 4s ease-out forwards,
+             milestone-standard-pulse 4s ease-in-out;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.milestone-toast-title {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
+}
+
+.milestone-toast-message {
+  font-size: 0.875rem;
+  color: rgba(203, 213, 225, 0.9);
+  line-height: 1.5;
+}
+
+.milestone-toast-icon {
+  position: absolute;
+  top: 1.25rem;
+  left: 1.25rem;
+  font-size: 1.5rem;
+}
+
+.milestone-toast-content {
+  margin-left: 2.5rem;
+}
+
+/* Particle effect container (only for rank-up) */
+.milestone-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+
+.milestone-particle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(135deg, #00d9ff, #8b5cf6);
+  border-radius: 50%;
+  animation: milestone-rank-up-particles 1.5s ease-out forwards;
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.8);
+}
+
+/* ===== RANK CARD ANIMATIONS - NEON STYLE ===== */
+
+.rank-progress-bar {
+  height: 6px;
+  background: rgba(15, 20, 25, 0.8);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.75rem;
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.rank-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00d9ff, #8b5cf6, #ff006e);
+  background-size: 200% 100%;
+  border-radius: 999px;
+  animation: rank-progress-fill 1s ease-out forwards, progress-shimmer 2s linear infinite;
+  width: 0;
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.6);
+}
+
+@keyframes progress-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.streak-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: #ff006e;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  text-shadow: 0 0 10px rgba(255, 0, 110, 0.5);
+}
+
+.streak-badge.active {
+  animation: streak-pulse 0.6s ease-in-out;
+}
+
+/* ===== GARDEN THEME OVERRIDES ===== */
+
+[data-theme="garden"] .milestone-toast {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: #bbf7d0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="garden"] .milestone-toast.tier-rank-up {
+  background: linear-gradient(135deg, rgba(21, 128, 61, 0.08), rgba(255, 255, 255, 0.98));
+  border-color: #15803d;
+}
+
+[data-theme="garden"] .milestone-toast.tier-achievement {
+  background: linear-gradient(135deg, rgba(4, 120, 87, 0.06), rgba(255, 255, 255, 0.98));
+  border-color: #047857;
+}
+
+[data-theme="garden"] .milestone-toast-title {
+  color: #1a3a2a;
+}
+
+[data-theme="garden"] .milestone-toast-message {
+  color: #44564a;
+}
+
+[data-theme="garden"] .rank-progress-fill {
+  background: linear-gradient(90deg, #15803d, #16a34a);
+}
+
+[data-theme="garden"] .milestone-particle {
+  background: #15803d;
+}
+
+/* ===== RESPONSIVE ===== */
+
+@media (max-width: 768px) {
+  .milestone-toast {
+    top: 1rem;
+    right: 1rem;
+    left: 1rem;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .milestone-toast {
+    padding: 1rem;
+  }
+  
+  .milestone-toast-title {
+    font-size: 1rem;
+  }
+  
+  .milestone-toast-message {
+    font-size: 0.8125rem;
+  }
+}
+
+/* ===== UNICORN CELEBRATION ANIMATIONS ===== */
+/* GPU-accelerated trajectory animations for flying unicorns */
+/* Uses CSS transforms exclusively for optimal performance */
+
+/* Diagonal trajectory - flies from bottom-left to top-right */
+@keyframes unicorn-diagonal {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(100vw, -100vh) rotate(360deg) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* Arc trajectory - parabolic arc across the screen */
+@keyframes unicorn-arc {
+  0% {
+    transform: translate(0, 0) rotate(-15deg) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  25% {
+    transform: translate(25vw, -30vh) rotate(0deg) scale(1.1);
+  }
+  50% {
+    transform: translate(50vw, -50vh) rotate(15deg) scale(1.2);
+  }
+  75% {
+    transform: translate(75vw, -30vh) rotate(30deg) scale(1.1);
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(100vw, 0) rotate(45deg) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Wave trajectory - sinusoidal wave pattern */
+@keyframes unicorn-wave {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  12.5% {
+    transform: translate(12.5vw, -15vh) rotate(45deg) scale(1.05);
+  }
+  25% {
+    transform: translate(25vw, 0) rotate(90deg) scale(1);
+  }
+  37.5% {
+    transform: translate(37.5vw, 15vh) rotate(135deg) scale(1.05);
+  }
+  50% {
+    transform: translate(50vw, 0) rotate(180deg) scale(1);
+  }
+  62.5% {
+    transform: translate(62.5vw, -15vh) rotate(225deg) scale(1.05);
+  }
+  75% {
+    transform: translate(75vw, 0) rotate(270deg) scale(1);
+  }
+  87.5% {
+    transform: translate(87.5vw, 15vh) rotate(315deg) scale(1.05);
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(100vw, 0) rotate(360deg) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Straight trajectory - direct horizontal flight */
+@keyframes unicorn-straight {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(100vw, 0) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Unicorn sprite base class with performance optimizations */
+.unicorn-sprite {
+  will-change: transform, opacity;
+  /* Force GPU acceleration */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* ===== RESPONSIVE ADJUSTMENTS ===== */
+
+@media (max-width: 768px) {
+  /* Reduce animation complexity on smaller screens */
+  @keyframes unicorn-arc {
+    0% {
+      transform: translate(0, 0) rotate(-15deg) scale(1);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    50% {
+      transform: translate(50vw, -30vh) rotate(15deg) scale(1.1);
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(100vw, 0) rotate(45deg) scale(1);
+      opacity: 0;
+    }
+  }
+  
+  @keyframes unicorn-wave {
+    0% {
+      transform: translate(0, 0) rotate(0deg) scale(1);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    25% {
+      transform: translate(25vw, -10vh) rotate(90deg) scale(1.05);
+    }
+    50% {
+      transform: translate(50vw, 0) rotate(180deg) scale(1);
+    }
+    75% {
+      transform: translate(75vw, 10vh) rotate(270deg) scale(1.05);
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(100vw, 0) rotate(360deg) scale(1);
+      opacity: 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Simplified animations for users who prefer reduced motion */
+  .unicorn-sprite {
+    animation-duration: 1s !important;
+  }
+  
+  @keyframes unicorn-diagonal {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(50vw, 0) scale(1);
+      opacity: 0;
+    }
+  }
+  
+  @keyframes unicorn-arc {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(50vw, 0) scale(1);
+      opacity: 0;
+    }
+  }
+  
+  @keyframes unicorn-wave {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(50vw, 0) scale(1);
+      opacity: 0;
+    }
+  }
+  
+  @keyframes unicorn-straight {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(50vw, 0) scale(1);
+      opacity: 0;
+    }
+  }
+}
+
+/* ===== ADDITIONAL FUTURISTIC ANIMATIONS ===== */
+
+/* Neon glow pulse for important elements */
+@keyframes neon-glow-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 5px currentColor) drop-shadow(0 0 10px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 10px currentColor) drop-shadow(0 0 20px currentColor) drop-shadow(0 0 30px currentColor);
+  }
+}
+
+/* Holographic text effect */
+@keyframes holographic-text {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Data stream effect */
+@keyframes data-stream {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+/* Cyber glitch effect */
+@keyframes cyber-glitch {
+  0% {
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+  10% {
+    transform: translate(-2px, 2px);
+    filter: hue-rotate(90deg);
+  }
+  20% {
+    transform: translate(2px, -2px);
+    filter: hue-rotate(180deg);
+  }
+  30% {
+    transform: translate(-2px, -2px);
+    filter: hue-rotate(270deg);
+  }
+  40% {
+    transform: translate(2px, 2px);
+    filter: hue-rotate(360deg);
+  }
+  50% {
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+}
+
+/* Neon border flow */
+@keyframes neon-border-flow {
+  0% {
+    box-shadow: 
+      0 0 5px rgba(0, 217, 255, 0.5),
+      0 0 10px rgba(0, 217, 255, 0.3),
+      inset 0 0 5px rgba(0, 217, 255, 0.2);
+  }
+  33% {
+    box-shadow: 
+      0 0 5px rgba(139, 92, 246, 0.5),
+      0 0 10px rgba(139, 92, 246, 0.3),
+      inset 0 0 5px rgba(139, 92, 246, 0.2);
+  }
+  66% {
+    box-shadow: 
+      0 0 5px rgba(255, 0, 110, 0.5),
+      0 0 10px rgba(255, 0, 110, 0.3),
+      inset 0 0 5px rgba(255, 0, 110, 0.2);
+  }
+  100% {
+    box-shadow: 
+      0 0 5px rgba(0, 217, 255, 0.5),
+      0 0 10px rgba(0, 217, 255, 0.3),
+      inset 0 0 5px rgba(0, 217, 255, 0.2);
+  }
+}
+
+/* Particle burst effect */
+@keyframes particle-burst {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(
+      calc(var(--x, 0) * 100px),
+      calc(var(--y, 0) * 100px)
+    ) scale(0);
+    opacity: 0;
+  }
+}
+
+/* Energy wave effect */
+@keyframes energy-wave {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+/* Cyber scan effect */
+@keyframes cyber-scan {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10%, 90% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+/* Matrix rain effect */
+@keyframes matrix-rain {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+/* Neon flicker effect */
+@keyframes neon-flicker {
+  0%, 100% {
+    opacity: 1;
+  }
+  41%, 43% {
+    opacity: 0.8;
+  }
+  45%, 47% {
+    opacity: 0.9;
+  }
+  49%, 51% {
+    opacity: 0.85;
+  }
+}
+
+/* Holographic interference */
+@keyframes holographic-interference {
+  0%, 100% {
+    background-position: 0% 0%;
+  }
+  25% {
+    background-position: 100% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  75% {
+    background-position: 0% 100%;
+  }
+}
+
+/* Digital countdown effect */
+@keyframes digital-countdown {
+  0% {
+    transform: rotateX(0deg);
+  }
+  50% {
+    transform: rotateX(90deg);
+  }
+  100% {
+    transform: rotateX(0deg);
+  }
+}
+
+/* Cyber pulse ring */
+@keyframes cyber-pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Neon trail effect */
+@keyframes neon-trail {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Apply subtle animations to specific elements */
+.leaderboard-list {
+  position: relative;
+}
+
+/* Stagger animation for leaderboard entries */
+.leaderboard-entry {
+  animation: fade-in-up 0.5s ease-out backwards;
+}
+
+.leaderboard-entry:nth-child(1) { animation-delay: 0.1s; }
+.leaderboard-entry:nth-child(2) { animation-delay: 0.2s; }
+.leaderboard-entry:nth-child(3) { animation-delay: 0.3s; }
+.leaderboard-entry:nth-child(4) { animation-delay: 0.4s; }
+.leaderboard-entry:nth-child(5) { animation-delay: 0.5s; }
+.leaderboard-entry:nth-child(n+6) { animation-delay: 0.6s; }
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive: Disable complex animations on mobile */
+@media (max-width: 768px) {
+  .leaderboard-entry {
+    animation-duration: 0.3s;
+  }
+}
+
+/* Accessibility: Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .leaderboard-entry {
+    animation: none;
+  }
+  
+  @keyframes neon-glow-pulse {
+    0%, 100% {
+      transform: none;
+      filter: none;
+      opacity: 1;
+    }
+  }
+  
+  @keyframes holographic-text {
+    0%, 100% {
+      transform: none;
+      filter: none;
+      opacity: 1;
+    }
+  }
+  
+  @keyframes data-stream {
+    0%, 100% {
+      transform: none;
+      filter: none;
+      opacity: 1;
+    }
+  }
+  
+  @keyframes cyber-glitch {
+    0%, 100% {
+      transform: none;
+      filter: none;
+      opacity: 1;
+    }
+  }
+  
+  @keyframes neon-border-flow {
+    0%, 100% {
+      transform: none;
+      filter: none;
+      opacity: 1;
+    }
+  }
+  
+  @keyframes neon-flicker {
+    0%, 100% {
+      transform: none;
+      filter: none;
+      opacity: 1;
+    }
+  }
+}

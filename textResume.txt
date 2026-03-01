@@ -1,0 +1,108 @@
+Athar Hafiz UX/UI Developer and React Application Architect 
+ 
+Profile 
+Currently learning German to become fluent. I specialize in rapid prototyping and building production-ready React applications. I combine UX/UI design principles with hands-on implementation, leveraging modern component libraries to create enterprise-grade reference implementations. I excel at translating design systems into functional code, building scalable UI architectures, and collaborating with cross-functional teams to deliver complete digital experiences from concept to deployment. 
+Berlin, Germany P: 177 2763088 E: athar.hafiz@gmail.com L: www.linkedin.com/in/atharhafiz Portfolio: https://atharux.com/ 
+Dec 2023 - Present 
+   
+Skills 
+DEVELOPMENT 
+		●  React & React Hooks  
+		●  Component Architecture  
+		●  HTML5 / CSS3 / JavaScript  
+		●  Tailwind CSS  
+		●  Shadcn/ui Component Library  
+		●  Responsive Web Design  
+		●  Git Version Control  
+		●  API Integration  DESIGN & PROTOTYPING  
+		●  Figma to React Workflow  
+		●  Design Systems  
+		●  Wireframing & Prototyping  
+		●  User Research  
+		●  UI/UX Best Practices  
+		●  Accessibility (WCAG)  
+		●  Information Architecture  REACT FRONT END UI  
+		●  Event Operations Automation  
+		●  Conversational Travel Planning  
+		●  Lead Sequence Orchestration  TOOLS & PLATFORMS  
+		●  Figma  
+		●  Sketch  
+		●  Zeplin, Storybook  
+		●  Jira, Trello, Asana  
+		●  Tableau, Analytics  
+		●  CRM Platforms  
+		●  WordPress, CMS  
+Work Experience 
+Co-founder 
+Rising Tide Berlin, Berlin, Germany 
+		●  Designed and built a responsive website with modern UI/UX  
+		●  Implemented design system and component library for seamless  brand experience across digital touchpoints  
+		●  Building local brand partnerships for sustainability in fashion and  
+events 
+Fractional Director UX Design 
+Startup (NDA Client), Remote - Contract 
+May 2024 
+		●  Architected and delivered 30-page Figma design system using Shadcn/ui  
+		●  Translated design system into production-ready components with custom glassmorphic UI patterns  
+		●  Delivered a tokenized design system for a complex SaaS desktop application with modern component architecture  Marketing Developer / Campaign Strategist Chef Works, Inc.  Chef Works, Poway, California, USA Oct 2018 - Jan 2024  ● Built HTML/CSS email templates and landing pages, increasing click rates from 9% to 45% and generating $150K+ annual sales growth  ● Developed data visualization dashboards using Tableau for campaign performance tracking  ● Designed and implemented a gamified dashboard UI, increasing S&R team productivity by 25%  ● Created customer journey mapping and persona development frameworks across 4 revenue streams  ● Implemented GDPR-compliant data segmentation systems for email marketing automation  
+  
+UX/UI Designer & Prototyper 
+Volt 480, Remote - Contract 
+Sept 2018 - Sept 2018 
+		●  Delivered working interactive prototype within 2 weeks for tradeshow presentation, securing next-phase funding  
+		●  Built a responsive, clickable prototype demonstrating core workflows  
+Marketing Project Manager 
+Epik Token, Remote - Freelance Nov 2017 - Oct 2018 
+		●  Designed and built product website and whitepaper materials for blockchain startup launch  
+		●  Developed presentation materials and tradeshow assets, contributing to a $2M investment raise  
+		●  Created responsive landing pages and marketing collateral Product Designer  
+Vinder, Remote - Freelance 
+Sep 2017 - May 2018 
+		●  Led Agile design sprints and implemented design-to-development handoff workflows  
+		●  Built a complete design system with reusable components for Android and iOS applications  
+		●  Created production-ready specifications, wireframes, and interactive prototypes  
+Technical Project Manager/ Designer 
+Virtual Fantasy League, Remote - Freelance 
+Nov 2016 - Sept 2017 
+		●  Established design and development SOPs for streamlined product delivery  
+		●  Managed cross-functional teams to deliver a complete product in 9 months  
+		●  Provided technical direction and design specifications to the development team  
+User Experience Architect 
+Tandon Group, San Jose, California, USA 
+Jan 2016 - Oct 2016 
+		●  Redesigned and built B2B medical services website, securing 3 major contracts  
+		●  Designed and developed RFID technology website, leading to $250,000 in sales  
+		●  Rebuilt jewelry retail site with improved UX/UI and conversion optimization  
+		●  Managed WordPress development, SEO implementation, and email campaign integration  
+iOS App Review/ UX Designer 
+Apple, Cupertino, California, USA 
+Sep 2010 - Jan 2016 
+		●  Designed and collaborated with developers on a gamified productivity app, increasing team efficiency by 25%  
+		●  Developed app review workflow policies and best practices documentation, and influenced process workflow improvements  
+		●  Reviewed 100,000+ apps annually with a focus on UX quality standards  
+		●  Managed developer appeals and provided technical UX feedback  
+		Certifications 
+		Zertifikat B1 
+		g.a.s.t., Berlin, DE 2025 
+		Deutsch B1.2 
+		vhs Pankow, Berlin, DE 2025 
+		UX/UI Design 
+		General Assembly, San Francisco, CA, USA 2016 
+		Gamification Design 
+		Octalysis Group, San Jose, CA, USA 2017 
+		Lean Six Sigma - Green Belt 
+		Lean Wright, Inc Poway, California, USA 2019 
+		Languages 
+		English 
+		Native 
+		Urdu 
+		Native 
+		Hindi 
+		Conversational 
+		German 
+		B2.2, currently learning 
+		Education 
+		Bachelor of Fine Arts 
+		Digital Media Art SJSU, San Jose, CA, USA 2005 
+		A.A. Liberal Arts 
+		De Anza College, Cupertino, CA, USA 1999 

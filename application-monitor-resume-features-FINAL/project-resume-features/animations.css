@@ -1,0 +1,299 @@
+/* ===== MILESTONE ANIMATIONS ===== */
+/* Pure keyframes only - no layout, no component coupling */
+/* Tier system matches gamification.js MILESTONE_TIERS output */
+
+/* ===== Tier 1: Rank Up (most impactful) ===== */
+@keyframes milestone-rank-up {
+  0% {
+    transform: scale(0.8) translateY(30px);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.1) translateY(0);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1) translateY(0);
+  }
+  85% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9) translateY(-20px);
+    opacity: 0;
+  }
+}
+
+@keyframes milestone-rank-up-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(6, 182, 212, 0.8),
+                0 0 60px rgba(6, 182, 212, 0.4);
+  }
+}
+
+@keyframes milestone-rank-up-particles {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--particle-x, 0), var(--particle-y, -100px)) scale(0);
+    opacity: 0;
+  }
+}
+
+/* ===== Tier 2: Achievement (medium impact) ===== */
+@keyframes milestone-achievement {
+  0% {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  10% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  90% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-15px);
+    opacity: 0;
+  }
+}
+
+@keyframes milestone-achievement-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.6),
+                0 0 45px rgba(16, 185, 129, 0.3);
+  }
+}
+
+/* ===== Tier 3: Standard (subtle) ===== */
+@keyframes milestone-standard {
+  0% {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  10% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  90% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+}
+
+@keyframes milestone-standard-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* ===== Progress bar fill animation ===== */
+@keyframes rank-progress-fill {
+  from {
+    width: 0;
+  }
+  to {
+    width: var(--progress-width, 0%);
+  }
+}
+
+/* ===== Streak counter pulse ===== */
+@keyframes streak-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ===== TOAST COMPONENT CLASSES ===== */
+/* These are applied by MilestoneToast.jsx based on tier prop */
+
+.milestone-toast {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  z-index: 9999;
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  min-width: 320px;
+  max-width: 400px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.milestone-toast.tier-rank-up {
+  animation: milestone-rank-up 4s ease-out forwards,
+             milestone-rank-up-glow 4s ease-in-out;
+  border-color: #06b6d4;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(30, 41, 59, 0.95));
+}
+
+.milestone-toast.tier-achievement {
+  animation: milestone-achievement 4s ease-out forwards,
+             milestone-achievement-glow 4s ease-in-out;
+  border-color: #10b981;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(30, 41, 59, 0.95));
+}
+
+.milestone-toast.tier-standard {
+  animation: milestone-standard 4s ease-out forwards,
+             milestone-standard-pulse 4s ease-in-out;
+}
+
+.milestone-toast-title {
+  font-size: 1.125rem;
+  font-weight: bold;
+  color: #f8fafc;
+  margin-bottom: 0.5rem;
+}
+
+.milestone-toast-message {
+  font-size: 0.875rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.milestone-toast-icon {
+  position: absolute;
+  top: 1.25rem;
+  left: 1.25rem;
+  font-size: 1.5rem;
+}
+
+.milestone-toast-content {
+  margin-left: 2.5rem;
+}
+
+/* Particle effect container (only for rank-up) */
+.milestone-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+
+.milestone-particle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #06b6d4;
+  border-radius: 50%;
+  animation: milestone-rank-up-particles 1.5s ease-out forwards;
+}
+
+/* ===== RANK CARD ANIMATIONS ===== */
+
+.rank-progress-bar {
+  height: 6px;
+  background: rgba(51, 65, 85, 0.5);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.75rem;
+}
+
+.rank-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0891b2, #06b6d4);
+  border-radius: 999px;
+  animation: rank-progress-fill 1s ease-out forwards;
+  width: 0;
+}
+
+.streak-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.streak-badge.active {
+  animation: streak-pulse 0.6s ease-in-out;
+}
+
+/* ===== GARDEN THEME OVERRIDES ===== */
+
+[data-theme="garden"] .milestone-toast {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: #bbf7d0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="garden"] .milestone-toast.tier-rank-up {
+  background: linear-gradient(135deg, rgba(21, 128, 61, 0.08), rgba(255, 255, 255, 0.98));
+  border-color: #15803d;
+}
+
+[data-theme="garden"] .milestone-toast.tier-achievement {
+  background: linear-gradient(135deg, rgba(4, 120, 87, 0.06), rgba(255, 255, 255, 0.98));
+  border-color: #047857;
+}
+
+[data-theme="garden"] .milestone-toast-title {
+  color: #1a3a2a;
+}
+
+[data-theme="garden"] .milestone-toast-message {
+  color: #44564a;
+}
+
+[data-theme="garden"] .rank-progress-fill {
+  background: linear-gradient(90deg, #15803d, #16a34a);
+}
+
+[data-theme="garden"] .milestone-particle {
+  background: #15803d;
+}
+
+/* ===== RESPONSIVE ===== */
+
+@media (max-width: 768px) {
+  .milestone-toast {
+    top: 1rem;
+    right: 1rem;
+    left: 1rem;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .milestone-toast {
+    padding: 1rem;
+  }
+  
+  .milestone-toast-title {
+    font-size: 1rem;
+  }
+  
+  .milestone-toast-message {
+    font-size: 0.8125rem;
+  }
+}
