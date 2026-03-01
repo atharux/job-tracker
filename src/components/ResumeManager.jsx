@@ -107,17 +107,28 @@ export default function ResumeManager({ user }) {
       const { error } = await supabase
         .from('resume_versions')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id); // Add user_id check for security
 
       if (error) throw error;
 
+      // Clear panels if they're showing the deleted resume
       if (leftVersion?.id === id) {
         setLeftVersion(null);
+        setLeftEditContent('');
+        setLeftEditName('');
       }
       if (rightVersion?.id === id) {
         setRightVersion(null);
+        setRightEditContent('');
+        setRightEditName('');
       }
+      
+      // Force reload with cache bypass
       await loadVersions();
+      
+      // Update local state immediately
+      setVersions(prev => prev.filter(v => v.id !== id));
     } catch (err) {
       console.error('Failed to delete:', err);
       alert('Failed to delete version');
