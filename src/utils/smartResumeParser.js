@@ -12,7 +12,7 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Extract text from PDF file
+ * Extract text from PDF file with better formatting preservation
  */
 async function extractTextFromPDF(file) {
   const arrayBuffer = await file.arrayBuffer();
@@ -22,11 +22,37 @@ async function extractTextFromPDF(file) {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items.map(item => item.str).join(' ');
-    fullText += pageText + '\n';
+    
+    // Group text items by vertical position to preserve lines
+    const lines = [];
+    let currentLine = { y: null, text: '' };
+    
+    textContent.items.forEach((item, index) => {
+      const y = Math.round(item.transform[5]); // Vertical position
+      const text = item.str;
+      
+      // If this is a new line (different Y position)
+      if (currentLine.y === null || Math.abs(y - currentLine.y) > 2) {
+        if (currentLine.text.trim()) {
+          lines.push(currentLine.text.trim());
+        }
+        currentLine = { y, text: text };
+      } else {
+        // Same line - add space if needed
+        const needsSpace = currentLine.text && !currentLine.text.endsWith(' ') && !text.startsWith(' ');
+        currentLine.text += (needsSpace ? ' ' : '') + text;
+      }
+    });
+    
+    // Add last line
+    if (currentLine.text.trim()) {
+      lines.push(currentLine.text.trim());
+    }
+    
+    fullText += lines.join('\n') + '\n\n';
   }
   
-  return fullText;
+  return fullText.trim();
 }
 
 /**
