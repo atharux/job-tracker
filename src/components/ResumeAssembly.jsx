@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Upload } from 'lucide-react'; // Add Upload to existing imports
 import { extractTextFromFile } from '../utils/smartResumeParser';
 import { supabase } from '../supabaseClient';
-import { Download, Save, Wand2, FileText, Link, ChevronDown, ChevronUp, X, Check, Loader2, AlertCircle, Eye, Edit3 } from 'lucide-react';
+import { Download, Save, Wand2, FileText, Link, ChevronDown, ChevronUp, X, Check, Loader2, AlertCircle, Eye, Edit3, Mail } from 'lucide-react';
 
 // ─── Supabase helpers ────────────────────────────────────────────────────────
 
@@ -171,6 +171,19 @@ const fileInputRef = useRef(null);
   const [showAnalysisPanel, setShowAnalysisPanel] = useState(true);
   const textareaRef = useRef(null);
 
+  // ── Cover Letter state ───────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState('resume'); // 'resume' | 'coverletter'
+  const [coverLetter, setCoverLetter] = useState('');
+  const [coverLetterEdit, setCoverLetterEdit] = useState('');
+  const [isCLEditing, setIsCLEditing] = useState(false);
+  const [isCLGenerating, setIsCLGenerating] = useState(false);
+  const [isCLSaving, setIsCLSaving] = useState(false);
+  const [clSavedMsg, setCLSavedMsg] = useState('');
+  const [clError, setCLError] = useState('');
+  const [clVersionName, setCLVersionName] = useState('');
+  // Store job context for cover letter generation (set after handleAnalyze completes)
+  const jobContextRef = useRef(null);
+
   useEffect(() => {
     loadUserPersona(user.id)
       .then(setResumeVersions)
@@ -305,6 +318,12 @@ Output ONLY the resume text, no preamble, no markdown headers beyond section nam
       setCustomizedResume(assembled);
       setEditContent(assembled);
       setVersionName(`${jobSignal.jobTitle || 'Role'} @ ${jobSignal.company || 'Company'} — ${new Date().toLocaleDateString()}`);
+      setCLVersionName(`Cover Letter — ${jobSignal.jobTitle || 'Role'} @ ${jobSignal.company || 'Company'} — ${new Date().toLocaleDateString()}`);
+      // Store context for cover letter generation
+      jobContextRef.current = { jobSignal, matchData, baseResumeContent };
+      setActiveTab('resume');
+      setCoverLetter('');
+      setCoverLetterEdit('');
       setStep(2);
       console.log('Analysis complete - step set to 2, analysis:', { jobTitle: jobSignal.jobTitle, company: jobSignal.company, score: matchData.score });
     } catch (err) {
@@ -346,7 +365,66 @@ Output ONLY the resume text, no preamble, no markdown headers beyond section nam
     setAnalysisError('');
     setSavedMsg('');
     setShowVersionInput(false);
+    // reset cover letter
+    setActiveTab('resume');
+    setCoverLetter('');
+    setCoverLetterEdit('');
+    setIsCLEditing(false);
+    setCLError('');
+    setCLSavedMsg('');
+    jobContextRef.current = null;
   };
+
+  // ── Generate Cover Letter ────────────────────────────────────────────────────
+
+  const handleGenerateCoverLetter = async () => {
+    const ctx = jobContextRef.current;
+    if (!ctx) return;
+    setIsCLGenerating(true);
+    setCLError('');
+    try {
+      const generated = await callAI(
+        `You are an expert cover letter writer. Write a professional, personalized cover letter tailored to the job and candidate.
+
+Rules:
+- Open with a specific hook referencing the company's mission or the role's purpose (drawn from job signal)
+- Second paragraph: highlight 2-3 concrete experiences from the candidate's background that directly map to the role's requirements
+- Third paragraph: address any skill gaps honestly and frame them as growth opportunities; mention excitement for the specific tech stack or domain
+- Fourth paragraph: close with what draws the candidate to THIS role specifically (team size, ownership, growth), not generic enthusiasm
+- Keep total length to 4 paragraphs, ~300-380 words
+- Tone: warm, direct, confident — not corporate or sycophantic
+- End with "Warm regards," followed by a blank line for the candidate's name
+- Output ONLY the cover letter text, no subject line, no preamble`,
+        `CANDIDATE RESUME:\n${ctx.baseResumeContent || '(No resume provided)'}\n\nJOB SIGNAL:\n${JSON.stringify(ctx.jobSignal)}\n\nMATCH DATA:\n${JSON.stringify(ctx.matchData)}\n\nJOB DESCRIPTION (raw):\n${jobInput}`,
+        aiProvider
+      );
+      setCoverLetter(generated);
+      setCoverLetterEdit(generated);
+    } catch (err) {
+      setCLError(err.message || 'Cover letter generation failed.');
+    } finally {
+      setIsCLGenerating(false);
+    }
+  };
+
+  const handleSaveCoverLetter = async () => {
+    const content = isCLEditing ? coverLetterEdit : coverLetter;
+    if (!clVersionName.trim() || !content) return;
+    setIsCLSaving(true);
+    try {
+      await saveResumeVersion(user.id, clVersionName, content);
+      setCLSavedMsg('Saved!');
+      setTimeout(() => setCLSavedMsg(''), 3000);
+      const updated = await loadUserPersona(user.id);
+      setResumeVersions(updated);
+    } catch (err) {
+      setCLSavedMsg('Save failed: ' + err.message);
+    } finally {
+      setIsCLSaving(false);
+    }
+  };
+
+  const finalCLContent = isCLEditing ? coverLetterEdit : coverLetter;
 
   const finalContent = isEditing ? editContent : customizedResume;
 
@@ -758,6 +836,72 @@ Output ONLY the resume text, no preamble, no markdown headers beyond section nam
           gap: 24px;
         }
         @media (max-width: 700px) { .ra-two-col { grid-template-columns: 1fr; } }
+
+        /* ── Result Tabs (Resume / Cover Letter) ───────────────────── */
+        .ra-tabs {
+          display: flex;
+          gap: 4px;
+          background: rgba(0,0,0,0.2);
+          border-radius: 10px;
+          padding: 4px;
+          width: fit-content;
+          margin-bottom: 20px;
+        }
+        .ra-tab {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          padding: 8px 18px;
+          border-radius: 7px;
+          border: none;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          background: transparent;
+          color: rgba(255,255,255,0.35);
+          transition: all 0.2s;
+          font-family: inherit;
+        }
+        .ra-tab--active {
+          background: rgba(110,231,183,0.13);
+          color: #6ee7b7;
+          border: 1px solid rgba(110,231,183,0.22);
+        }
+        .ra-tab:not(.ra-tab--active):hover {
+          background: rgba(255,255,255,0.05);
+          color: rgba(255,255,255,0.6);
+        }
+        .ra-cl-empty {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
+          padding: 48px 24px;
+          text-align: center;
+        }
+        .ra-cl-empty__icon {
+          width: 52px;
+          height: 52px;
+          border-radius: 50%;
+          background: rgba(110,231,183,0.08);
+          border: 1px solid rgba(110,231,183,0.18);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #6ee7b7;
+        }
+        .ra-cl-empty__title {
+          font-size: 15px;
+          font-weight: 600;
+          color: #e2e8f0;
+        }
+        .ra-cl-empty__sub {
+          font-size: 13px;
+          color: rgba(255,255,255,0.3);
+          max-width: 300px;
+          line-height: 1.6;
+        }
       `}</style>
 
       {/* ── Step Bar ─────────────────────────────────────────────────────── */}
@@ -988,73 +1132,206 @@ Output ONLY the resume text, no preamble, no markdown headers beyond section nam
             )}
           </div>
 
-          {/* Resume editor/preview */}
+          {/* Resume / Cover Letter tabbed card */}
           <div className="ra-card">
-            <div className="ra-card-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FileText size={18} className="ra-card-title-accent" />
-                Customized Resume
-              </span>
+            {/* Tab toggle */}
+            <div className="ra-tabs">
               <button
-                className={`ra-btn ${isEditing ? 'ra-btn--success' : 'ra-btn--ghost'}`}
-                style={{ fontSize: 13, padding: '7px 14px' }}
-                onClick={() => setIsEditing(v => !v)}
+                className={`ra-tab ${activeTab === 'resume' ? 'ra-tab--active' : ''}`}
+                onClick={() => setActiveTab('resume')}
               >
-                {isEditing ? <><Eye size={14} /> Preview</> : <><Edit3 size={14} /> Edit</>}
+                <FileText size={14} /> Customized Resume
+              </button>
+              <button
+                className={`ra-tab ${activeTab === 'coverletter' ? 'ra-tab--active' : ''}`}
+                onClick={() => setActiveTab('coverletter')}
+              >
+                <Mail size={14} /> Cover Letter
               </button>
             </div>
 
-            {isEditing ? (
-              <textarea
-                ref={textareaRef}
-                className="ra-resume-edit"
-                value={editContent}
-                onChange={e => setEditContent(e.target.value)}
-              />
-            ) : (
-              <div className="ra-resume-preview">{finalContent}</div>
+            {/* ── Resume tab ── */}
+            {activeTab === 'resume' && (
+              <>
+                <div className="ra-card-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FileText size={18} className="ra-card-title-accent" />
+                    Customized Resume
+                  </span>
+                  <button
+                    className={`ra-btn ${isEditing ? 'ra-btn--success' : 'ra-btn--ghost'}`}
+                    style={{ fontSize: 13, padding: '7px 14px' }}
+                    onClick={() => setIsEditing(v => !v)}
+                  >
+                    {isEditing ? <><Eye size={14} /> Preview</> : <><Edit3 size={14} /> Edit</>}
+                  </button>
+                </div>
+
+                {isEditing ? (
+                  <textarea
+                    ref={textareaRef}
+                    className="ra-resume-edit"
+                    value={editContent}
+                    onChange={e => setEditContent(e.target.value)}
+                  />
+                ) : (
+                  <div className="ra-resume-preview">{finalContent}</div>
+                )}
+
+                <div style={{ marginTop: 20 }}>
+                  <label className="ra-label">Version Name</label>
+                  <input
+                    className="ra-input"
+                    value={versionName}
+                    onChange={e => setVersionName(e.target.value)}
+                    placeholder="e.g. Senior Engineer @ Acme — Jan 2026"
+                  />
+                </div>
+
+                <div className="ra-btn-row">
+                  <button
+                    className="ra-btn ra-btn--primary"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                  >
+                    <Save size={15} /> {isSaving ? 'Saving…' : 'Save Version'}
+                  </button>
+                  <button
+                    className="ra-btn ra-btn--ghost"
+                    onClick={() => downloadTXT(finalContent, `${versionName || 'resume'}.txt`)}
+                  >
+                    <Download size={15} /> ATS (.txt)
+                  </button>
+                  <button
+                    className="ra-btn ra-btn--ghost"
+                    onClick={() => downloadPDF(finalContent, `${versionName || 'resume'}.pdf`)}
+                  >
+                    <Download size={15} /> PDF
+                  </button>
+                  {savedMsg && (
+                    <span className="ra-saved-badge">
+                      <Check size={14} /> {savedMsg}
+                    </span>
+                  )}
+                </div>
+              </>
             )}
 
-            {/* Version name */}
-            <div style={{ marginTop: 20 }}>
-              <label className="ra-label">Version Name</label>
-              <input
-                className="ra-input"
-                value={versionName}
-                onChange={e => setVersionName(e.target.value)}
-                placeholder="e.g. Senior Engineer @ Acme — Jan 2026"
-              />
-            </div>
+            {/* ── Cover Letter tab ── */}
+            {activeTab === 'coverletter' && (
+              <>
+                <div className="ra-card-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Mail size={18} className="ra-card-title-accent" />
+                    Cover Letter
+                  </span>
+                  {coverLetter && (
+                    <button
+                      className={`ra-btn ${isCLEditing ? 'ra-btn--success' : 'ra-btn--ghost'}`}
+                      style={{ fontSize: 13, padding: '7px 14px' }}
+                      onClick={() => setIsCLEditing(v => !v)}
+                    >
+                      {isCLEditing ? <><Eye size={14} /> Preview</> : <><Edit3 size={14} /> Edit</>}
+                    </button>
+                  )}
+                </div>
 
-            {/* Actions */}
-            <div className="ra-btn-row">
-              <button
-                className="ra-btn ra-btn--primary"
-                onClick={handleSave}
-                disabled={isSaving}
-              >
-                <Save size={15} /> {isSaving ? 'Saving…' : 'Save Version'}
-              </button>
-              <button
-                className="ra-btn ra-btn--ghost"
-                onClick={() => downloadTXT(finalContent, `${versionName || 'resume'}.txt`)}
-              >
-                <Download size={15} /> ATS (.txt)
-              </button>
-              <button
-                className="ra-btn ra-btn--ghost"
-                onClick={() => downloadPDF(finalContent, `${versionName || 'resume'}.pdf`)}
-              >
-                <Download size={15} /> PDF
-              </button>
-              {savedMsg && (
-                <span className="ra-saved-badge">
-                  <Check size={14} /> {savedMsg}
-                </span>
-              )}
-            </div>
+                {/* Not yet generated */}
+                {!coverLetter && !isCLGenerating && (
+                  <div className="ra-cl-empty">
+                    <div className="ra-cl-empty__icon">
+                      <Mail size={22} />
+                    </div>
+                    <div className="ra-cl-empty__title">Generate a tailored cover letter</div>
+                    <div className="ra-cl-empty__sub">
+                      Uses the same job analysis and your resume to write a role-specific cover letter in your voice.
+                    </div>
+                    {clError && (
+                      <div className="ra-error" style={{ maxWidth: 420, width: '100%' }}>
+                        <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                        <span>{clError}</span>
+                      </div>
+                    )}
+                    <button
+                      className="ra-btn ra-btn--primary"
+                      onClick={handleGenerateCoverLetter}
+                    >
+                      <Mail size={15} /> Generate Cover Letter
+                    </button>
+                  </div>
+                )}
 
-            {/* Reset */}
+                {/* Generating */}
+                {isCLGenerating && (
+                  <div className="ra-loading">
+                    <Loader2 size={36} className="ra-loading__spinner" />
+                    <div className="ra-loading__text">Writing your cover letter…</div>
+                    <div className="ra-loading__sub">Matching your background to the role signal and crafting a tailored letter</div>
+                  </div>
+                )}
+
+                {/* Generated */}
+                {coverLetter && !isCLGenerating && (
+                  <>
+                    {isCLEditing ? (
+                      <textarea
+                        className="ra-resume-edit"
+                        value={coverLetterEdit}
+                        onChange={e => setCoverLetterEdit(e.target.value)}
+                      />
+                    ) : (
+                      <div className="ra-resume-preview">{finalCLContent}</div>
+                    )}
+
+                    <div style={{ marginTop: 20 }}>
+                      <label className="ra-label">Version Name</label>
+                      <input
+                        className="ra-input"
+                        value={clVersionName}
+                        onChange={e => setCLVersionName(e.target.value)}
+                        placeholder="e.g. Cover Letter — Product Designer @ Acme — Jan 2026"
+                      />
+                    </div>
+
+                    <div className="ra-btn-row">
+                      <button
+                        className="ra-btn ra-btn--primary"
+                        onClick={handleSaveCoverLetter}
+                        disabled={isCLSaving}
+                      >
+                        <Save size={15} /> {isCLSaving ? 'Saving…' : 'Save Version'}
+                      </button>
+                      <button
+                        className="ra-btn ra-btn--ghost"
+                        onClick={() => downloadTXT(finalCLContent, `${clVersionName || 'cover-letter'}.txt`)}
+                      >
+                        <Download size={15} /> TXT
+                      </button>
+                      <button
+                        className="ra-btn ra-btn--ghost"
+                        onClick={() => downloadPDF(finalCLContent, `${clVersionName || 'cover-letter'}.pdf`)}
+                      >
+                        <Download size={15} /> PDF
+                      </button>
+                      <button
+                        className="ra-btn ra-btn--ghost"
+                        style={{ marginLeft: 'auto' }}
+                        onClick={() => { setCoverLetter(''); setCoverLetterEdit(''); setIsCLEditing(false); setCLError(''); }}
+                      >
+                        <X size={14} /> Regenerate
+                      </button>
+                      {clSavedMsg && (
+                        <span className="ra-saved-badge">
+                          <Check size={14} /> {clSavedMsg}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* Reset — always visible at bottom */}
             <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <button className="ra-btn ra-btn--danger-ghost" onClick={handleReset}>
                 <X size={14} /> Start Over
