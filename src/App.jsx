@@ -48,6 +48,7 @@ export default function App() {
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [milestoneQueue, setMilestoneQueue] = useState([]);
   const [activeCelebration, setActiveCelebration] = useState(null);
+  const [statusCelebration, setStatusCelebration] = useState(null); // For status-specific celebrations
   const [currentView, setCurrentView] = useState('applications'); // 'applications', 'leaderboard', 'assembly', or 'resumes'
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showApiSettings, setShowApiSettings] = useState(false);
@@ -495,6 +496,17 @@ export default function App() {
       }
 setIsModalOpen(false);
       await loadApplications();
+      
+      // Status-specific celebrations (immediate feedback)
+      if (editingId && oldStatus !== formData.status) {
+        if (formData.status === 'rejected') {
+          // Butterfly celebration for rejection
+          setStatusCelebration({ emoji: '🦋', type: 'rejected' });
+        } else if (formData.status === 'interview') {
+          // Dragon celebration for interview
+          setStatusCelebration({ emoji: '🐲', type: 'interview' });
+        }
+      }
       
       // Gamification update - SINGLE CALL ONLY
       if (gamificationState) {
@@ -1334,6 +1346,14 @@ if (!user) {
         <CelebrationAnimation
           milestone={activeCelebration}
           onComplete={() => setActiveCelebration(null)}
+        />
+      )}
+
+      {statusCelebration && (
+        <CelebrationAnimation
+          milestone={{ tier: 'standard', type: statusCelebration.type }}
+          emoji={statusCelebration.emoji}
+          onComplete={() => setStatusCelebration(null)}
         />
       )}
     </div>

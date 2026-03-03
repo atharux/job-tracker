@@ -16,6 +16,7 @@ import UnicornSprite from './UnicornSprite';
 /**
  * @typedef {Object} CelebrationAnimationProps
  * @property {Milestone} milestone - The milestone that triggered the celebration
+ * @property {string} [emoji] - Optional emoji to use instead of unicorn (e.g., '🦋', '🐲')
  * @property {() => void} onComplete - Callback invoked when animation completes
  */
 
@@ -75,12 +76,12 @@ function getCelebrationConfig(tier) {
 
 /**
  * CELEBRATION ANIMATION COMPONENT
- * Renders flying unicorn animations when milestones are achieved
- * Spawns multiple unicorns with staggered timing based on milestone tier
+ * Renders flying emoji animations when milestones are achieved
+ * Spawns multiple emojis with staggered timing based on milestone tier
  * 
  * @param {CelebrationAnimationProps} props
  */
-export default function CelebrationAnimation({ milestone, onComplete }) {
+export default function CelebrationAnimation({ milestone, emoji, onComplete }) {
   const [unicorns, setUnicorns] = useState([]);
 
   const handleUnicornComplete = useCallback((id) => {
@@ -131,6 +132,7 @@ export default function CelebrationAnimation({ milestone, onComplete }) {
           duration={unicorn.duration}
           delay={unicorn.delay}
           trajectory={unicorn.trajectory}
+          emoji={emoji}
           onAnimationEnd={handleUnicornComplete}
         />
       ))}

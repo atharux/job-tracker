@@ -12,13 +12,14 @@ import React, { useEffect, useRef } from 'react';
  * @property {number} duration - Animation duration in seconds
  * @property {number} delay - Delay before animation starts in milliseconds
  * @property {TrajectoryType} trajectory - The flight path type
+ * @property {string} [emoji] - Optional emoji to display (defaults to 🦄)
  * @property {(id: string) => void} onAnimationEnd - Callback when animation completes
  */
 
 /**
  * UNICORN SPRITE COMPONENT
- * Individual animated unicorn element
- * Uses emoji unicorn (🦄) for quick implementation
+ * Individual animated emoji element
+ * Uses emoji (🦄, 🦋, 🐲) for quick implementation
  * Structured to allow easy image swapping later
  * 
  * @param {UnicornSpriteProps} props
@@ -30,6 +31,7 @@ export default function UnicornSprite({
   duration, 
   delay, 
   trajectory,
+  emoji = '🦄',
   onAnimationEnd 
 }) {
   const unicornRef = useRef(null);
@@ -69,7 +71,7 @@ export default function UnicornSprite({
       className={`unicorn-sprite trajectory-${trajectory}`}
       style={style}
     >
-      🦄
+      {emoji}
     </div>
   );
 }
