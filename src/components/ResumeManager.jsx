@@ -2,7 +2,82 @@ import React, { useState, useEffect } from 'react';
 import { FileText, Edit3, Trash2, Download, Eye, X, Save, Plus, Upload, FilePlus } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { extractTextFromFile } from '../utils/smartResumeParser';
-import jsPDF from 'jspdf';
+import { generateProfessionalPDF } from '../utils/professionalPdfExport';
+
+
+// ─── Formatted Resume Renderer ───────────────────────────────────────────────
+
+function FormattedResume({ content }) {
+  if (!content) return null;
+  const lines = content.split('\n');
+  const elements = [];
+  let i = 0, currentEntry = null;
+  let key = 0;
+  const k = () => key++;
+
+  const flushEntry = () => {
+    if (currentEntry) {
+      elements.push(<div className="rp-entry" key={k()}>{currentEntry}</div>);
+      currentEntry = null;
+    }
+  };
+  const isSectionHeader = (line) => {
+    const t = line.trim();
+    return t.length > 1 && t === t.toUpperCase() && /^[A-Z\s\/&\-]+$/.test(t) && t.length < 60;
+  };
+  const isBullet = (line) => /^\s*[-\u2022\u25cf*\u25aa]/.test(line);
+  const hasDate = (line) => /(\d{4}|\bJan\b|\bFeb\b|\bMar\b|\bApr\b|\bMay\b|\bJun\b|\bJul\b|\bAug\b|\bSep\b|\bOct\b|\bNov\b|\bDec\b|Present|Current)/i.test(line);
+
+  while (i < lines.length && !lines[i].trim()) i++;
+  if (i < lines.length) { elements.push(<div className="rp-name" key={k()}>{lines[i].trim()}</div>); i++; }
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) { i++; break; }
+    if (isSectionHeader(line)) break;
+    elements.push(<div className="rp-contact" key={k()}>{line}</div>);
+    i++;
+  }
+  elements.push(<hr className="rp-divider" key={k()} />);
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) { i++; continue; }
+    if (isSectionHeader(line)) {
+      flushEntry();
+      elements.push(<div className="rp-section-header" key={k()}>{line}</div>);
+      i++; continue;
+    }
+    if (isBullet(line)) {
+      const text = line.replace(/^\s*[-\u2022\u25cf*\u25aa]\s*/, '');
+      if (!currentEntry) currentEntry = [];
+      currentEntry.push(<div className="rp-bullet" key={k()}>{text}</div>);
+      i++; continue;
+    }
+    if (i + 1 < lines.length && hasDate(lines[i + 1].trim()) && lines[i + 1].trim()) {
+      flushEntry();
+      const metaLine = lines[i + 1].trim();
+      const parts = metaLine.split(/\s{2,}/);
+      currentEntry = [
+        <div className="rp-entry-title" key={k()}>{line}</div>,
+        <div className="rp-entry-meta" key={k()}>
+          <span>{parts[0] || metaLine}</span>
+          {parts.length > 1 && <span>{parts.slice(1).join('  ')}</span>}
+        </div>
+      ];
+      i += 2; continue;
+    }
+    if (hasDate(line) && !currentEntry) {
+      elements.push(<div className="rp-entry-meta" key={k()}><span>{line}</span></div>);
+      i++; continue;
+    }
+    if (!currentEntry) currentEntry = [];
+    currentEntry.push(<div className="rp-para" key={k()}>{line}</div>);
+    i++;
+  }
+  flushEntry();
+  return <div className="rm-formatted-resume">{elements}</div>;
+}
 
 export default function ResumeManager({ user }) {
   const [versions, setVersions] = useState([]);
@@ -146,62 +221,7 @@ export default function ResumeManager({ user }) {
   };
 
   const downloadPDF = (content, filename) => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 20;
-    const maxWidth = pageWidth - (margin * 2);
-    let yPosition = margin;
-
-    // Parse content into sections
-    const sections = parseResumeContent(content);
-
-    // Title/Name (if exists)
-    if (sections.header) {
-      doc.setFontSize(16);
-      doc.setFont(undefined, 'bold');
-      const headerLines = doc.splitTextToSize(sections.header, maxWidth);
-      headerLines.forEach(line => {
-        if (yPosition > pageHeight - margin) {
-          doc.addPage();
-          yPosition = margin;
-        }
-        doc.text(line, margin, yPosition);
-        yPosition += 7;
-      });
-      yPosition += 5;
-    }
-
-    // Render each section
-    Object.entries(sections).forEach(([key, value]) => {
-      if (key === 'header' || !value) return;
-
-      // Section title
-      doc.setFontSize(12);
-      doc.setFont(undefined, 'bold');
-      if (yPosition > pageHeight - margin) {
-        doc.addPage();
-        yPosition = margin;
-      }
-      doc.text(key.toUpperCase(), margin, yPosition);
-      yPosition += 7;
-
-      // Section content
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      const lines = doc.splitTextToSize(value, maxWidth);
-      lines.forEach(line => {
-        if (yPosition > pageHeight - margin) {
-          doc.addPage();
-          yPosition = margin;
-        }
-        doc.text(line, margin, yPosition);
-        yPosition += 5;
-      });
-      yPosition += 5;
-    });
-
-    doc.save(filename);
+    generateProfessionalPDF(content, filename);
   };
 
   const parseResumeContent = (content) => {
@@ -470,7 +490,7 @@ CERTIFICATIONS
             onChange={(e) => setContent(e.target.value)}
           />
         ) : (
-          <div className="rm-preview">{formatResumeContent(version.content)}</div>
+          <div className="rm-preview"><FormattedResume content={version.content} /></div>
         )}
       </div>
     );
@@ -833,66 +853,30 @@ CERTIFICATIONS
         }
 
         .rm-preview {
-          background: rgba(0,0,0,0.2);
-          border: 1px solid rgba(255,255,255,0.07);
+          background: #ffffff;
           border-radius: 10px;
-          padding: 20px;
-          font-family: 'Courier New', monospace;
-          font-size: 12px;
-          line-height: 1.7;
-          color: #cbd5e1;
+          padding: 32px 40px;
           max-height: 550px;
           overflow-y: auto;
+          color: #1a1a1a;
         }
 
-        .rm-formatted-content {
-          font-family: 'Segoe UI', system-ui, sans-serif;
-        }
+        .rm-formatted-resume { font-family: Georgia, serif; }
 
-        .rm-section {
-          margin-bottom: 24px;
-        }
+        .rp-name { font-family: Georgia, serif; font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 5px; }
+        .rp-contact { font-size: 12px; color: #475569; margin-bottom: 2px; line-height: 1.6; }
+        .rp-divider { border: none; border-top: 2px solid #0f172a; margin: 12px 0 8px; }
+        .rp-section-header { font-family: Georgia, serif; font-size: 9.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; margin-top: 20px; margin-bottom: 8px; }
+        .rp-entry { margin-bottom: 12px; }
+        .rp-entry-title { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
+        .rp-entry-meta { font-size: 11.5px; color: #64748b; margin-bottom: 4px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; font-style: italic; }
+        .rp-bullet { font-size: 12.5px; color: #334155; line-height: 1.6; padding-left: 14px; position: relative; margin-bottom: 2px; }
+        .rp-bullet::before { content: '•'; position: absolute; left: 2px; color: #94a3b8; }
+        .rp-para { font-size: 12.5px; color: #334155; line-height: 1.65; margin-bottom: 3px; }
 
-        .rm-section-title {
-          font-size: 14px;
-          font-weight: 700;
-          color: #6ee7b7;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 12px;
-          padding-bottom: 6px;
-          border-bottom: 2px solid rgba(110,231,183,0.3);
-        }
-
-        .rm-section-header {
-          font-size: 16px;
-          font-weight: 700;
-          color: #e2e8f0;
-          margin-bottom: 16px;
-          line-height: 1.4;
-        }
-
-        .rm-section-content {
-          color: #cbd5e1;
-          line-height: 1.7;
-        }
-
-        .rm-line {
-          margin-bottom: 4px;
-        }
-
-        .rm-preview::-webkit-scrollbar {
-          width: 5px;
-        }
-
-        .rm-preview::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .rm-preview::-webkit-scrollbar-thumb {
-          background: rgba(255,255,255,0.1);
-          border-radius: 3px;
-        }
+        .rm-preview::-webkit-scrollbar { width: 5px; }
+        .rm-preview::-webkit-scrollbar-track { background: transparent; }
+        .rm-preview::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
 
         .rm-placeholder {
           text-align: center;

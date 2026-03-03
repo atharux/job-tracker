@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload } from 'lucide-react'; // Add Upload to existing imports
 import { extractTextFromFile } from '../utils/smartResumeParser';
+import { generateProfessionalPDF } from '../utils/professionalPdfExport';
 import { supabase } from '../supabaseClient';
 import { Download, Save, Wand2, FileText, Link, ChevronDown, ChevronUp, X, Check, Loader2, AlertCircle, Eye, Edit3, Mail } from 'lucide-react';
 
@@ -91,28 +92,7 @@ function downloadTXT(content, filename) {
 }
 
 function downloadPDF(content, filename) {
-  // Build a minimal print-ready HTML page and trigger browser print-to-PDF
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<title>${filename}</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Georgia, serif; font-size: 11pt; color: #111; padding: 32px 40px; max-width: 720px; margin: auto; line-height: 1.55; }
-  pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: inherit; }
-  h1, h2, h3 { font-family: 'Segoe UI', sans-serif; }
-  @media print { body { padding: 0; } }
-</style>
-</head>
-<body><pre>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body>
-</html>`;
-  const win = window.open('', '_blank');
-  if (!win) { alert('Allow popups to download PDF, or use Save as TXT.'); return; }
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 400);
+  generateProfessionalPDF(content, filename);
 }
 
 // ─── STEP INDICATORS ─────────────────────────────────────────────────────────
