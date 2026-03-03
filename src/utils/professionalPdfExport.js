@@ -1,7 +1,7 @@
 /**
  * Professional PDF Export Utility
  * Generates print-ready HTML for professional resume formatting
- * Matches the style shown in the reference image
+ * Matches ATS-friendly Helvetica/Arial style
  */
 
 export function generateProfessionalPDF(content, filename) {
@@ -18,65 +18,72 @@ export function generateProfessionalPDF(content, filename) {
   }
   
   body {
-    font-family: Georgia, serif;
+    font-family: "Helvetica Neue", Arial, sans-serif;
     font-size: 11pt;
-    color: #1a1a1a;
-    padding: 0.5in 0.75in;
-    max-width: 8.5in;
-    margin: 0 auto;
     line-height: 1.45;
-    background: white;
+    color: #000;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+  
+  .resume {
+    width: 794px;
+    margin: 40px auto;
+    padding: 0 40px;
   }
   
   /* Name/Header */
   .resume-name {
-    font-size: 28pt;
+    font-size: 20pt;
     font-weight: 700;
-    color: #0f172a;
-    margin-bottom: 6px;
-    letter-spacing: -0.02em;
+    margin: 0;
+    margin-bottom: 8px;
   }
   
   /* Contact Info */
   .resume-contact {
     font-size: 10pt;
-    color: #475569;
     margin-bottom: 2px;
-    line-height: 1.6;
+    line-height: 1.4;
+  }
+  
+  .resume-contact a {
+    color: #000;
+    text-decoration: none;
   }
   
   /* Horizontal divider */
   .resume-divider {
     border: none;
-    border-top: 2px solid #0f172a;
-    margin: 14px 0 10px;
+    border-top: 1px solid #000;
+    margin: 16px 0 8px;
   }
   
   /* Section Headers (EXPERIENCE, SKILLS, etc.) */
   .resume-section-header {
-    font-size: 9pt;
+    font-size: 12pt;
     font-weight: 700;
-    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: #0f172a;
-    border-bottom: 1px solid #cbd5e1;
-    padding-bottom: 3px;
-    margin-top: 14px;
-    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+    margin-top: 28px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 4px;
     page-break-after: avoid;
   }
   
   /* Entry container */
   .resume-entry {
+    margin-top: 16px;
     margin-bottom: 10px;
     page-break-inside: avoid;
   }
   
   /* Job title / Entry title */
   .resume-entry-title {
-    font-size: 11.5pt;
+    font-size: 11pt;
     font-weight: 700;
-    color: #0f172a;
     margin-bottom: 2px;
     page-break-after: avoid;
   }
@@ -84,50 +91,64 @@ export function generateProfessionalPDF(content, filename) {
   /* Company, location, dates */
   .resume-entry-meta {
     font-size: 10pt;
-    color: #64748b;
-    margin-bottom: 3px;
-    font-style: italic;
+    color: #333;
+    margin-bottom: 6px;
+    font-style: normal;
     page-break-after: avoid;
   }
   
   /* Bullet points */
-  .resume-bullet {
-    font-size: 11pt;
-    color: #334155;
-    line-height: 1.5;
-    padding-left: 16px;
-    position: relative;
-    margin-bottom: 1px;
-    page-break-inside: avoid;
+  .resume-bullets {
+    margin: 6px 0 10px 18px;
+    padding: 0;
+    list-style-type: disc;
   }
   
-  .resume-bullet::before {
-    content: '•';
-    position: absolute;
-    left: 4px;
-    color: #94a3b8;
+  .resume-bullet {
+    margin-bottom: 4px;
+    line-height: 1.45;
+    page-break-inside: avoid;
   }
   
   /* Regular paragraph text */
   .resume-para {
     font-size: 11pt;
-    color: #334155;
-    line-height: 1.55;
-    margin-bottom: 3px;
+    line-height: 1.45;
+    margin-bottom: 6px;
   }
   
-  /* Summary section */
-  .resume-summary {
+  /* Skills grid */
+  .resume-skills-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    margin-top: 10px;
+  }
+  
+  .resume-skills-category {
+    margin-bottom: 12px;
+  }
+  
+  .resume-skills-category-title {
+    font-weight: 700;
     font-size: 11pt;
-    color: #334155;
-    line-height: 1.55;
     margin-bottom: 6px;
+  }
+  
+  .resume-skills-list {
+    font-size: 11pt;
+    line-height: 1.45;
   }
   
   @media print {
     body {
-      padding: 0;
       margin: 0;
+      padding: 0;
+    }
+    
+    .resume {
+      margin: 0;
+      width: 100%;
     }
     
     .resume-entry {
@@ -148,7 +169,11 @@ export function generateProfessionalPDF(content, filename) {
   }
 </style>
 </head>
-<body>${parseAndFormatResume(content)}</body>
+<body>
+<div class="resume">
+${parseAndFormatResume(content)}
+</div>
+</body>
 </html>`;
 
   // Create iframe and trigger print
@@ -177,7 +202,7 @@ function parseAndFormatResume(content) {
   const lines = content.split('\n');
   let html = '';
   let i = 0;
-  let currentEntry = [];
+  let currentBullets = [];
   let nameFound = false;
   
   const isSectionHeader = (line) => {
@@ -185,7 +210,7 @@ function parseAndFormatResume(content) {
     return t.length > 1 && t === t.toUpperCase() && /^[A-Z\s\/&\-:]+$/.test(t) && t.length < 60;
   };
   
-  const isBullet = (line) => /^\s*[-\u2022\u25cf*\u25aa]/.test(line);
+  const isBullet = (line) => /^\s*[-\u2022\u25cf*\u25aa•]/.test(line);
   
   const hasDate = (line) => /(\d{4}|\bJan\b|\bFeb\b|\bMar\b|\bApr\b|\bMay\b|\bJun\b|\bJul\b|\bAug\b|\bSep\b|\bOct\b|\bNov\b|\bDec\b|Present|Current)/i.test(line);
   
@@ -197,17 +222,21 @@ function parseAndFormatResume(content) {
            /https?:\/\//.test(line);
   };
   
-  const flushEntry = () => {
-    if (currentEntry.length > 0) {
-      html += '<div class="resume-entry">' + currentEntry.join('') + '</div>';
-      currentEntry = [];
+  const flushBullets = () => {
+    if (currentBullets.length > 0) {
+      html += '<ul class="resume-bullets">';
+      currentBullets.forEach(bullet => {
+        html += `<li class="resume-bullet">${bullet}</li>`;
+      });
+      html += '</ul>';
+      currentBullets = [];
     }
   };
   
   // Skip empty lines at start
   while (i < lines.length && !lines[i].trim()) i++;
   
-  // Look for name - it should be the first substantial line that's NOT a section header or contact info
+  // Look for name - first substantial line that's NOT a section header or contact info
   while (i < lines.length && !nameFound) {
     const line = lines[i].trim();
     
@@ -229,7 +258,7 @@ function parseAndFormatResume(content) {
     }
     
     // This should be the name
-    html += `<div class="resume-name">${escapeHtml(line)}</div>`;
+    html += `<h1 class="resume-name">${escapeHtml(line)}</h1>`;
     nameFound = true;
     i++;
     break;
@@ -237,10 +266,10 @@ function parseAndFormatResume(content) {
   
   // If no name found, add a placeholder
   if (!nameFound) {
-    html += '<div class="resume-name">[Your Name]</div>';
+    html += '<h1 class="resume-name">[Your Name]</h1>';
   }
   
-  // Parse contact info (lines before first real section header like SUMMARY, EXPERIENCE, etc.)
+  // Parse contact info (lines before first real section header)
   while (i < lines.length) {
     const line = lines[i].trim();
     
@@ -276,35 +305,38 @@ function parseAndFormatResume(content) {
     }
     
     if (isSectionHeader(line)) {
-      flushEntry();
-      html += `<div class="resume-section-header">${escapeHtml(line)}</div>`;
+      flushBullets();
+      html += `<h2 class="resume-section-header">${escapeHtml(line)}</h2>`;
       i++;
       continue;
     }
     
     if (isBullet(line)) {
-      const text = line.replace(/^\s*[-\u2022\u25cf*\u25aa]\s*/, '');
-      currentEntry.push(`<div class="resume-bullet">${escapeHtml(text)}</div>`);
+      const text = line.replace(/^\s*[-\u2022\u25cf*\u25aa•]\s*/, '');
+      currentBullets.push(escapeHtml(text));
       i++;
       continue;
     }
     
     // Check for job title + meta pattern
     if (i + 1 < lines.length && hasDate(lines[i + 1].trim()) && lines[i + 1].trim()) {
-      flushEntry();
+      flushBullets();
       const metaLine = lines[i + 1].trim();
-      currentEntry.push(`<div class="resume-entry-title">${escapeHtml(line)}</div>`);
-      currentEntry.push(`<div class="resume-entry-meta">${escapeHtml(metaLine)}</div>`);
+      html += '<div class="resume-entry">';
+      html += `<div class="resume-entry-title">${escapeHtml(line)}</div>`;
+      html += `<div class="resume-entry-meta">${escapeHtml(metaLine)}</div>`;
+      html += '</div>';
       i += 2;
       continue;
     }
     
     // Regular paragraph
-    currentEntry.push(`<div class="resume-para">${escapeHtml(line)}</div>`);
+    flushBullets();
+    html += `<p class="resume-para">${escapeHtml(line)}</p>`;
     i++;
   }
   
-  flushEntry();
+  flushBullets();
   
   return html;
 }

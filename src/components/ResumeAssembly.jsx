@@ -700,14 +700,14 @@ Rules:
 
         /* ── Resume Preview ────────────────────────────────────────── */
         .ra-resume-preview {
-          background: rgba(0,0,0,0.2);
+          background: #ffffff;
           border: 1px solid rgba(255,255,255,0.07);
           border-radius: 10px;
-          padding: 24px;
-          font-family: 'Courier New', monospace;
-          font-size: 13px;
-          line-height: 1.75;
-          color: #cbd5e1;
+          padding: 40px;
+          font-family: "Helvetica Neue", Arial, sans-serif;
+          font-size: 11pt;
+          line-height: 1.45;
+          color: #000;
           white-space: pre-wrap;
           word-break: break-word;
           max-height: 560px;
@@ -715,7 +715,7 @@ Rules:
         }
         .ra-resume-preview::-webkit-scrollbar { width: 5px; }
         .ra-resume-preview::-webkit-scrollbar-track { background: transparent; }
-        .ra-resume-preview::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        .ra-resume-preview::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 3px; }
 
         .ra-resume-edit {
           width: 100%;

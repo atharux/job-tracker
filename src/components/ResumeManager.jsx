@@ -855,24 +855,89 @@ CERTIFICATIONS
         .rm-preview {
           background: #ffffff;
           border-radius: 10px;
-          padding: 32px 40px;
+          padding: 40px;
           max-height: 550px;
           overflow-y: auto;
-          color: #1a1a1a;
+          color: #000;
+          font-family: "Helvetica Neue", Arial, sans-serif;
+          font-size: 11pt;
+          line-height: 1.45;
         }
 
-        .rm-formatted-resume { font-family: Georgia, serif; }
+        .rm-formatted-resume { 
+          font-family: "Helvetica Neue", Arial, sans-serif;
+        }
 
-        .rp-name { font-family: Georgia, serif; font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 5px; }
-        .rp-contact { font-size: 12px; color: #475569; margin-bottom: 2px; line-height: 1.6; }
-        .rp-divider { border: none; border-top: 2px solid #0f172a; margin: 12px 0 8px; }
-        .rp-section-header { font-family: Georgia, serif; font-size: 9.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; margin-top: 20px; margin-bottom: 8px; }
-        .rp-entry { margin-bottom: 12px; }
-        .rp-entry-title { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
-        .rp-entry-meta { font-size: 11.5px; color: #64748b; margin-bottom: 4px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; font-style: italic; }
-        .rp-bullet { font-size: 12.5px; color: #334155; line-height: 1.6; padding-left: 14px; position: relative; margin-bottom: 2px; }
-        .rp-bullet::before { content: '•'; position: absolute; left: 2px; color: #94a3b8; }
-        .rp-para { font-size: 12.5px; color: #334155; line-height: 1.65; margin-bottom: 3px; }
+        .rp-name { 
+          font-family: "Helvetica Neue", Arial, sans-serif;
+          font-size: 20pt;
+          font-weight: 700;
+          color: #000;
+          margin-bottom: 8px;
+        }
+        .rp-contact { 
+          font-size: 10pt;
+          color: #000;
+          margin-bottom: 2px;
+          line-height: 1.4;
+        }
+        .rp-divider { 
+          border: none;
+          border-top: 1px solid #000;
+          margin: 16px 0 8px;
+        }
+        .rp-section-header { 
+          font-family: "Helvetica Neue", Arial, sans-serif;
+          font-size: 12pt;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          color: #000;
+          border-bottom: 1px solid #000;
+          padding-bottom: 4px;
+          margin-top: 28px;
+          margin-bottom: 10px;
+        }
+        .rp-entry { 
+          margin-top: 16px;
+          margin-bottom: 10px;
+        }
+        .rp-entry-title { 
+          font-size: 11pt;
+          font-weight: 700;
+          color: #000;
+          margin-bottom: 2px;
+        }
+        .rp-entry-meta { 
+          font-size: 10pt;
+          color: #333;
+          margin-bottom: 6px;
+          display: flex;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 4px;
+          font-style: normal;
+        }
+        .rp-bullet { 
+          font-size: 11pt;
+          color: #000;
+          line-height: 1.45;
+          padding-left: 18px;
+          position: relative;
+          margin-bottom: 4px;
+        }
+        .rp-bullet::before { 
+          content: '•';
+          position: absolute;
+          left: 2px;
+          color: #000;
+        }
+        .rp-para { 
+          font-size: 11pt;
+          color: #000;
+          line-height: 1.45;
+          margin-bottom: 6px;
+        }
 
         .rm-preview::-webkit-scrollbar { width: 5px; }
         .rm-preview::-webkit-scrollbar-track { background: transparent; }
