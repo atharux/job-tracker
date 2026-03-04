@@ -52,6 +52,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState('applications'); // 'applications', 'leaderboard', 'assembly', or 'resumes'
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showApiSettings, setShowApiSettings] = useState(false);
+  const [sortColumn, setSortColumn] = useState('date_applied'); // 'company', 'position', 'date_applied'
+  const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc'
 
   const applyGamification = async (action, actionData = {}) => {
     if (!gamificationState) return;
@@ -941,6 +943,32 @@ if (!user) {
     ? applications
     : applications.filter(app => app.status === filterStatus);
 
+  // Sort applications
+  const sortedApplications = [...filteredApplications].sort((a, b) => {
+    let comparison = 0;
+    
+    if (sortColumn === 'company') {
+      comparison = a.company.localeCompare(b.company);
+    } else if (sortColumn === 'position') {
+      comparison = a.position.localeCompare(b.position);
+    } else if (sortColumn === 'date_applied') {
+      comparison = new Date(a.date_applied) - new Date(b.date_applied);
+    }
+    
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
   const statusConfig = {
     applied: { bg: 'bg-blue-500/10', text: 'text-blue-600', label: 'Applied' },
     interview: { bg: 'bg-yellow-500/10', text: 'text-yellow-600', label: 'Interview' },
@@ -1143,16 +1171,34 @@ if (!user) {
           <table>
             <thead>
               <tr>
-                <th>Company</th>
-                <th>Position</th>
-                <th>Applied</th>
+                <th 
+                  onClick={() => handleSort('company')} 
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  title="Click to sort by company"
+                >
+                  Company {sortColumn === 'company' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th 
+                  onClick={() => handleSort('position')} 
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  title="Click to sort by position"
+                >
+                  Position {sortColumn === 'position' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th 
+                  onClick={() => handleSort('date_applied')} 
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  title="Click to sort by date"
+                >
+                  Applied {sortColumn === 'date_applied' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
                 <th>Contact</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredApplications.length === 0 ? (
+              {sortedApplications.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="empty-state">
                     {filterStatus !== 'all' ? (
@@ -1163,7 +1209,7 @@ if (!user) {
                   </td>
                 </tr>
               ) : (
-                                filteredApplications.map(app => (
+                                sortedApplications.map(app => (
                   <tr key={app.id}>
                     <td className="company-name">{app.company}</td>
                     <td className="position-name">{app.position}</td>
@@ -1195,9 +1241,9 @@ if (!user) {
         </div>
 
         {/* Footer */}
-        {filteredApplications.length > 0 && (
+        {sortedApplications.length > 0 && (
           <div className="footer">
-            <p>Showing {filteredApplications.length} of {applications.length} applications</p>
+            <p>Showing {sortedApplications.length} of {applications.length} applications</p>
           </div>
         )}
           </>
