@@ -971,8 +971,8 @@ if (!user) {
 
   const statusConfig = {
     applied: { bg: 'bg-blue-500/10', text: 'text-blue-600', label: 'Applied' },
-    interview: { bg: 'bg-yellow-500/10', text: 'text-yellow-600', label: 'Interview' },
-    offered: { bg: 'bg-green-500/10', text: 'text-green-600', label: 'Offered' },
+    interview: { bg: 'bg-green-500/10', text: 'text-green-600', label: 'Interview' },
+    offered: { bg: 'status-gold', text: 'text-yellow-600', label: 'Offered' },
     rejected: { bg: 'bg-red-500/10', text: 'text-red-600', label: 'Rejected' },
     accepted: { bg: 'bg-emerald-500/10', text: 'text-emerald-600', label: 'Accepted' }
   };

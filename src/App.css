@@ -3438,3 +3438,26 @@ td:has(.status-badge) {
 =======
 >>>>>>> 5df3dea574210052156d98133a081a630a7c5efb
 }
+
+/* Gold shiny status badge */
+.status-gold {
+  background: linear-gradient(135deg, 
+    rgba(255, 215, 0, 0.15) 0%, 
+    rgba(255, 223, 0, 0.25) 25%,
+    rgba(255, 215, 0, 0.15) 50%,
+    rgba(255, 223, 0, 0.25) 75%,
+    rgba(255, 215, 0, 0.15) 100%
+  );
+  background-size: 200% 200%;
+  animation: goldShine 3s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.2), inset 0 0 10px rgba(255, 215, 0, 0.1);
+}
+
+@keyframes goldShine {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
