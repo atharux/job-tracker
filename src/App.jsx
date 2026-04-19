@@ -768,6 +768,13 @@ setIsModalOpen(false);
 
       alert(`Successfully imported ${validatedData.length} application(s)!`);
       await loadApplications();
+
+      if (gamificationState) {
+      for (let i = 0; i < validatedData.length; i++) {
+      await applyGamification('create_application', {});
+        }
+      }
+      
     } catch (error) {
       console.error('CSV processing error:', error);
       alert('Failed to process CSV file. Please check the format.');
