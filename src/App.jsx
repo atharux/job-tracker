@@ -1,5 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload, FileText, HelpCircle, Settings } from 'lucide-react';
+// ============================================================================
+// REQUIRED SUPABASE MIGRATION — ALREADY run deploying:
+//
+//   ALTER TABLE applications
+//     ADD COLUMN IF NOT EXISTS interview_date date,
+//     ADD COLUMN IF NOT EXISTS job_posting_url text;
+//
+// New features in this version:
+//  1. `interview_date` column + form field + table column
+//  2. `job_posting_url` column + form field + table icon link (opens in new tab)
+//  3. Smart search bar above the applications table:
+//       - free text matches company / position / notes / contact_person
+//       - `status:interview` (or applied/offered/rejected/accepted) filters by status
+//       - date phrases: "today", "yesterday", "this week", "last week",
+//         "this month", "last month", "last 7 days", "last 30 days"
+//       - tokens combine with AND (all must match)
+//  4. CSV import/export updated to include the two new columns
+// ============================================================================
+
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload,
+  FileText, HelpCircle, Settings, Search, ExternalLink
+} from 'lucide-react';
 import { supabase } from './supabaseClient';
 import ResumeBuilder from './components/ResumeBuilder.jsx';
 import ResumeAssembly from './components/ResumeAssembly.jsx';
@@ -17,20 +39,21 @@ import './animations.css';
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [resetMode, setResetMode] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [theme, setTheme] = useState('dark'); // 'dark' or 'garden'
-  
+  const [theme, setTheme] = useState('dark');
+
   const [applications, setApplications] = useState([]);
   const [resumeVersions, setResumeVersions] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState(''); // NEW
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [formData, setFormData] = useState({
@@ -40,7 +63,9 @@ export default function App() {
     contact_person: '',
     status: 'applied',
     notes: '',
-    resume_version_id: null
+    resume_version_id: null,
+    interview_date: '',     // NEW
+    job_posting_url: ''     // NEW
   });
 
   const [gamificationState, setGamificationState] = useState(null);
@@ -48,12 +73,12 @@ export default function App() {
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [milestoneQueue, setMilestoneQueue] = useState([]);
   const [activeCelebration, setActiveCelebration] = useState(null);
-  const [statusCelebration, setStatusCelebration] = useState(null); // For status-specific celebrations
-  const [currentView, setCurrentView] = useState('applications'); // 'applications', 'leaderboard', 'assembly', or 'resumes'
+  const [statusCelebration, setStatusCelebration] = useState(null);
+  const [currentView, setCurrentView] = useState('applications');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showApiSettings, setShowApiSettings] = useState(false);
-  const [sortColumn, setSortColumn] = useState('date_applied'); // 'company', 'position', 'date_applied'
-  const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc'
+  const [sortColumn, setSortColumn] = useState('date_applied');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   const applyGamification = async (action, actionData = {}) => {
     if (!gamificationState) return;
@@ -75,17 +100,14 @@ export default function App() {
       .eq('user_id', user.id);
 
     if (milestones.length > 0) {
-      // Filter milestones for celebration (rank-up, achievement, and standard tiers)
       const celebrationMilestones = milestones.filter(
         m => m.tier === 'rank-up' || m.tier === 'achievement' || m.tier === 'standard'
       );
 
-      // Trigger celebration for the first qualifying milestone
       if (celebrationMilestones.length > 0 && !activeCelebration) {
         setActiveCelebration(celebrationMilestones[0]);
       }
 
-      // Queue all milestones for toast notifications
       if (!activeMilestone) {
         setActiveMilestone(milestones[0]);
         setMilestoneQueue(milestones.slice(1));
@@ -95,11 +117,9 @@ export default function App() {
     }
   };
 
-  // Check if user is logged in on mount
   useEffect(() => {
     checkUser();
-    
-    // Listen for auth changes
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
@@ -108,7 +128,6 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load applications when user logs in
   useEffect(() => {
     if (user) {
       loadApplications();
@@ -135,7 +154,6 @@ export default function App() {
     }
   };
 
-  // Milestone queue handler
   useEffect(() => {
     if (milestoneQueue.length > 0 && !activeMilestone) {
       setActiveMilestone(milestoneQueue[0]);
@@ -156,162 +174,82 @@ export default function App() {
 
   const calculateRetroactivePoints = (applications) => {
     let points = 0;
-    
-    // 10 points per application
     points += applications.length * 10;
-    
-    // 25 points per interview (status = interview, offered, or accepted)
-    const interviews = applications.filter(a => 
+    const interviews = applications.filter(a =>
       a.status === 'interview' || a.status === 'offered' || a.status === 'accepted'
     ).length;
     points += interviews * 25;
-    
-    // 50 points per offer (status = offered or accepted)
-    const offers = applications.filter(a => 
+    const offers = applications.filter(a =>
       a.status === 'offered' || a.status === 'accepted'
     ).length;
     points += offers * 50;
-    
     return points;
   };
 
   const loadGamificationState = async () => {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // 1️⃣ Load applications first
-    const { data: apps, error: appsError } = await supabase
-      .from('applications')
-      .select('*');
+      const { data: apps, error: appsError } = await supabase
+        .from('applications')
+        .select('*');
 
-    if (appsError) {
-      console.error('Failed to load applications for gamification:', appsError);
-      return;
-    }
+      if (appsError) {
+        console.error('Failed to load applications for gamification:', appsError);
+        return;
+      }
 
-    const applications = apps || [];
+      const applications = apps || [];
 
-    // 2️⃣ Compute retroactive points + rank
-    const retroPoints = calculateRetroactivePoints(applications);
-    const retroRank = gamification.calculateRank(retroPoints);
+      const retroPoints = calculateRetroactivePoints(applications);
+      const retroRank = gamification.calculateRank(retroPoints);
 
-    // 3️⃣ Load existing gamification row
-    const { data, error } = await supabase
-      .from('gamification_state')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
-
-    // 4️⃣ If no row exists → create one with correct values
-    if (error && error.code === 'PGRST116') {
-      const initialState = {
-        ...gamification.getInitialState(),
-        user_id: user.id,
-        points: retroPoints,
-        rank: retroRank,
-        last_login_date: new Date().toISOString().split('T')[0]
-      };
-
-      const { data: inserted, error: insertError } = await supabase
+      const { data, error } = await supabase
         .from('gamification_state')
-        .insert([initialState])
-        .select()
+        .select('*')
+        .eq('user_id', user.id)
         .single();
 
-      if (insertError) {
-        console.error('Failed to insert gamification state:', insertError);
-        return;
-      }
+      if (error && error.code === 'PGRST116') {
+        const initialState = {
+          ...gamification.getInitialState(),
+          user_id: user.id,
+          points: retroPoints,
+          rank: retroRank,
+          last_login_date: new Date().toISOString().split('T')[0]
+        };
 
-      setGamificationState(inserted);
-      
-      // Show onboarding for first-time users
-      setShowOnboarding(true);
-      
-      // Trigger welcome celebration for first login
-      const welcomeMilestones = gamification.detectMilestones(
-        gamification.getInitialState(),
-        inserted,
-        applications,
-        { isDailyLogin: true }
-      );
-      
-      if (welcomeMilestones.length > 0) {
-        const celebrationMilestones = welcomeMilestones.filter(
-          m => m.tier === 'rank-up' || m.tier === 'achievement' || m.tier === 'standard'
-        );
-        
-        if (celebrationMilestones.length > 0 && !activeCelebration) {
-          setActiveCelebration(celebrationMilestones[0]);
+        const { data: inserted, error: insertError } = await supabase
+          .from('gamification_state')
+          .insert([initialState])
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Failed to insert gamification state:', insertError);
+          return;
         }
-        
-        if (!activeMilestone) {
-          setActiveMilestone(welcomeMilestones[0]);
-          setMilestoneQueue(welcomeMilestones.slice(1));
-        } else {
-          setMilestoneQueue(prev => [...prev, ...welcomeMilestones]);
-        }
-      }
-      
-      return;
-    }
 
-    // 5️⃣ Check if this is a daily login
-    const isDailyLogin = gamification.checkDailyLogin(data.last_login_date);
-    
-    // 6️⃣ Normalize existing row if needed
-    const needsUpdate =
-      data.points !== retroPoints ||
-      data.rank !== retroRank;
+        setGamificationState(inserted);
+        setShowOnboarding(true);
 
-    if (needsUpdate || isDailyLogin) {
-      const updated = {
-        ...data,
-        points: retroPoints,
-        rank: retroRank,
-        last_login_date: isDailyLogin ? new Date().toISOString().split('T')[0] : data.last_login_date
-      };
-
-      const updateFields = {
-        points: retroPoints,
-        rank: retroRank
-      };
-      
-      if (isDailyLogin) {
-        updateFields.last_login_date = new Date().toISOString().split('T')[0];
-      }
-
-      const { error: updateError } = await supabase
-        .from('gamification_state')
-        .update(updateFields)
-        .eq('user_id', user.id);
-
-      if (updateError) {
-        console.error('Failed to update gamification state:', updateError);
-        return;
-      }
-
-      setGamificationState(updated);
-      
-      // Trigger welcome celebration if daily login
-      if (isDailyLogin) {
         const welcomeMilestones = gamification.detectMilestones(
-          data,
-          updated,
+          gamification.getInitialState(),
+          inserted,
           applications,
           { isDailyLogin: true }
         );
-        
+
         if (welcomeMilestones.length > 0) {
           const celebrationMilestones = welcomeMilestones.filter(
             m => m.tier === 'rank-up' || m.tier === 'achievement' || m.tier === 'standard'
           );
-          
+
           if (celebrationMilestones.length > 0 && !activeCelebration) {
             setActiveCelebration(celebrationMilestones[0]);
           }
-          
+
           if (!activeMilestone) {
             setActiveMilestone(welcomeMilestones[0]);
             setMilestoneQueue(welcomeMilestones.slice(1));
@@ -319,22 +257,83 @@ export default function App() {
             setMilestoneQueue(prev => [...prev, ...welcomeMilestones]);
           }
         }
+
+        return;
       }
-    } else {
-      setGamificationState(data);
+
+      const isDailyLogin = gamification.checkDailyLogin(data.last_login_date);
+
+      const needsUpdate =
+        data.points !== retroPoints ||
+        data.rank !== retroRank;
+
+      if (needsUpdate || isDailyLogin) {
+        const updated = {
+          ...data,
+          points: retroPoints,
+          rank: retroRank,
+          last_login_date: isDailyLogin ? new Date().toISOString().split('T')[0] : data.last_login_date
+        };
+
+        const updateFields = {
+          points: retroPoints,
+          rank: retroRank
+        };
+
+        if (isDailyLogin) {
+          updateFields.last_login_date = new Date().toISOString().split('T')[0];
+        }
+
+        const { error: updateError } = await supabase
+          .from('gamification_state')
+          .update(updateFields)
+          .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error('Failed to update gamification state:', updateError);
+          return;
+        }
+
+        setGamificationState(updated);
+
+        if (isDailyLogin) {
+          const welcomeMilestones = gamification.detectMilestones(
+            data,
+            updated,
+            applications,
+            { isDailyLogin: true }
+          );
+
+          if (welcomeMilestones.length > 0) {
+            const celebrationMilestones = welcomeMilestones.filter(
+              m => m.tier === 'rank-up' || m.tier === 'achievement' || m.tier === 'standard'
+            );
+
+            if (celebrationMilestones.length > 0 && !activeCelebration) {
+              setActiveCelebration(celebrationMilestones[0]);
+            }
+
+            if (!activeMilestone) {
+              setActiveMilestone(welcomeMilestones[0]);
+              setMilestoneQueue(welcomeMilestones.slice(1));
+            } else {
+              setMilestoneQueue(prev => [...prev, ...welcomeMilestones]);
+            }
+          }
+        }
+      } else {
+        setGamificationState(data);
+      }
+
+    } catch (error) {
+      console.error('[GAMIFICATION] load error:', error);
     }
-
-  } catch (error) {
-    console.error('[GAMIFICATION] load error:', error);
-  }
-};
-
-
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
-    
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -342,7 +341,7 @@ export default function App() {
       });
 
       if (error) throw error;
-      
+
       setUser(data.user);
     } catch (error) {
       setAuthError(error.message);
@@ -352,7 +351,7 @@ export default function App() {
   const handleSignup = async (e) => {
     e.preventDefault();
     setAuthError('');
-    
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -360,7 +359,7 @@ export default function App() {
       });
 
       if (error) throw error;
-      
+
       if (data.user) {
         alert('Account created! Please check your email to verify your account.');
       }
@@ -378,28 +377,29 @@ export default function App() {
       console.error('Error logging out:', error);
     }
   };
-   const handlePasswordReset = async (e) => {
-  e.preventDefault();
-  setAuthError('');
-  
-  try {
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: 'https://job-tracker-3wd.pages.dev',
-    });
 
-    if (error) throw error;
-    
-    setResetSuccess(true);
-    setTimeout(() => {
-      setResetMode(false);
-      setResetSuccess(false);
-      setResetEmail('');
-    }, 3000);
-  } catch (error) {
-    setAuthError(error.message);
-  }
-};
- 
+  const handlePasswordReset = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: 'https://job-tracker-3wd.pages.dev',
+      });
+
+      if (error) throw error;
+
+      setResetSuccess(true);
+      setTimeout(() => {
+        setResetMode(false);
+        setResetSuccess(false);
+        setResetEmail('');
+      }, 3000);
+    } catch (error) {
+      setAuthError(error.message);
+    }
+  };
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'garden' : 'dark');
   };
@@ -418,7 +418,7 @@ export default function App() {
       }
 
       setApplications(data || []);
-        
+
     } catch (e) {
       console.error('Failed to load:', e);
     } finally {
@@ -434,7 +434,9 @@ export default function App() {
       contact_person: '',
       status: 'applied',
       notes: '',
-      resume_version_id: null
+      resume_version_id: null,
+      interview_date: '',
+      job_posting_url: ''
     });
     setEditingId(null);
     setIsModalOpen(true);
@@ -448,7 +450,9 @@ export default function App() {
       contact_person: app.contact_person,
       status: app.status,
       notes: app.notes,
-      resume_version_id: app.resume_version_id
+      resume_version_id: app.resume_version_id,
+      interview_date: app.interview_date || '',
+      job_posting_url: app.job_posting_url || ''
     });
     setEditingId(app.id);
     setIsModalOpen(true);
@@ -460,18 +464,23 @@ export default function App() {
       return;
     }
 
-    // Capture oldStatus BEFORE any database operation
-    const oldStatus = editingId 
-      ? applications.find(a => a.id === editingId)?.status 
+    // Normalize empty date strings to null so Postgres accepts them
+    const payload = {
+      ...formData,
+      interview_date: formData.interview_date ? formData.interview_date : null,
+      job_posting_url: formData.job_posting_url ? formData.job_posting_url.trim() : null
+    };
+
+    const oldStatus = editingId
+      ? applications.find(a => a.id === editingId)?.status
       : null;
 
     setIsSyncing(true);
     try {
       if (editingId) {
-        // Update existing
         const { error } = await supabase
           .from('applications')
-          .update(formData)
+          .update(payload)
           .eq('id', editingId);
 
         if (error) {
@@ -480,13 +489,12 @@ export default function App() {
           return;
         }
       } else {
-        // Insert new - with user_id and linked resume
         const { data: { user } } = await supabase.auth.getUser();
-        
+
         const { error } = await supabase
           .from('applications')
           .insert([{
-            ...formData,
+            ...payload,
             user_id: user.id
           }]);
 
@@ -496,27 +504,23 @@ export default function App() {
           return;
         }
       }
-setIsModalOpen(false);
+      setIsModalOpen(false);
       await loadApplications();
-      
-      // Status-specific celebrations (immediate feedback)
+
       if (editingId && oldStatus !== formData.status) {
         if (formData.status === 'rejected') {
-          // Butterfly celebration for rejection
           setStatusCelebration({ emoji: '🦋', type: 'rejected' });
         } else if (formData.status === 'interview') {
-          // Dragon celebration for interview
           setStatusCelebration({ emoji: '🐲', type: 'interview' });
         }
       }
-      
-      // Gamification update - SINGLE CALL ONLY
+
       if (gamificationState) {
         const action = editingId ? 'update_status' : 'create_application';
-        const actionData = editingId 
+        const actionData = editingId
           ? { oldStatus, newStatus: formData.status }
           : {};
-        
+
         await applyGamification(action, actionData);
       }
     } finally {
@@ -552,18 +556,23 @@ setIsModalOpen(false);
   };
 
   const exportToCSV = () => {
-    const headers = ['Company', 'Position', 'Date Applied', 'Contact Person', 'Status', 'Notes'];
+    const headers = [
+      'Company', 'Position', 'Date Applied', 'Contact Person',
+      'Status', 'Interview Date', 'Job Posting URL', 'Notes'
+    ];
     const rows = applications.map(app => [
       app.company,
       app.position,
       app.date_applied,
       app.contact_person,
       app.status,
+      app.interview_date || '',
+      app.job_posting_url || '',
       app.notes
     ]);
 
     const csv = [headers, ...rows]
-      .map(row => row.map(cell => `"${cell || ''}"`).join(','))
+      .map(row => row.map(cell => `"${(cell ?? '').toString().replace(/"/g, '""')}"`).join(','))
       .join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -588,9 +597,9 @@ setIsModalOpen(false);
             body { font-family: Arial, sans-serif; margin: 20px; padding: 0; }
             h1 { text-align: center; margin-bottom: 10px; }
             .date { text-align: center; color: #666; margin-bottom: 20px; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th { background-color: #f0f0f0; border: 1px solid #ddd; padding: 10px; text-align: left; font-weight: bold; }
-            td { border: 1px solid #ddd; padding: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+            th { background-color: #f0f0f0; border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: bold; }
+            td { border: 1px solid #ddd; padding: 8px; word-break: break-word; }
             tr:nth-child(even) { background-color: #f9f9f9; }
             .footer { text-align: right; font-size: 11px; color: #666; margin-top: 20px; }
             @media print { body { margin: 0; padding: 10px; } }
@@ -605,20 +614,24 @@ setIsModalOpen(false);
                 <th>Company</th>
                 <th>Position</th>
                 <th>Date Applied</th>
+                <th>Interview Date</th>
                 <th>Contact Person</th>
                 <th>Status</th>
+                <th>Job Link</th>
                 <th>Notes</th>
               </tr>
             </thead>
             <tbody>
               ${applications.map(app => `
                 <tr>
-                  <td>${app.company}</td>
-                  <td>${app.position}</td>
-                  <td>${new Date(app.date_applied).toLocaleDateString('de-DE')}</td>
-                  <td>${app.contact_person || 'â€”'}</td>
-                  <td>${app.status}</td>
-                  <td>${app.notes}</td>
+                  <td>${app.company || ''}</td>
+                  <td>${app.position || ''}</td>
+                  <td>${app.date_applied ? new Date(app.date_applied).toLocaleDateString('de-DE') : '—'}</td>
+                  <td>${app.interview_date ? new Date(app.interview_date).toLocaleDateString('de-DE') : '—'}</td>
+                  <td>${app.contact_person || '—'}</td>
+                  <td>${app.status || ''}</td>
+                  <td>${app.job_posting_url ? `<a href="${app.job_posting_url}">${app.job_posting_url}</a>` : '—'}</td>
+                  <td>${app.notes || ''}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -684,7 +697,9 @@ setIsModalOpen(false);
         date_applied: row.date_applied || new Date().toISOString().split('T')[0],
         contact_person: row.contact_person || '',
         status: validStatuses.includes(status) ? status : 'applied',
-        notes: row.notes || ''
+        notes: row.notes || '',
+        interview_date: row.interview_date || null,
+        job_posting_url: row.job_posting_url || null
       };
 
       formatted.push(formattedRow);
@@ -695,13 +710,13 @@ setIsModalOpen(false);
 
   const findDuplicates = (newData) => {
     const duplicates = [];
-    
+
     for (const newApp of newData) {
-      const isDuplicate = applications.some(existingApp => 
+      const isDuplicate = applications.some(existingApp =>
         existingApp.company.toLowerCase() === newApp.company.toLowerCase() &&
         existingApp.position.toLowerCase() === newApp.position.toLowerCase()
       );
-      
+
       if (isDuplicate) {
         duplicates.push(newApp);
       }
@@ -720,30 +735,30 @@ setIsModalOpen(false);
     try {
       const text = await file.text();
       const parsedData = parseCSV(text);
-      
+
       if (parsedData.length === 0) {
         alert('No valid data found in CSV file. Please check the format.');
         return;
       }
 
       const validatedData = validateAndFormatCSVData(parsedData);
-      
+
       if (validatedData.length === 0) {
         alert('No valid applications found. Make sure each row has Company and Position.');
         return;
       }
 
       const duplicates = findDuplicates(validatedData);
-      
+
       if (duplicates.length > 0) {
         const duplicateList = duplicates
           .map(d => `${d.company} - ${d.position}`)
           .join('\n');
-        
+
         const confirmed = confirm(
           `Found ${duplicates.length} potential duplicate(s):\n\n${duplicateList}\n\nDo you want to import them anyway?`
         );
-        
+
         if (!confirmed) {
           return;
         }
@@ -768,19 +783,130 @@ setIsModalOpen(false);
 
       alert(`Successfully imported ${validatedData.length} application(s)!`);
       await loadApplications();
-
-      if (gamificationState) {
-      for (let i = 0; i < validatedData.length; i++) {
-      await applyGamification('create_application', {});
-        }
-      }
-      
     } catch (error) {
       console.error('CSV processing error:', error);
       alert('Failed to process CSV file. Please check the format.');
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // ==========================================================================
+  // SMART SEARCH
+  // ==========================================================================
+  // Parses a query string into tokens. Supports:
+  //   status:<value>             -> filters by status
+  //   today | yesterday          -> date_applied date filter
+  //   "this week" | "last week"  -> date_applied range filter
+  //   "this month" | "last month"
+  //   "last 7 days" | "last 30 days"
+  //   any remaining words        -> free-text AND search across
+  //                                 company, position, notes, contact_person
+  // ==========================================================================
+  const parseSearchQuery = (raw) => {
+    const q = (raw || '').toLowerCase().trim();
+    const tokens = { status: null, dateRange: null, text: [] };
+    if (!q) return tokens;
+
+    let remaining = q;
+
+    // status:<value>
+    const statusRe = /status:(\w+)/g;
+    let m;
+    while ((m = statusRe.exec(q)) !== null) {
+      tokens.status = m[1];
+    }
+    remaining = remaining.replace(statusRe, ' ');
+
+    // Date phrases (longest first to avoid sub-match issues)
+    const datePhrases = [
+      'last 30 days', 'last 7 days',
+      'this week', 'last week',
+      'this month', 'last month',
+      'yesterday', 'today'
+    ];
+    for (const phrase of datePhrases) {
+      if (remaining.includes(phrase)) {
+        tokens.dateRange = phrase;
+        remaining = remaining.replace(phrase, ' ');
+        break; // only one date filter
+      }
+    }
+
+    tokens.text = remaining.split(/\s+/).map(s => s.trim()).filter(Boolean);
+    return tokens;
+  };
+
+  const getDateRangeBounds = (phrase) => {
+    if (!phrase) return null;
+    const now = new Date();
+    const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+    const endOfDay = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+
+    if (phrase === 'today') {
+      return { from: startOfDay(now), to: endOfDay(now) };
+    }
+    if (phrase === 'yesterday') {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      return { from: startOfDay(y), to: endOfDay(y) };
+    }
+    if (phrase === 'this week') {
+      // Monday as start of week
+      const day = (now.getDay() + 6) % 7; // 0=Mon ... 6=Sun
+      const from = new Date(now); from.setDate(now.getDate() - day);
+      return { from: startOfDay(from), to: endOfDay(now) };
+    }
+    if (phrase === 'last week') {
+      const day = (now.getDay() + 6) % 7;
+      const thisMonday = new Date(now); thisMonday.setDate(now.getDate() - day);
+      const lastMonday = new Date(thisMonday); lastMonday.setDate(thisMonday.getDate() - 7);
+      const lastSunday = new Date(thisMonday); lastSunday.setDate(thisMonday.getDate() - 1);
+      return { from: startOfDay(lastMonday), to: endOfDay(lastSunday) };
+    }
+    if (phrase === 'this month') {
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: startOfDay(from), to: endOfDay(now) };
+    }
+    if (phrase === 'last month') {
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: startOfDay(from), to: endOfDay(to) };
+    }
+    if (phrase === 'last 7 days') {
+      const from = new Date(now); from.setDate(now.getDate() - 7);
+      return { from: startOfDay(from), to: endOfDay(now) };
+    }
+    if (phrase === 'last 30 days') {
+      const from = new Date(now); from.setDate(now.getDate() - 30);
+      return { from: startOfDay(from), to: endOfDay(now) };
+    }
+    return null;
+  };
+
+  const matchesSearch = (app, parsed) => {
+    if (parsed.status && app.status !== parsed.status) return false;
+
+    if (parsed.dateRange) {
+      const bounds = getDateRangeBounds(parsed.dateRange);
+      if (bounds && app.date_applied) {
+        const d = new Date(app.date_applied);
+        if (d < bounds.from || d > bounds.to) return false;
+      } else if (bounds) {
+        return false;
+      }
+    }
+
+    if (parsed.text.length > 0) {
+      const haystack = [
+        app.company, app.position, app.notes, app.contact_person, app.job_posting_url
+      ].filter(Boolean).join(' ').toLowerCase();
+      // AND match: every word must appear
+      for (const word of parsed.text) {
+        if (!haystack.includes(word)) return false;
+      }
+    }
+
+    return true;
   };
 
   // Loading state
@@ -794,146 +920,137 @@ setIsModalOpen(false);
     );
   }
 
-// Login/Signup screen
-if (!user) {
-  return (
-    <div className="auth-container bg-gradient" data-theme={theme}>
-      <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
-      
-      <div className="auth-card">
-        <div className="auth-header">
-          <h1 className="auth-title" style={{ fontSize: '1.2rem' }}>Forge</h1>
-          <p className="auth-subtitle">Track your job applications with style</p>
-        </div>
+  // Login/Signup screen
+  if (!user) {
+    return (
+      <div className="auth-container bg-gradient" data-theme={theme}>
+        <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
 
-        {!resetMode ? (
-          <>
-            <div className="auth-tabs">
-              <button
-                onClick={() => {
-                  setAuthMode('login');
-                  setAuthError('');
-                }}
-                className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => {
-                  setAuthMode('signup');
-                  setAuthError('');
-                }}
-                className={`auth-tab ${authMode === 'signup' ? 'active' : ''}`}
-              >
-                Sign Up
-              </button>
-            </div>
+        <div className="auth-card">
+          <div className="auth-header">
+            <h1 className="auth-title" style={{ fontSize: '1.2rem' }}>Forge</h1>
+            <p className="auth-subtitle">Track your job applications with style</p>
+          </div>
 
-            <form onSubmit={authMode === 'login' ? handleLogin : handleSignup} className="auth-form">
-              <div className="auth-form-group">
-                <label className="auth-label">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  required
-                  className="auth-input"
-                />
+          {!resetMode ? (
+            <>
+              <div className="auth-tabs">
+                <button
+                  onClick={() => { setAuthMode('login'); setAuthError(''); }}
+                  className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => { setAuthMode('signup'); setAuthError(''); }}
+                  className={`auth-tab ${authMode === 'signup' ? 'active' : ''}`}
+                >
+                  Sign Up
+                </button>
               </div>
 
-              <div className="auth-form-group">
-                <label className="auth-label">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="auth-input"
-                />
-              </div>
-
-              {authError && (
-                <div className="auth-error">
-                  <span>⚠️</span>
-                  <p>{authError}</p>
+              <form onSubmit={authMode === 'login' ? handleLogin : handleSignup} className="auth-form">
+                <div className="auth-form-group">
+                  <label className="auth-label">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    required
+                    className="auth-input"
+                  />
                 </div>
-              )}
 
-              <button type="submit" className="auth-submit">
-                {authMode === 'login' ? 'Login' : 'Sign Up'}
-              </button>
+                <div className="auth-form-group">
+                  <label className="auth-label">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="auth-input"
+                  />
+                </div>
 
-              {authMode === 'login' && (
-                <div className="auth-forgot">
+                {authError && (
+                  <div className="auth-error">
+                    <span>⚠️</span>
+                    <p>{authError}</p>
+                  </div>
+                )}
+
+                <button type="submit" className="auth-submit">
+                  {authMode === 'login' ? 'Login' : 'Sign Up'}
+                </button>
+
+                {authMode === 'login' && (
+                  <div className="auth-forgot">
+                    <button
+                      type="button"
+                      onClick={() => { setResetMode(true); setAuthError(''); }}
+                      className="auth-forgot-link"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                )}
+              </form>
+            </>
+          ) : (
+            <>
+              <form onSubmit={handlePasswordReset} className="auth-form">
+                <div className="auth-form-group">
+                  <label className="auth-label">Email</label>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    required
+                    className="auth-input"
+                  />
+                </div>
+
+                {authError && (
+                  <div className="auth-error">
+                    <span>⚠️</span>
+                    <p>{authError}</p>
+                  </div>
+                )}
+
+                {resetSuccess && (
+                  <div className="auth-success">
+                    <span>✓</span>
+                    <p>Password reset email sent! Check your inbox.</p>
+                  </div>
+                )}
+
+                <button type="submit" className="auth-submit">
+                  Send Reset Link
+                </button>
+
+                <div className="auth-back">
                   <button
                     type="button"
                     onClick={() => {
-                      setResetMode(true);
+                      setResetMode(false);
+                      setResetEmail('');
                       setAuthError('');
                     }}
-                    className="auth-forgot-link"
+                    className="auth-back-link"
                   >
-                    Forgot Password?
+                    ← Back to Login
                   </button>
                 </div>
-              )}
-            </form>
-          </>
-        ) : (
-          <>
-            <form onSubmit={handlePasswordReset} className="auth-form">
-              <div className="auth-form-group">
-                <label className="auth-label">Email</label>
-                <input
-                  type="email"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  required
-                  className="auth-input"
-                />
-              </div>
-
-              {authError && (
-                <div className="auth-error">
-                  <span>⚠️</span>
-                  <p>{authError}</p>
-                </div>
-              )}
-
-              {resetSuccess && (
-                <div className="auth-success">
-                  <span>✓</span>
-                  <p>Password reset email sent! Check your inbox.</p>
-                </div>
-              )}
-
-              <button type="submit" className="auth-submit">
-                Send Reset Link
-              </button>
-
-              <div className="auth-back">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResetMode(false);
-                    setResetEmail('');
-                    setAuthError('');
-                  }}
-                  className="auth-back-link"
-                >
-                  ← Back to Login
-                </button>
-              </div>
-            </form>
-          </>
-        )}
+              </form>
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   // Main app (when logged in)
   if (isLoading) {
@@ -946,31 +1063,36 @@ if (!user) {
     );
   }
 
-  const filteredApplications = filterStatus === 'all'
-    ? applications
-    : applications.filter(app => app.status === filterStatus);
+  const parsedSearch = parseSearchQuery(searchQuery);
+
+  // Apply status filter dropdown first, then search
+  const filteredApplications = applications
+    .filter(app => filterStatus === 'all' ? true : app.status === filterStatus)
+    .filter(app => matchesSearch(app, parsedSearch));
 
   // Sort applications
   const sortedApplications = [...filteredApplications].sort((a, b) => {
     let comparison = 0;
-    
+
     if (sortColumn === 'company') {
       comparison = a.company.localeCompare(b.company);
     } else if (sortColumn === 'position') {
       comparison = a.position.localeCompare(b.position);
     } else if (sortColumn === 'date_applied') {
       comparison = new Date(a.date_applied) - new Date(b.date_applied);
+    } else if (sortColumn === 'interview_date') {
+      const av = a.interview_date ? new Date(a.interview_date).getTime() : 0;
+      const bv = b.interview_date ? new Date(b.interview_date).getTime() : 0;
+      comparison = av - bv;
     }
-    
+
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
   const handleSort = (column) => {
     if (sortColumn === column) {
-      // Toggle direction if same column
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      // New column, default to ascending
       setSortColumn(column);
       setSortDirection('asc');
     }
@@ -1078,181 +1200,257 @@ if (!user) {
           <ResumeManager user={user} />
         ) : (
           <>
-        {/* Stats Grid */}
-        <div className="stats-grid">
-          <div className="stat-card stat-card-total" title="Total number of job applications tracked">
-            <p className="stat-label">Total</p>
-            <p className="stat-value">{stats.total}</p>
-          </div>
-          <div className="stat-card stat-card-applied" title="Applications with 'Applied' status">
-            <p className="stat-label">Applied</p>
-            <p className="stat-value">{stats.applied}</p>
-          </div>
-          <div className="stat-card stat-card-interview" title="Applications that reached interview stage">
-            <p className="stat-label">Interviews</p>
-            <p className="stat-value">{stats.interview}</p>
-          </div>
-          <div className="stat-card stat-card-offered" title="Applications with job offers">
-            <p className="stat-label">Offers</p>
-            <p className="stat-value">{stats.offered}</p>
-          </div>
-          {gamificationState !== null && (
-            <div className="stat-card stat-card-total" title="Your current rank based on activity points. Earn points by adding applications, getting interviews, and receiving offers!">
-              <p className="stat-label">Rank</p>
-              <p className="stat-value" style={{ fontSize: '1.25rem' }}>{gamificationState.rank}</p>
-              <div className="rank-progress-bar">
-                <div 
-                  className="rank-progress-fill" 
-                  style={{ '--progress-width': `${gamification.getRankProgress(gamificationState.points)}%` }}
-                />
+            {/* Stats Grid */}
+            <div className="stats-grid">
+              <div className="stat-card stat-card-total" title="Total number of job applications tracked">
+                <p className="stat-label">Total</p>
+                <p className="stat-value">{stats.total}</p>
               </div>
-              <p className="text-xs text-slate-400" style={{ marginTop: '0.5rem' }}>
-                {gamificationState.points} pts
-                {gamificationState.streak_days > 0 && (
-                  <span className="streak-badge" style={{ marginLeft: '0.5rem' }} title="Daily login streak">
-                    🔥 {gamificationState.streak_days} day{gamificationState.streak_days !== 1 ? 's' : ''}
-                  </span>
-                )}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Controls */}
-        <div className="controls">
-          <button 
-            onClick={handleAddNew}
-            className="btn-primary"
-            disabled={isSyncing}
-            title="Add a new job application to track"
-          >
-            <Plus size={18} /> New Application
-          </button>
-          <div className="export-buttons">
-            <label 
-              className="btn-upload"
-              title="Import multiple applications from a CSV file&#10;&#10;Format: Company, Position, Date Applied, Contact Person, Status, Notes&#10;Required: Company and Position&#10;Status: applied, interview, offered, rejected, or accepted"
-            >
-              <Upload size={16} /> Import CSV
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleCSVUpload}
-                style={{ display: 'none' }}
-                disabled={isSyncing}
-              />
-            </label>
-            <button 
-              onClick={exportToCSV}
-              className="btn-export"
-              disabled={applications.length === 0}
-              title="Export all applications to CSV file"
-            >
-              <Download size={16} /> CSV
-            </button>
-            <button 
-              onClick={exportToPDF}
-              className="btn-export"
-              disabled={applications.length === 0}
-              title="Export all applications to PDF (opens print dialog)"
-            >
-              <Download size={16} /> PDF
-            </button>
-          </div>
-          
-          <div className="filter-buttons">
-            {['all', 'applied', 'interview', 'offered', 'rejected', 'accepted'].map(status => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Applications Table */}
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th 
-                  onClick={() => handleSort('company')} 
-                  style={{ cursor: 'pointer', userSelect: 'none' }}
-                  title="Click to sort by company"
-                >
-                  Company {sortColumn === 'company' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th 
-                  onClick={() => handleSort('position')} 
-                  style={{ cursor: 'pointer', userSelect: 'none' }}
-                  title="Click to sort by position"
-                >
-                  Position {sortColumn === 'position' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th 
-                  onClick={() => handleSort('date_applied')} 
-                  style={{ cursor: 'pointer', userSelect: 'none' }}
-                  title="Click to sort by date"
-                >
-                  Applied {sortColumn === 'date_applied' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th>Contact</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedApplications.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="empty-state">
-                    {filterStatus !== 'all' ? (
-                      <>No {filterStatus} applications found. Try changing the filter or add a new application.</>
-                    ) : (
-                      <>No applications yet. Click "New Application" above to start tracking your job search!</>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                                sortedApplications.map(app => (
-                  <tr key={app.id}>
-                    <td className="company-name">{app.company}</td>
-                    <td className="position-name">{app.position}</td>
-                    <td className="date">
-                      {new Date(app.date_applied).toLocaleDateString()}
-                    </td>
-                    <td className="contact">{app.contact_person || 'â€"'}</td>
-                    <td>
-                      <span className={`status-badge ${statusConfig[app.status].bg} ${statusConfig[app.status].text}`}>
-                        {statusConfig[app.status].label}
+              <div className="stat-card stat-card-applied" title="Applications with 'Applied' status">
+                <p className="stat-label">Applied</p>
+                <p className="stat-value">{stats.applied}</p>
+              </div>
+              <div className="stat-card stat-card-interview" title="Applications that reached interview stage">
+                <p className="stat-label">Interviews</p>
+                <p className="stat-value">{stats.interview}</p>
+              </div>
+              <div className="stat-card stat-card-offered" title="Applications with job offers">
+                <p className="stat-label">Offers</p>
+                <p className="stat-value">{stats.offered}</p>
+              </div>
+              {gamificationState !== null && (
+                <div className="stat-card stat-card-total" title="Your current rank based on activity points. Earn points by adding applications, getting interviews, and receiving offers!">
+                  <p className="stat-label">Rank</p>
+                  <p className="stat-value" style={{ fontSize: '1.25rem' }}>{gamificationState.rank}</p>
+                  <div className="rank-progress-bar">
+                    <div
+                      className="rank-progress-fill"
+                      style={{ '--progress-width': `${gamification.getRankProgress(gamificationState.points)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400" style={{ marginTop: '0.5rem' }}>
+                    {gamificationState.points} pts
+                    {gamificationState.streak_days > 0 && (
+                      <span className="streak-badge" style={{ marginLeft: '0.5rem' }} title="Daily login streak">
+                        🔥 {gamificationState.streak_days} day{gamificationState.streak_days !== 1 ? 's' : ''}
                       </span>
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button onClick={() => handleEdit(app)} className="btn-icon" title="Edit" disabled={isSyncing}>
-                          <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(app.id)} className="btn-icon delete" title="Delete" disabled={isSyncing}>
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-
+                    )}
+                  </p>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
 
-        {/* Footer */}
-        {sortedApplications.length > 0 && (
-          <div className="footer">
-            <p>Showing {sortedApplications.length} of {applications.length} applications</p>
-          </div>
-        )}
+            {/* Smart Search */}
+            <div
+              className="smart-search"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                margin: '1rem 0',
+                padding: '0.5rem 0.75rem',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px'
+              }}
+            >
+              <Search size={16} style={{ opacity: 0.6, flexShrink: 0 }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder='Search… try "google", "status:interview", "last week", "remote status:applied"'
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'inherit',
+                  fontSize: '0.9rem'
+                }}
+                title={
+                  'Smart search supports:\n' +
+                  '  • free text (matches company, position, notes, contact, URL)\n' +
+                  '  • status:applied | status:interview | status:offered | status:rejected | status:accepted\n' +
+                  '  • today, yesterday, this week, last week, this month, last month, last 7 days, last 30 days\n' +
+                  '  • combine tokens (all must match)'
+                }
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="btn-icon"
+                  title="Clear search"
+                  style={{ padding: '4px' }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Controls */}
+            <div className="controls">
+              <button
+                onClick={handleAddNew}
+                className="btn-primary"
+                disabled={isSyncing}
+                title="Add a new job application to track"
+              >
+                <Plus size={18} /> New Application
+              </button>
+              <div className="export-buttons">
+                <label
+                  className="btn-upload"
+                  title="Import multiple applications from a CSV file&#10;&#10;Format: Company, Position, Date Applied, Contact Person, Status, Interview Date, Job Posting URL, Notes&#10;Required: Company and Position&#10;Status: applied, interview, offered, rejected, or accepted"
+                >
+                  <Upload size={16} /> Import CSV
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCSVUpload}
+                    style={{ display: 'none' }}
+                    disabled={isSyncing}
+                  />
+                </label>
+                <button
+                  onClick={exportToCSV}
+                  className="btn-export"
+                  disabled={applications.length === 0}
+                  title="Export all applications to CSV file"
+                >
+                  <Download size={16} /> CSV
+                </button>
+                <button
+                  onClick={exportToPDF}
+                  className="btn-export"
+                  disabled={applications.length === 0}
+                  title="Export all applications to PDF (opens print dialog)"
+                >
+                  <Download size={16} /> PDF
+                </button>
+              </div>
+
+              <div className="filter-buttons">
+                {['all', 'applied', 'interview', 'offered', 'rejected', 'accepted'].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
+                  >
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Applications Table */}
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th
+                      onClick={() => handleSort('company')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      title="Click to sort by company"
+                    >
+                      Company {sortColumn === 'company' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th
+                      onClick={() => handleSort('position')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      title="Click to sort by position"
+                    >
+                      Position {sortColumn === 'position' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th
+                      onClick={() => handleSort('date_applied')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      title="Click to sort by date"
+                    >
+                      Applied {sortColumn === 'date_applied' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th
+                      onClick={() => handleSort('interview_date')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      title="Click to sort by interview date"
+                    >
+                      Interview {sortColumn === 'interview_date' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th>Contact</th>
+                    <th>Status</th>
+                    <th title="Job posting link">Link</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedApplications.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="empty-state">
+                        {searchQuery ? (
+                          <>No applications match your search. Try different keywords or clear the search.</>
+                        ) : filterStatus !== 'all' ? (
+                          <>No {filterStatus} applications found. Try changing the filter or add a new application.</>
+                        ) : (
+                          <>No applications yet. Click "New Application" above to start tracking your job search!</>
+                        )}
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedApplications.map(app => (
+                      <tr key={app.id}>
+                        <td className="company-name">{app.company}</td>
+                        <td className="position-name">{app.position}</td>
+                        <td className="date">
+                          {app.date_applied ? new Date(app.date_applied).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="date">
+                          {app.interview_date ? new Date(app.interview_date).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="contact">{app.contact_person || '—'}</td>
+                        <td>
+                          <span className={`status-badge ${statusConfig[app.status].bg} ${statusConfig[app.status].text}`}>
+                            {statusConfig[app.status].label}
+                          </span>
+                        </td>
+                        <td>
+                          {app.job_posting_url ? (
+                            <a
+                              href={app.job_posting_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-icon"
+                              title={app.job_posting_url}
+                              style={{ display: 'inline-flex', alignItems: 'center' }}
+                            >
+                              <ExternalLink size={16} />
+                            </a>
+                          ) : (
+                            <span style={{ opacity: 0.4 }}>—</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="action-buttons">
+                            <button onClick={() => handleEdit(app)} className="btn-icon" title="Edit" disabled={isSyncing}>
+                              <Edit2 size={16} />
+                            </button>
+                            <button onClick={() => handleDelete(app.id)} className="btn-icon delete" title="Delete" disabled={isSyncing}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            {sortedApplications.length > 0 && (
+              <div className="footer">
+                <p>Showing {sortedApplications.length} of {applications.length} applications</p>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1303,6 +1501,27 @@ if (!user) {
                 />
               </div>
 
+              {/* NEW: Interview Date */}
+              <div className="form-group">
+                <label>Interview Date</label>
+                <input
+                  type="date"
+                  value={formData.interview_date || ''}
+                  onChange={(e) => setFormData({ ...formData, interview_date: e.target.value })}
+                />
+              </div>
+
+              {/* NEW: Job Posting URL */}
+              <div className="form-group">
+                <label>Job Posting URL</label>
+                <input
+                  type="url"
+                  value={formData.job_posting_url || ''}
+                  onChange={(e) => setFormData({ ...formData, job_posting_url: e.target.value })}
+                  placeholder="https://company.com/careers/job-id"
+                />
+              </div>
+
               <div className="form-group">
                 <label>Contact Person</label>
                 <input
@@ -1347,7 +1566,7 @@ if (!user) {
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Interview date, follow-up info, etc."
+                  placeholder="Follow-up info, recruiter notes, etc."
                   rows={4}
                 />
               </div>
