@@ -17,10 +17,11 @@
 //  4. CSV import/export updated to include the two new columns
 // ============================================================================
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload,
-  FileText, HelpCircle, Settings, Search, ExternalLink
+  FileText, HelpCircle, Settings, Search, ExternalLink,
+  LayoutGrid, List, BarChart3, Clock, Paperclip, Bell, Contrast
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import ResumeBuilder from './components/ResumeBuilder.jsx';
@@ -35,6 +36,280 @@ import Leaderboard from './components/Leaderboard.jsx';
 import * as gamification from './gamification.js';
 import './App.css';
 import './animations.css';
+import './accessibility.css';
+
+// ----------------------------------------------------------------------------
+// Constants
+// ----------------------------------------------------------------------------
+const STATUS_OPTIONS = ['applied', 'interview', 'offered', 'rejected', 'accepted'];
+
+const STATUS_BADGE = {
+  applied:   { className: 'badge badge-applied',   label: 'Applied',   symbol: '●' },
+  interview: { className: 'badge badge-interview', label: 'Interview', symbol: '◆' },
+  offered:   { className: 'badge badge-offered',   label: 'Offered',   symbol: '★' },
+  rejected:  { className: 'badge badge-rejected',  label: 'Rejected',  symbol: '✕' },
+  accepted:  { className: 'badge badge-accepted',  label: 'Accepted',  symbol: '✓' },
+};
+
+const SAVED_SEARCHES = [
+  { label: "This week's interviews", query: 'status:interview this week' },
+  { label: 'Pending follow-ups',     query: 'status:applied last 30 days' },
+  { label: 'Recent offers',          query: 'status:offered last month' },
+  { label: 'This month',             query: 'this month' },
+];
+
+// ----------------------------------------------------------------------------
+// A11y helpers
+// ----------------------------------------------------------------------------
+const SkipLink = () => (
+  <a href="#main-content" className="skip-link">Skip to main content</a>
+);
+
+const VisuallyHidden = ({ children }) => (
+  <span className="sr-only">{children}</span>
+);
+
+const LiveRegion = ({ message }) => (
+  <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{message}</div>
+);
+
+function useFocusTrap(ref, isOpen, onClose) {
+  useEffect(() => {
+    if (!isOpen || !ref.current) return;
+    const previouslyFocused = document.activeElement;
+    const root = ref.current;
+    const focusables = root.querySelectorAll(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    first?.focus();
+    const handleKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      if (e.key !== 'Tab') return;
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      previouslyFocused?.focus?.();
+    };
+  }, [isOpen, ref, onClose]);
+}
+
+// ----------------------------------------------------------------------------
+// Sub-components
+// ----------------------------------------------------------------------------
+function StatusBadge({ status }) {
+  const cfg = STATUS_BADGE[status] || STATUS_BADGE.applied;
+  return (
+    <span className={cfg.className}>
+      <span aria-hidden="true">{cfg.symbol} </span>{cfg.label}
+    </span>
+  );
+}
+
+function SortableHeader({ label, column, sortColumn, sortDirection, onSort }) {
+  const active = sortColumn === column;
+  const ariaSort = active ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
+  return (
+    <th aria-sort={ariaSort} scope="col">
+      <button type="button" onClick={() => onSort(column)} className="th-button">
+        {label}
+        <span aria-hidden="true">{active ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+      </button>
+    </th>
+  );
+}
+
+function AttachmentsField({ attachments, onChange }) {
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [type, setType] = useState('resume');
+  const add = () => {
+    if (!name.trim() || !url.trim()) return;
+    onChange([...(attachments || []), { name: name.trim(), url: url.trim(), type }]);
+    setName(''); setUrl(''); setType('resume');
+  };
+  const remove = (i) => onChange(attachments.filter((_, idx) => idx !== i));
+  return (
+    <fieldset className="form-group attachments-field">
+      <legend><Paperclip size={14} aria-hidden="true" /> Attachments</legend>
+      {attachments?.length > 0 && (
+        <ul className="attachment-list">
+          {attachments.map((a, i) => (
+            <li key={i}>
+              <a href={a.url} target="_blank" rel="noopener noreferrer">
+                {a.name} <span className="sr-only">({a.type}, opens in new tab)</span>
+              </a>
+              <span className="attachment-type">{a.type}</span>
+              <button type="button" onClick={() => remove(i)} className="btn-icon" aria-label={`Remove ${a.name}`}>
+                <X size={14} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="attachment-add">
+        <input type="text" placeholder="Label (e.g. Resume v3)" value={name}
+          onChange={(e) => setName(e.target.value)} aria-label="Attachment label" />
+        <input type="url" placeholder="https://…" value={url}
+          onChange={(e) => setUrl(e.target.value)} aria-label="Attachment URL" />
+        <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Attachment type">
+          <option value="resume">Resume</option>
+          <option value="cover_letter">Cover letter</option>
+          <option value="other">Other</option>
+        </select>
+        <button type="button" onClick={add} className="btn-secondary">Add</button>
+      </div>
+    </fieldset>
+  );
+}
+
+function KanbanBoard({ applications, onEdit, onChangeStatus }) {
+  const [dragId, setDragId] = useState(null);
+  return (
+    <div className="kanban-board" role="region" aria-label="Kanban board">
+      {STATUS_OPTIONS.map(col => {
+        const cards = applications.filter(a => a.status === col);
+        return (
+          <div key={col} className="kanban-col"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => {
+              if (!dragId) return;
+              const app = applications.find(a => a.id === dragId);
+              if (app) onChangeStatus(app, col);
+              setDragId(null);
+            }}
+            aria-label={`${col} column, ${cards.length} cards`}>
+            <h3 className="kanban-col-title">
+              <StatusBadge status={col} />
+              <span className="kanban-count">{cards.length}</span>
+            </h3>
+            <div className="kanban-col-body">
+              {cards.length === 0
+                ? <p className="kanban-empty">No cards</p>
+                : cards.map(a => (
+                  <article key={a.id} className="kanban-card"
+                    draggable onDragStart={() => setDragId(a.id)}
+                    tabIndex={0} role="button"
+                    onClick={() => onEdit(a)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(a); } }}
+                    aria-label={`${a.company}, ${a.position}. Press Enter to edit.`}>
+                    <strong>{a.company}</strong>
+                    <span>{a.position}</span>
+                    {a.interview_date && (
+                      <small><Bell size={12} aria-hidden="true" /> {new Date(a.interview_date).toLocaleDateString()}</small>
+                    )}
+                    <label className="sr-only" htmlFor={`move-${a.id}`}>Move {a.company} to status</label>
+                    <select id={`move-${a.id}`} className="kanban-move" defaultValue=""
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { if (e.target.value) { onChangeStatus(a, e.target.value); e.target.value = ''; } }}>
+                      <option value="" disabled>Move to…</option>
+                      {STATUS_OPTIONS.filter(s => s !== col).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </article>
+                ))
+              }
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AnalyticsView({ applications }) {
+  const total = applications.length;
+  const byStatus = STATUS_OPTIONS.map(s => ({
+    status: s, count: applications.filter(a => a.status === s).length,
+  }));
+  const responses = applications.filter(a => ['interview','offered','accepted','rejected'].includes(a.status)).length;
+  const responseRate = total ? Math.round((responses / total) * 100) : 0;
+  const now = new Date();
+  const weeks = Array.from({ length: 8 }, (_, i) => {
+    const end = new Date(now); end.setDate(now.getDate() - i * 7); end.setHours(23,59,59,999);
+    const start = new Date(end); start.setDate(end.getDate() - 6); start.setHours(0,0,0,0);
+    const count = applications.filter(a => {
+      if (!a.date_applied) return false;
+      const d = new Date(a.date_applied);
+      return d >= start && d <= end;
+    }).length;
+    return { label: `${start.getMonth()+1}/${start.getDate()}`, count };
+  }).reverse();
+  const maxWeek = Math.max(1, ...weeks.map(w => w.count));
+  const maxStatus = Math.max(1, ...byStatus.map(b => b.count));
+  const interviewApps = applications.filter(a => a.date_applied && a.interview_date);
+  const avgDaysToInterview = interviewApps.length === 0 ? null
+    : Math.round(interviewApps.reduce((acc, a) =>
+        acc + (new Date(a.interview_date) - new Date(a.date_applied)) / (1000*60*60*24), 0
+      ) / interviewApps.length);
+  return (
+    <section aria-label="Analytics" className="analytics">
+      <h2><BarChart3 size={20} aria-hidden="true" /> Analytics</h2>
+      <div className="analytics-grid">
+        <div className="analytics-card"><p className="stat-label">Total Applications</p><p className="stat-value">{total}</p></div>
+        <div className="analytics-card"><p className="stat-label">Response Rate</p><p className="stat-value">{responseRate}%</p><p className="stat-sub">{responses} of {total}</p></div>
+        <div className="analytics-card"><p className="stat-label">Avg. days to interview</p><p className="stat-value">{avgDaysToInterview ?? '—'}</p></div>
+      </div>
+      <h3>Applications per week</h3>
+      <div className="bar-chart" role="img" aria-label={`Applications per week: ${weeks.map(w => `${w.label}: ${w.count}`).join(', ')}`}>
+        {weeks.map((w, i) => (
+          <div key={i} className="bar-col">
+            <div className="bar" style={{ height: `${(w.count / maxWeek) * 100}%` }} aria-hidden="true">
+              <span className="bar-value">{w.count}</span>
+            </div>
+            <span className="bar-label">{w.label}</span>
+          </div>
+        ))}
+      </div>
+      <h3>Status distribution</h3>
+      <ul className="status-dist" aria-label="Status distribution">
+        {byStatus.map(b => (
+          <li key={b.status}>
+            <span className="status-dist-label"><StatusBadge status={b.status} /></span>
+            <span className="status-dist-bar" aria-hidden="true"><span style={{ width: `${(b.count / maxStatus) * 100}%` }} /></span>
+            <span className="status-dist-count">{b.count}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function TimelineModal({ application, events, onClose }) {
+  const ref = useRef(null);
+  useFocusTrap(ref, true, onClose);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div ref={ref} className="modal" role="dialog" aria-modal="true"
+        aria-labelledby="timeline-title" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 id="timeline-title" className="modal-title">
+            <Clock size={18} aria-hidden="true" /> Timeline — {application.company}
+          </h2>
+          <button onClick={onClose} className="modal-close" aria-label="Close timeline"><X size={20} /></button>
+        </div>
+        <div className="modal-body">
+          {events.length === 0
+            ? <p>No activity recorded yet.</p>
+            : <ol className="timeline">
+                {events.map(e => (
+                  <li key={e.id} className="timeline-item">
+                    <time dateTime={e.created_at}>{new Date(e.created_at).toLocaleString()}</time>
+                    <p>{e.message || e.event_type}</p>
+                  </li>
+                ))}
+              </ol>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -79,6 +354,26 @@ export default function App() {
   const [showApiSettings, setShowApiSettings] = useState(false);
   const [sortColumn, setSortColumn] = useState('date_applied');
   const [sortDirection, setSortDirection] = useState('desc');
+  const [highContrast, setHighContrast] = useState(() => localStorage.getItem('forge.hc') === '1');
+  const [tableView, setTableView] = useState(() => localStorage.getItem('forge.view') || 'table');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [timelineFor, setTimelineFor] = useState(null);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+  const [liveMessage, setLiveMessage] = useState('');
+  const modalRef = useRef(null);
+  useFocusTrap(modalRef, isModalOpen, () => handleCancel());
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('hc-mode', highContrast);
+    localStorage.setItem('forge.hc', highContrast ? '1' : '0');
+  }, [highContrast]);
+
+  useEffect(() => { localStorage.setItem('forge.view', tableView); }, [tableView]);
+
+  const announce = useCallback((msg) => {
+    setLiveMessage(msg);
+    setTimeout(() => setLiveMessage(''), 2000);
+  }, []);
 
   const applyGamification = async (action, actionData = {}) => {
     if (!gamificationState) return;
@@ -426,6 +721,25 @@ export default function App() {
     }
   };
 
+  const logEvent = async (applicationId, payload) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('application_events').insert([{
+        application_id: applicationId,
+        user_id: user.id,
+        ...payload,
+      }]);
+    } catch (e) { console.error('Failed to log event:', e); }
+  };
+
+  const openTimeline = async (app) => {
+    setTimelineFor(app);
+    const { data, error } = await supabase
+      .from('application_events').select('*')
+      .eq('application_id', app.id).order('created_at', { ascending: false });
+    setTimelineEvents(error ? [] : (data || []));
+  };
+
   const handleAddNew = () => {
     setFormData({
       company: '',
@@ -436,7 +750,8 @@ export default function App() {
       notes: '',
       resume_version_id: null,
       interview_date: '',
-      job_posting_url: ''
+      job_posting_url: '',
+      attachments: []
     });
     setEditingId(null);
     setIsModalOpen(true);
@@ -452,7 +767,8 @@ export default function App() {
       notes: app.notes,
       resume_version_id: app.resume_version_id,
       interview_date: app.interview_date || '',
-      job_posting_url: app.job_posting_url || ''
+      job_posting_url: app.job_posting_url || '',
+      attachments: app.attachments || []
     });
     setEditingId(app.id);
     setIsModalOpen(true);
@@ -468,7 +784,8 @@ export default function App() {
     const payload = {
       ...formData,
       interview_date: formData.interview_date ? formData.interview_date : null,
-      job_posting_url: formData.job_posting_url ? formData.job_posting_url.trim() : null
+      job_posting_url: formData.job_posting_url ? formData.job_posting_url.trim() : null,
+      attachments: formData.attachments || []
     };
 
     const oldStatus = editingId
@@ -488,20 +805,27 @@ export default function App() {
           alert('Failed to update application');
           return;
         }
+        if (oldStatus !== formData.status) {
+          await logEvent(editingId, { event_type: 'status_change', from_status: oldStatus, to_status: formData.status, message: `Status changed from ${oldStatus} to ${formData.status}` });
+        } else {
+          await logEvent(editingId, { event_type: 'edit', message: 'Application edited' });
+        }
       } else {
         const { data: { user } } = await supabase.auth.getUser();
 
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from('applications')
-          .insert([{
-            ...payload,
-            user_id: user.id
-          }]);
+          .insert([{ ...payload, user_id: user.id }])
+          .select()
+          .single();
 
         if (error) {
           console.error('Insert error:', error);
           alert('Failed to save application');
           return;
+        }
+        if (inserted) {
+          await logEvent(inserted.id, { event_type: 'created', to_status: payload.status, message: `Application created for ${payload.company} — ${payload.position}` });
         }
       }
       setIsModalOpen(false);
@@ -723,6 +1047,41 @@ export default function App() {
     }
 
     return duplicates;
+  };
+
+  const toggleSelect = (id) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const clearSelection = () => setSelectedIds(new Set());
+  const selectAllVisible = (ids) => setSelectedIds(new Set(ids));
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} application(s)?`)) return;
+    setIsSyncing(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const { error } = await supabase.from('applications').delete().in('id', ids);
+      if (error) { alert('Bulk delete failed'); return; }
+      announce(`${ids.length} applications deleted`);
+      clearSelection();
+      await loadApplications();
+    } finally { setIsSyncing(false); }
+  };
+
+  const bulkStatus = async (status) => {
+    if (selectedIds.size === 0) return;
+    setIsSyncing(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const { error } = await supabase.from('applications').update({ status }).in('id', ids);
+      if (error) { alert('Bulk update failed'); return; }
+      await Promise.all(ids.map(id => {
+        const old = applications.find(a => a.id === id)?.status;
+        return logEvent(id, { event_type: 'status_change', from_status: old, to_status: status, message: `Bulk status change to ${status}` });
+      }));
+      announce(`${ids.length} applications updated to ${status}`);
+      clearSelection();
+      await loadApplications();
+    } finally { setIsSyncing(false); }
   };
 
   const handleCSVUpload = async (event) => {
@@ -1125,6 +1484,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient" data-theme={theme}>
+      <SkipLink />
+      <LiveRegion message={liveMessage} />
       <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
@@ -1143,6 +1504,13 @@ export default function App() {
                 title="Track your job applications"
               >
                 Applications
+              </button>
+              <button
+                onClick={() => setCurrentView('analytics')}
+                className={`btn-header-action ${currentView === 'analytics' ? 'active' : ''}`}
+                title="Analytics dashboard"
+              >
+                Analytics
               </button>
               <button
                 onClick={() => setCurrentView('resumes')}
@@ -1180,6 +1548,14 @@ export default function App() {
                 <Settings size={16} />
               </button>
               <button
+                onClick={() => setHighContrast(v => !v)}
+                className="btn-header-action"
+                aria-pressed={highContrast}
+                title="Toggle high-contrast mode"
+              >
+                <Contrast size={16} />
+              </button>
+              <button
                 onClick={toggleTheme}
                 className="theme-toggle px-3 py-2 rounded-lg transition-colors"
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
@@ -1208,6 +1584,8 @@ export default function App() {
           <ResumeAssembly user={user} />
         ) : currentView === 'resumes' ? (
           <ResumeManager user={user} />
+        ) : currentView === 'analytics' ? (
+          <AnalyticsView applications={applications} />
         ) : (
           <>
             {/* Stats Grid */}
@@ -1250,7 +1628,132 @@ export default function App() {
               )}
             </div>
 
-            {/* Smart Search */}
+            {/* Upcoming interviews banner */}
+            {(() => {
+              const now = new Date(); now.setHours(0,0,0,0);
+              const max = new Date(now); max.setDate(now.getDate() + 7);
+              const upcoming = applications
+                .filter(a => a.interview_date)
+                .map(a => ({ ...a, _d: new Date(a.interview_date) }))
+                .filter(a => a._d >= now && a._d <= max)
+                .sort((a,b) => a._d - b._d);
+              return upcoming.length > 0 ? (
+                <aside className="upcoming-banner" role="region" aria-label="Upcoming interviews">
+                  <div className="upcoming-banner-icon" aria-hidden="true"><Bell size={18} /></div>
+                  <div>
+                    <strong>{upcoming.length}</strong> interview{upcoming.length !== 1 ? 's' : ''} in the next 7 days:
+                    <ul className="upcoming-list">
+                      {upcoming.slice(0, 3).map(a => (
+                        <li key={a.id}>
+                          <button className="link-button" onClick={() => handleEdit(a)}>{a.company} — {a.position}</button>
+                          {' '}on <time dateTime={a.interview_date}>{new Date(a.interview_date).toLocaleDateString()}</time>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </aside>
+              ) : null;
+            })()}
+
+            {/* Saved searches */}
+            <div className="saved-searches" role="group" aria-label="Saved searches">
+              {SAVED_SEARCHES.map(p => (
+                <button key={p.label}
+                  className={`chip ${searchQuery === p.query ? 'chip-active' : ''}`}
+                  onClick={() => setSearchQuery(searchQuery === p.query ? '' : p.query)}
+                  aria-pressed={searchQuery === p.query}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Controls */}
+            <div className="controls">
+              <button
+                onClick={handleAddNew}
+                className="btn-primary"
+                disabled={isSyncing}
+                title="Add a new job application to track"
+              >
+                <Plus size={18} /> New Application
+              </button>
+              <div className="export-buttons">
+                <label
+                  className="btn-upload"
+                  title="Import multiple applications from a CSV file"
+                >
+                  <Upload size={16} /> Import CSV
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCSVUpload}
+                    style={{ display: 'none' }}
+                    disabled={isSyncing}
+                  />
+                </label>
+                <button onClick={exportToCSV} className="btn-export" disabled={applications.length === 0} title="Export to CSV">
+                  <Download size={16} /> CSV
+                </button>
+                <button onClick={exportToPDF} className="btn-export" disabled={applications.length === 0} title="Export to PDF">
+                  <Download size={16} /> PDF
+                </button>
+              </div>
+
+              {/* View toggle */}
+              <div className="view-toggle" role="group" aria-label="View mode">
+                <button onClick={() => setTableView('table')} className={`view-btn ${tableView === 'table' ? 'active' : ''}`} aria-pressed={tableView === 'table'} aria-label="Table view">
+                  <List size={16} aria-hidden="true" /> Table
+                </button>
+                <button onClick={() => setTableView('kanban')} className={`view-btn ${tableView === 'kanban' ? 'active' : ''}`} aria-pressed={tableView === 'kanban'} aria-label="Kanban view">
+                  <LayoutGrid size={16} aria-hidden="true" /> Kanban
+                </button>
+              </div>
+
+              <div className="filter-buttons">
+                {['all', 'applied', 'interview', 'offered', 'rejected', 'accepted'].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
+                  >
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bulk action bar */}
+            {selectedIds.size > 0 && (
+              <div className="bulk-bar" role="region" aria-label="Bulk actions">
+                <span><strong>{selectedIds.size}</strong> selected</span>
+                <button className="btn-secondary" onClick={clearSelection}>Clear</button>
+                <select defaultValue="" onChange={(e) => { if (e.target.value) { bulkStatus(e.target.value); e.target.value = ''; } }} aria-label="Bulk status change">
+                  <option value="" disabled>Change status to…</option>
+                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button className="btn-danger" onClick={bulkDelete}>
+                  <Trash2 size={14} aria-hidden="true" /> Delete selected
+                </button>
+              </div>
+            )}
+
+            {/* Table or Kanban */}
+            {tableView === 'kanban' ? (
+              <KanbanBoard
+                applications={filteredApplications}
+                onEdit={handleEdit}
+                onChangeStatus={async (app, newStatus) => {
+                  if (app.status === newStatus) return;
+                  setIsSyncing(true);
+                  try {
+                    await supabase.from('applications').update({ status: newStatus }).eq('id', app.id);
+                    await logEvent(app.id, { event_type: 'status_change', from_status: app.status, to_status: newStatus, message: `Moved to ${newStatus}` });
+                    announce(`${app.company} moved to ${newStatus}`);
+                    await loadApplications();
+                  } finally { setIsSyncing(false); }
+                }}
+              />
+            ) : (
             <div
               className="smart-search"
               style={{
@@ -1298,162 +1801,123 @@ export default function App() {
               )}
             </div>
 
-            {/* Controls */}
-            <div className="controls">
-              <button
-                onClick={handleAddNew}
-                className="btn-primary"
-                disabled={isSyncing}
-                title="Add a new job application to track"
-              >
-                <Plus size={18} /> New Application
-              </button>
-              <div className="export-buttons">
-                <label
-                  className="btn-upload"
-                  title="Import multiple applications from a CSV file&#10;&#10;Format: Company, Position, Date Applied, Contact Person, Status, Interview Date, Job Posting URL, Notes&#10;Required: Company and Position&#10;Status: applied, interview, offered, rejected, or accepted"
-                >
-                  <Upload size={16} /> Import CSV
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleCSVUpload}
-                    style={{ display: 'none' }}
-                    disabled={isSyncing}
-                  />
-                </label>
-                <button
-                  onClick={exportToCSV}
-                  className="btn-export"
-                  disabled={applications.length === 0}
-                  title="Export all applications to CSV file"
-                >
-                  <Download size={16} /> CSV
+            {/* Smart Search */}
+            <div className="smart-search">
+              <Search size={16} style={{ opacity: 0.6, flexShrink: 0 }} aria-hidden="true" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder='Search… try "google", "status:interview", "last week"'
+                aria-label="Search applications"
+                style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', fontSize: '0.9rem' }}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="btn-icon" aria-label="Clear search" style={{ padding: '4px' }}>
+                  <X size={14} />
                 </button>
-                <button
-                  onClick={exportToPDF}
-                  className="btn-export"
-                  disabled={applications.length === 0}
-                  title="Export all applications to PDF (opens print dialog)"
-                >
-                  <Download size={16} /> PDF
-                </button>
-              </div>
-
-              <div className="filter-buttons">
-                {['all', 'applied', 'interview', 'offered', 'rejected', 'accepted'].map(status => (
-                  <button
-                    key={status}
-                    onClick={() => setFilterStatus(status)}
-                    className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
-                  >
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
 
-            {/* Applications Table */}
+            {/* Applications Table / Kanban */}
+            {tableView === 'kanban' ? (
+              <KanbanBoard
+                applications={filteredApplications}
+                onEdit={handleEdit}
+                onChangeStatus={async (app, newStatus) => {
+                  if (app.status === newStatus) return;
+                  setIsSyncing(true);
+                  try {
+                    await supabase.from('applications').update({ status: newStatus }).eq('id', app.id);
+                    await logEvent(app.id, { event_type: 'status_change', from_status: app.status, to_status: newStatus, message: `Moved to ${newStatus}` });
+                    announce(`${app.company} moved to ${newStatus}`);
+                    await loadApplications();
+                  } finally { setIsSyncing(false); }
+                }}
+              />
+            ) : (
             <div className="table-wrapper">
-              <table>
+              {/* Mobile cards */}
+              <div className="mobile-cards">
+                {sortedApplications.length === 0 ? (
+                  <p className="empty-state">No applications match.</p>
+                ) : sortedApplications.map(app => (
+                  <article key={app.id} className="app-card">
+                    <header className="app-card-header">
+                      <h3>{app.company}</h3>
+                      <StatusBadge status={app.status} />
+                    </header>
+                    <p className="app-card-position">{app.position}</p>
+                    <dl className="app-card-meta">
+                      <div><dt>Applied</dt><dd>{app.date_applied ? new Date(app.date_applied).toLocaleDateString() : '—'}</dd></div>
+                      <div><dt>Interview</dt><dd>{app.interview_date ? new Date(app.interview_date).toLocaleDateString() : '—'}</dd></div>
+                    </dl>
+                    <div className="action-buttons">
+                      <button onClick={() => handleEdit(app)} className="btn-icon" aria-label={`Edit ${app.company}`} disabled={isSyncing}><Edit2 size={16} /></button>
+                      <button onClick={() => openTimeline(app)} className="btn-icon" aria-label={`Timeline for ${app.company}`} disabled={isSyncing}><Clock size={16} /></button>
+                      <button onClick={() => handleDelete(app.id)} className="btn-icon delete" aria-label={`Delete ${app.company}`} disabled={isSyncing}><Trash2 size={16} /></button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <table className="desktop-table">
                 <thead>
                   <tr>
-                    <th
-                      onClick={() => handleSort('company')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      title="Click to sort by company"
-                    >
-                      Company {sortColumn === 'company' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    <th scope="col">
+                      <input type="checkbox"
+                        aria-label={sortedApplications.length > 0 && sortedApplications.every(a => selectedIds.has(a.id)) ? 'Deselect all' : 'Select all'}
+                        checked={sortedApplications.length > 0 && sortedApplications.every(a => selectedIds.has(a.id))}
+                        onChange={(e) => e.target.checked ? selectAllVisible(sortedApplications.map(a => a.id)) : clearSelection()}
+                      />
                     </th>
-                    <th
-                      onClick={() => handleSort('position')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      title="Click to sort by position"
-                    >
-                      Position {sortColumn === 'position' && (sortDirection === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th
-                      onClick={() => handleSort('date_applied')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      title="Click to sort by date"
-                    >
-                      Applied {sortColumn === 'date_applied' && (sortDirection === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th
-                      onClick={() => handleSort('interview_date')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      title="Click to sort by interview date"
-                    >
-                      Interview {sortColumn === 'interview_date' && (sortDirection === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th>Contact</th>
-                    <th>Status</th>
-                    <th title="Job posting link">Link</th>
-                    <th>Actions</th>
+                    <SortableHeader label="Company" column="company" sortColumn={sortColumn} sortDirection={sortDirection} onSort={handleSort} />
+                    <SortableHeader label="Position" column="position" sortColumn={sortColumn} sortDirection={sortDirection} onSort={handleSort} />
+                    <SortableHeader label="Applied" column="date_applied" sortColumn={sortColumn} sortDirection={sortDirection} onSort={handleSort} />
+                    <SortableHeader label="Interview" column="interview_date" sortColumn={sortColumn} sortDirection={sortDirection} onSort={handleSort} />
+                    <th scope="col">Contact</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Link</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedApplications.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="empty-state">
-                        {searchQuery ? (
-                          <>No applications match your search. Try different keywords or clear the search.</>
-                        ) : filterStatus !== 'all' ? (
-                          <>No {filterStatus} applications found. Try changing the filter or add a new application.</>
-                        ) : (
-                          <>No applications yet. Click "New Application" above to start tracking your job search!</>
-                        )}
+                      <td colSpan="9" className="empty-state">
+                        {searchQuery ? <>No applications match your search.</> : filterStatus !== 'all' ? <>No {filterStatus} applications found.</> : <>No applications yet. Click "New Application" to start!</>}
                       </td>
                     </tr>
-                  ) : (
-                    sortedApplications.map(app => (
-                      <tr key={app.id}>
-                        <td className="company-name">{app.company}</td>
-                        <td className="position-name">{app.position}</td>
-                        <td className="date">
-                          {app.date_applied ? new Date(app.date_applied).toLocaleDateString() : '—'}
-                        </td>
-                        <td className="date">
-                          {app.interview_date ? new Date(app.interview_date).toLocaleDateString() : '—'}
-                        </td>
-                        <td className="contact">{app.contact_person || '—'}</td>
-                        <td>
-                          <span className={`status-badge ${statusConfig[app.status].bg} ${statusConfig[app.status].text}`}>
-                            {statusConfig[app.status].label}
-                          </span>
-                        </td>
-                        <td>
-                          {app.job_posting_url ? (
-                            <a
-                              href={app.job_posting_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="btn-icon"
-                              title={app.job_posting_url}
-                              style={{ display: 'inline-flex', alignItems: 'center' }}
-                            >
-                              <ExternalLink size={16} />
-                            </a>
-                          ) : (
-                            <span style={{ opacity: 0.4 }}>—</span>
-                          )}
-                        </td>
-                        <td>
-                          <div className="action-buttons">
-                            <button onClick={() => handleEdit(app)} className="btn-icon" title="Edit" disabled={isSyncing}>
-                              <Edit2 size={16} />
-                            </button>
-                            <button onClick={() => handleDelete(app.id)} className="btn-icon delete" title="Delete" disabled={isSyncing}>
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ) : sortedApplications.map(app => (
+                    <tr key={app.id} aria-selected={selectedIds.has(app.id)}>
+                      <td><input type="checkbox" aria-label={`Select ${app.company}`} checked={selectedIds.has(app.id)} onChange={() => toggleSelect(app.id)} /></td>
+                      <td className="company-name">{app.company}</td>
+                      <td className="position-name">{app.position}</td>
+                      <td className="date">{app.date_applied ? new Date(app.date_applied).toLocaleDateString() : '—'}</td>
+                      <td className="date">{app.interview_date ? new Date(app.interview_date).toLocaleDateString() : '—'}</td>
+                      <td className="contact">{app.contact_person || '—'}</td>
+                      <td><StatusBadge status={app.status} /></td>
+                      <td>
+                        {app.job_posting_url ? (
+                          <a href={app.job_posting_url} target="_blank" rel="noopener noreferrer" className="btn-icon" aria-label={`Job posting for ${app.company} (opens in new tab)`} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                            <ExternalLink size={16} />
+                          </a>
+                        ) : <span style={{ opacity: 0.4 }}>—</span>}
+                      </td>
+                      <td>
+                        <div className="action-buttons">
+                          <button onClick={() => handleEdit(app)} className="btn-icon" aria-label={`Edit ${app.company}`} disabled={isSyncing}><Edit2 size={16} /></button>
+                          <button onClick={() => openTimeline(app)} className="btn-icon" aria-label={`Timeline for ${app.company}`} disabled={isSyncing}><Clock size={16} /></button>
+                          <button onClick={() => handleDelete(app.id)} className="btn-icon delete" aria-label={`Delete ${app.company}`} disabled={isSyncing}><Trash2 size={16} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
+            )} {/* end kanban/table */}
 
             {/* Footer */}
             {sortedApplications.length > 0 && (
@@ -1468,9 +1932,9 @@ export default function App() {
       {/* Modal */}
       {isModalOpen && (
         <div className="modal-backdrop" onClick={handleCancel}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">
+              <h2 id="modal-title" className="modal-title">
                 {editingId ? 'Edit Application' : 'New Application'}
               </h2>
               <button
@@ -1571,6 +2035,11 @@ export default function App() {
                 </select>
               </div>
 
+              <AttachmentsField
+                attachments={formData.attachments || []}
+                onChange={(atts) => setFormData({ ...formData, attachments: atts })}
+              />
+
               <div className="form-group">
                 <label>Notes</label>
                 <textarea
@@ -1600,6 +2069,14 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {timelineFor && (
+        <TimelineModal
+          application={timelineFor}
+          events={timelineEvents}
+          onClose={() => { setTimelineFor(null); setTimelineEvents([]); }}
+        />
       )}
 
       {activeMilestone && (
