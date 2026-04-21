@@ -1,39 +1,26 @@
 // ============================================================================
-// Forge — Job Application Tracker (App_v2.jsx)
-/
+// REQUIRED SUPABASE MIGRATION — ALREADY run deploying:
 //
-// WHAT'S NEW IN THIS VERSION
-// --------------------------
-//  1.  Full WCAG 2.1 AA accessibility pass:
-//       - High-contrast status badges (>= 4.5:1, most >= 7:1)
-//       - All icon-only buttons get aria-label
-//       - Modal: role="dialog", aria-modal, focus trap, Esc to close, focus restore
-//       - Sortable headers use <button> with aria-sort
-//       - Form labels properly associated via htmlFor
-//       - Skip link to main content
-//       - Live region announces toasts/sync status (aria-live)
-//       - 44x44 minimum touch targets
-//       - prefers-reduced-motion respected
-//       - External links announce "(opens in new tab)" via sr-only text
-//  2.  High-contrast mode toggle (persisted in localStorage)
-//  3.  Dark / Light theme with proper contrast in both
-//  4.  Bulk select + bulk delete + bulk status change
-//  5.  Kanban board view (toggle with Table view)
-//  6.  Upcoming interviews reminder banner
-//  7.  Analytics dashboard view (apps/week, response rate, status distribution)
-//  8.  Attachments per application (resume/cover letter URL list)
-//  9.  Saved search presets as chips
-// 10.  Activity timeline per application (auto-logs status changes)
-// 11.  Mobile-friendly card view below md breakpoint (auto-switch)
+//   ALTER TABLE applications
+//     ADD COLUMN IF NOT EXISTS interview_date date,
+//     ADD COLUMN IF NOT EXISTS job_posting_url text;
 //
-// All companion CSS is in `accessibility.css` — import it from main.jsx or App.jsx.
+// New features in this version:
+//  1. `interview_date` column + form field + table column
+//  2. `job_posting_url` column + form field + table icon link (opens in new tab)
+//  3. Smart search bar above the applications table:
+//       - free text matches company / position / notes / contact_person
+//       - `status:interview` (or applied/offered/rejected/accepted) filters by status
+//       - date phrases: "today", "yesterday", "this week", "last week",
+//         "this month", "last month", "last 7 days", "last 30 days"
+//       - tokens combine with AND (all must match)
+//  4. CSV import/export updated to include the two new columns
 // ============================================================================
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload,
-  FileText, HelpCircle, Settings, Search, ExternalLink,
-  LayoutGrid, List, BarChart3, Clock, Paperclip, Bell, Sun, Moon, Contrast
+  FileText, HelpCircle, Settings, Search, ExternalLink
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import ResumeBuilder from './components/ResumeBuilder.jsx';
@@ -41,90 +28,15 @@ import ResumeAssembly from './components/ResumeAssembly.jsx';
 import ResumeManager from './components/ResumeManager.jsx';
 import OnboardingTutorial from './components/OnboardingTutorial.jsx';
 import ApiKeySettings from './components/ApiKeySettings.jsx';
+
 import MilestoneToast from './MilestoneToast.jsx';
 import CelebrationAnimation from './components/CelebrationAnimation.jsx';
 import Leaderboard from './components/Leaderboard.jsx';
 import * as gamification from './gamification.js';
 import './App.css';
 import './animations.css';
-import './accessibility.css'; // NEW — see file delivered alongside this one
 
-// ----------------------------------------------------------------------------
-// Constants
-// ----------------------------------------------------------------------------
-const STATUS_OPTIONS = ['applied', 'interview', 'offered', 'rejected', 'accepted'];
-
-// WCAG AA-compliant status badges (white text on dark color, 7:1+ contrast).
-// Each also has a distinct shape/icon prefix so status is not color-only.
-const STATUS_BADGE = {
-  applied:  { className: 'badge badge-applied',  label: 'Applied',  symbol: '●' },
-  interview:{ className: 'badge badge-interview',label: 'Interview',symbol: '◆' },
-  offered:  { className: 'badge badge-offered',  label: 'Offered',  symbol: '★' },
-  rejected: { className: 'badge badge-rejected', label: 'Rejected', symbol: '✕' },
-  accepted: { className: 'badge badge-accepted', label: 'Accepted', symbol: '✓' },
-};
-
-const SAVED_SEARCHES = [
-  { label: 'This week\'s interviews', query: 'status:interview this week' },
-  { label: 'Pending follow-ups',     query: 'status:applied last 30 days' },
-  { label: 'Recent offers',          query: 'status:offered last month' },
-  { label: 'This month',             query: 'this month' },
-];
-
-// ----------------------------------------------------------------------------
-// Reusable a11y helpers
-// ----------------------------------------------------------------------------
-const SkipLink = () => (
-  <a href="#main-content" className="skip-link">Skip to main content</a>
-);
-
-const VisuallyHidden = ({ children }) => (
-  <span className="sr-only">{children}</span>
-);
-
-// Live region used to announce sync state, errors, and milestones to screen readers.
-const LiveRegion = ({ message }) => (
-  <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-    {message}
-  </div>
-);
-
-// Focus trap hook — used by modal.
-function useFocusTrap(ref, isOpen, onClose) {
-  useEffect(() => {
-    if (!isOpen || !ref.current) return;
-
-    const previouslyFocused = document.activeElement;
-    const root = ref.current;
-    const focusables = root.querySelectorAll(
-      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
-    );
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    first?.focus();
-
-    const handleKey = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
-      if (e.key !== 'Tab') return;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault(); last?.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault(); first?.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('keydown', handleKey);
-      previouslyFocused?.focus?.();
-    };
-  }, [isOpen, ref, onClose]);
-}
-
-// ----------------------------------------------------------------------------
-// Main App component
-// ----------------------------------------------------------------------------
 export default function App() {
-  // ---------- Auth state ----------
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authMode, setAuthMode] = useState('login');
@@ -134,100 +46,68 @@ export default function App() {
   const [resetMode, setResetMode] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [theme, setTheme] = useState('dark');
 
-  // ---------- Theme + a11y prefs ----------
-  const [theme, setTheme] = useState(() => localStorage.getItem('forge.theme') || 'dark');
-  const [highContrast, setHighContrast] = useState(
-    () => localStorage.getItem('forge.hc') === '1'
-  );
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem('forge.theme', theme);
-  }, [theme]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('hc-mode', highContrast);
-    localStorage.setItem('forge.hc', highContrast ? '1' : '0');
-  }, [highContrast]);
-
-  // ---------- Data ----------
   const [applications, setApplications] = useState([]);
   const [resumeVersions, setResumeVersions] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(''); // NEW
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [liveMessage, setLiveMessage] = useState('');
-  const [formData, setFormData] = useState(emptyForm());
-  const [selectedIds, setSelectedIds] = useState(new Set()); // bulk select
-  const [tableView, setTableView] = useState(
-    () => localStorage.getItem('forge.view') || 'table' // 'table' | 'kanban'
-  );
-  useEffect(() => { localStorage.setItem('forge.view', tableView); }, [tableView]);
+  const [formData, setFormData] = useState({
+    company: '',
+    position: '',
+    date_applied: '',
+    contact_person: '',
+    status: 'applied',
+    notes: '',
+    resume_version_id: null,
+    interview_date: '',     // NEW
+    job_posting_url: ''     // NEW
+  });
 
-  const [timelineFor, setTimelineFor] = useState(null); // application id whose timeline is open
-  const [timelineEvents, setTimelineEvents] = useState([]);
-
-  // ---------- Gamification ----------
   const [gamificationState, setGamificationState] = useState(null);
+
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [milestoneQueue, setMilestoneQueue] = useState([]);
   const [activeCelebration, setActiveCelebration] = useState(null);
   const [statusCelebration, setStatusCelebration] = useState(null);
-
-  // ---------- View ----------
   const [currentView, setCurrentView] = useState('applications');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showApiSettings, setShowApiSettings] = useState(false);
   const [sortColumn, setSortColumn] = useState('date_applied');
   const [sortDirection, setSortDirection] = useState('desc');
 
-  // Modal focus trap
-  const modalRef = useRef(null);
-  useFocusTrap(modalRef, isModalOpen, () => handleCancel());
-
-  function emptyForm() {
-    return {
-      company: '',
-      position: '',
-      date_applied: '',
-      contact_person: '',
-      status: 'applied',
-      notes: '',
-      resume_version_id: null,
-      interview_date: '',
-      job_posting_url: '',
-      attachments: [], // [{ name, url, type }]
-    };
-  }
-
-  // Announce a transient message to screen readers.
-  const announce = useCallback((msg) => {
-    setLiveMessage(msg);
-    // Clear after a moment so re-announcement works.
-    setTimeout(() => setLiveMessage(''), 2000);
-  }, []);
-
-  // --------------------------------------------------------------------------
-  // Gamification (unchanged from v1 — kept brief)
-  // --------------------------------------------------------------------------
   const applyGamification = async (action, actionData = {}) => {
     if (!gamificationState) return;
+
     const oldState = gamificationState;
     const newState = gamification.computeNewState(oldState, action, actionData);
-    const milestones = gamification.detectMilestones(oldState, newState, applications);
+
+    const milestones = gamification.detectMilestones(
+      oldState,
+      newState,
+      applications
+    );
+
     setGamificationState(newState);
-    await supabase.from('gamification_state').update(newState).eq('user_id', user.id);
+
+    await supabase
+      .from('gamification_state')
+      .update(newState)
+      .eq('user_id', user.id);
+
     if (milestones.length > 0) {
       const celebrationMilestones = milestones.filter(
         m => m.tier === 'rank-up' || m.tier === 'achievement' || m.tier === 'standard'
       );
+
       if (celebrationMilestones.length > 0 && !activeCelebration) {
         setActiveCelebration(celebrationMilestones[0]);
       }
+
       if (!activeMilestone) {
         setActiveMilestone(milestones[0]);
         setMilestoneQueue(milestones.slice(1));
@@ -237,15 +117,14 @@ export default function App() {
     }
   };
 
-  // --------------------------------------------------------------------------
-  // Bootstrap
-  // --------------------------------------------------------------------------
   useEffect(() => {
     checkUser();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -256,6 +135,24 @@ export default function App() {
       loadResumeVersions();
     }
   }, [user]);
+
+  const loadResumeVersions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('resume_versions')
+        .select('id, name')
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Load resume versions error:', error);
+        return;
+      }
+
+      setResumeVersions(data || []);
+    } catch (e) {
+      console.error('Failed to load resume versions:', e);
+    }
+  };
 
   useEffect(() => {
     if (milestoneQueue.length > 0 && !activeMilestone) {
@@ -268,126 +165,279 @@ export default function App() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
-    } catch (e) {
-      console.error('Error checking user:', e);
+    } catch (error) {
+      console.error('Error checking user:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadResumeVersions = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('resume_versions').select('id, name').order('updated_at', { ascending: false });
-      if (error) { console.error(error); return; }
-      setResumeVersions(data || []);
-    } catch (e) { console.error(e); }
-  };
-
-  const calculateRetroactivePoints = (apps) => {
-    let p = 0;
-    p += apps.length * 10;
-    p += apps.filter(a => ['interview','offered','accepted'].includes(a.status)).length * 25;
-    p += apps.filter(a => ['offered','accepted'].includes(a.status)).length * 50;
-    return p;
+  const calculateRetroactivePoints = (applications) => {
+    let points = 0;
+    points += applications.length * 10;
+    const interviews = applications.filter(a =>
+      a.status === 'interview' || a.status === 'offered' || a.status === 'accepted'
+    ).length;
+    points += interviews * 25;
+    const offers = applications.filter(a =>
+      a.status === 'offered' || a.status === 'accepted'
+    ).length;
+    points += offers * 50;
+    return points;
   };
 
   const loadGamificationState = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: apps } = await supabase.from('applications').select('*');
-      const allApps = apps || [];
-      const retroPoints = calculateRetroactivePoints(allApps);
-      const retroRank = gamification.calculateRank(retroPoints);
-      const { data, error } = await supabase
-        .from('gamification_state').select('*').eq('user_id', user.id).single();
-      if (error && error.code === 'PGRST116') {
-        const initial = {
-          ...gamification.getInitialState(),
-          user_id: user.id, points: retroPoints, rank: retroRank,
-          last_login_date: new Date().toISOString().split('T')[0],
-        };
-        const { data: inserted } = await supabase
-          .from('gamification_state').insert([initial]).select().single();
-        setGamificationState(inserted);
-        setShowOnboarding(true);
+
+      const { data: apps, error: appsError } = await supabase
+        .from('applications')
+        .select('*');
+
+      if (appsError) {
+        console.error('Failed to load applications for gamification:', appsError);
         return;
       }
+
+      const applications = apps || [];
+
+      const retroPoints = calculateRetroactivePoints(applications);
+      const retroRank = gamification.calculateRank(retroPoints);
+
+      const { data, error } = await supabase
+        .from('gamification_state')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        const initialState = {
+          ...gamification.getInitialState(),
+          user_id: user.id,
+          points: retroPoints,
+          rank: retroRank,
+          last_login_date: new Date().toISOString().split('T')[0]
+        };
+
+        const { data: inserted, error: insertError } = await supabase
+          .from('gamification_state')
+          .insert([initialState])
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Failed to insert gamification state:', insertError);
+          return;
+        }
+
+        setGamificationState(inserted);
+        setShowOnboarding(true);
+
+        const welcomeMilestones = gamification.detectMilestones(
+          gamification.getInitialState(),
+          inserted,
+          applications,
+          { isDailyLogin: true }
+        );
+
+        if (welcomeMilestones.length > 0) {
+          const celebrationMilestones = welcomeMilestones.filter(
+            m => m.tier === 'rank-up' || m.tier === 'achievement' || m.tier === 'standard'
+          );
+
+          if (celebrationMilestones.length > 0 && !activeCelebration) {
+            setActiveCelebration(celebrationMilestones[0]);
+          }
+
+          if (!activeMilestone) {
+            setActiveMilestone(welcomeMilestones[0]);
+            setMilestoneQueue(welcomeMilestones.slice(1));
+          } else {
+            setMilestoneQueue(prev => [...prev, ...welcomeMilestones]);
+          }
+        }
+
+        return;
+      }
+
       const isDailyLogin = gamification.checkDailyLogin(data.last_login_date);
-      const updateFields = { points: retroPoints, rank: retroRank };
-      if (isDailyLogin) updateFields.last_login_date = new Date().toISOString().split('T')[0];
-      await supabase.from('gamification_state').update(updateFields).eq('user_id', user.id);
-      setGamificationState({ ...data, ...updateFields });
-    } catch (e) {
-      console.error('[GAMIFICATION] load error:', e);
+
+      const needsUpdate =
+        data.points !== retroPoints ||
+        data.rank !== retroRank;
+
+      if (needsUpdate || isDailyLogin) {
+        const updated = {
+          ...data,
+          points: retroPoints,
+          rank: retroRank,
+          last_login_date: isDailyLogin ? new Date().toISOString().split('T')[0] : data.last_login_date
+        };
+
+        const updateFields = {
+          points: retroPoints,
+          rank: retroRank
+        };
+
+        if (isDailyLogin) {
+          updateFields.last_login_date = new Date().toISOString().split('T')[0];
+        }
+
+        const { error: updateError } = await supabase
+          .from('gamification_state')
+          .update(updateFields)
+          .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error('Failed to update gamification state:', updateError);
+          return;
+        }
+
+        setGamificationState(updated);
+
+        if (isDailyLogin) {
+          const welcomeMilestones = gamification.detectMilestones(
+            data,
+            updated,
+            applications,
+            { isDailyLogin: true }
+          );
+
+          if (welcomeMilestones.length > 0) {
+            const celebrationMilestones = welcomeMilestones.filter(
+              m => m.tier === 'rank-up' || m.tier === 'achievement' || m.tier === 'standard'
+            );
+
+            if (celebrationMilestones.length > 0 && !activeCelebration) {
+              setActiveCelebration(celebrationMilestones[0]);
+            }
+
+            if (!activeMilestone) {
+              setActiveMilestone(welcomeMilestones[0]);
+              setMilestoneQueue(welcomeMilestones.slice(1));
+            } else {
+              setMilestoneQueue(prev => [...prev, ...welcomeMilestones]);
+            }
+          }
+        }
+      } else {
+        setGamificationState(data);
+      }
+
+    } catch (error) {
+      console.error('[GAMIFICATION] load error:', error);
     }
   };
 
-  // --------------------------------------------------------------------------
-  // Auth handlers
-  // --------------------------------------------------------------------------
   const handleLogin = async (e) => {
-    e.preventDefault(); setAuthError('');
+    e.preventDefault();
+    setAuthError('');
+
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
       if (error) throw error;
+
       setUser(data.user);
-    } catch (err) { setAuthError(err.message); }
+    } catch (error) {
+      setAuthError(error.message);
+    }
   };
 
   const handleSignup = async (e) => {
-    e.preventDefault(); setAuthError('');
+    e.preventDefault();
+    setAuthError('');
+
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
       if (error) throw error;
-      if (data.user) alert('Account created! Please check your email to verify your account.');
-    } catch (err) { setAuthError(err.message); }
+
+      if (data.user) {
+        alert('Account created! Please check your email to verify your account.');
+      }
+    } catch (error) {
+      setAuthError(error.message);
+    }
   };
 
   const handleLogout = async () => {
-    try { await supabase.auth.signOut(); setUser(null); setApplications([]); }
-    catch (e) { console.error(e); }
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setApplications([]);
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
   };
 
   const handlePasswordReset = async (e) => {
-    e.preventDefault(); setAuthError('');
+    e.preventDefault();
+    setAuthError('');
+
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: 'https://job-tracker-3wd.pages.dev',
       });
+
       if (error) throw error;
+
       setResetSuccess(true);
-      setTimeout(() => { setResetMode(false); setResetSuccess(false); setResetEmail(''); }, 3000);
-    } catch (err) { setAuthError(err.message); }
+      setTimeout(() => {
+        setResetMode(false);
+        setResetSuccess(false);
+        setResetEmail('');
+      }, 3000);
+    } catch (error) {
+      setAuthError(error.message);
+    }
   };
 
-  // --------------------------------------------------------------------------
-  // Applications CRUD
-  // --------------------------------------------------------------------------
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'garden' : 'dark');
+  };
+
   const loadApplications = async () => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
-        .from('applications').select('*').order('date_applied', { ascending: false });
-      if (error) { console.error(error); return; }
-      setApplications(data || []);
-    } finally { setIsLoading(false); }
-  };
+        .from('applications')
+        .select('*')
+        .order('date_applied', { ascending: false });
 
-  const logEvent = async (applicationId, payload) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('application_events').insert([{
-        application_id: applicationId,
-        user_id: user.id,
-        ...payload,
-      }]);
-    } catch (e) { console.error('Failed to log event:', e); }
+      if (error) {
+        console.error('Load error:', error);
+        return;
+      }
+
+      setApplications(data || []);
+
+    } catch (e) {
+      console.error('Failed to load:', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAddNew = () => {
-    setFormData({ ...emptyForm(), date_applied: new Date().toISOString().split('T')[0] });
+    setFormData({
+      company: '',
+      position: '',
+      date_applied: new Date().toISOString().split('T')[0],
+      contact_person: '',
+      status: 'applied',
+      notes: '',
+      resume_version_id: null,
+      interview_date: '',
+      job_posting_url: ''
+    });
     setEditingId(null);
     setIsModalOpen(true);
   };
@@ -402,8 +452,7 @@ export default function App() {
       notes: app.notes,
       resume_version_id: app.resume_version_id,
       interview_date: app.interview_date || '',
-      job_posting_url: app.job_posting_url || '',
-      attachments: app.attachments || [],
+      job_posting_url: app.job_posting_url || ''
     });
     setEditingId(app.id);
     setIsModalOpen(true);
@@ -411,70 +460,94 @@ export default function App() {
 
   const handleSave = async () => {
     if (!formData.company.trim() || !formData.position.trim()) {
-      announce('Company and position are required');
       alert('Company and position are required');
       return;
     }
+
+    // Normalize empty date strings to null so Postgres accepts them
     const payload = {
       ...formData,
-      interview_date: formData.interview_date || null,
-      job_posting_url: formData.job_posting_url ? formData.job_posting_url.trim() : null,
-      attachments: formData.attachments || [],
+      interview_date: formData.interview_date ? formData.interview_date : null,
+      job_posting_url: formData.job_posting_url ? formData.job_posting_url.trim() : null
     };
-    const oldStatus = editingId ? applications.find(a => a.id === editingId)?.status : null;
+
+    const oldStatus = editingId
+      ? applications.find(a => a.id === editingId)?.status
+      : null;
 
     setIsSyncing(true);
     try {
       if (editingId) {
-        const { error } = await supabase.from('applications').update(payload).eq('id', editingId);
-        if (error) { alert('Failed to update'); return; }
-        if (oldStatus !== formData.status) {
-          await logEvent(editingId, {
-            event_type: 'status_change', from_status: oldStatus, to_status: formData.status,
-            message: `Status changed from ${oldStatus} to ${formData.status}`,
-          });
-        } else {
-          await logEvent(editingId, { event_type: 'edit', message: 'Application edited' });
+        const { error } = await supabase
+          .from('applications')
+          .update(payload)
+          .eq('id', editingId);
+
+        if (error) {
+          console.error('Update error:', error);
+          alert('Failed to update application');
+          return;
         }
-        announce('Application updated');
       } else {
         const { data: { user } } = await supabase.auth.getUser();
-        const { data: inserted, error } = await supabase
-          .from('applications').insert([{ ...payload, user_id: user.id }]).select().single();
-        if (error) { alert('Failed to save'); return; }
-        if (inserted) {
-          await logEvent(inserted.id, {
-            event_type: 'created', to_status: payload.status,
-            message: `Application created for ${payload.company} — ${payload.position}`,
-          });
+
+        const { error } = await supabase
+          .from('applications')
+          .insert([{
+            ...payload,
+            user_id: user.id
+          }]);
+
+        if (error) {
+          console.error('Insert error:', error);
+          alert('Failed to save application');
+          return;
         }
-        announce('Application created');
       }
       setIsModalOpen(false);
       await loadApplications();
 
       if (editingId && oldStatus !== formData.status) {
-        if (formData.status === 'rejected')  setStatusCelebration({ emoji: '🦋', type: 'rejected' });
-        else if (formData.status === 'interview') setStatusCelebration({ emoji: '🐲', type: 'interview' });
+        if (formData.status === 'rejected') {
+          setStatusCelebration({ emoji: '🦋', type: 'rejected' });
+        } else if (formData.status === 'interview') {
+          setStatusCelebration({ emoji: '🐲', type: 'interview' });
+        }
       }
 
       if (gamificationState) {
         const action = editingId ? 'update_status' : 'create_application';
-        const actionData = editingId ? { oldStatus, newStatus: formData.status } : {};
+        const actionData = editingId
+          ? { oldStatus, newStatus: formData.status }
+          : {};
+
         await applyGamification(action, actionData);
       }
-    } finally { setIsSyncing(false); }
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this application?')) return;
+
     setIsSyncing(true);
     try {
-      const { error } = await supabase.from('applications').delete().eq('id', id);
-      if (error) { alert('Failed to delete'); return; }
-      announce('Application deleted');
+      const { error } = await supabase
+        .from('applications')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Delete error:', error);
+        alert('Failed to delete application');
+        return;
+      }
+
       await loadApplications();
-    } finally { setIsSyncing(false); }
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleCancel = () => {
@@ -482,174 +555,294 @@ export default function App() {
     setEditingId(null);
   };
 
-  // --------------------------------------------------------------------------
-  // Bulk actions
-  // --------------------------------------------------------------------------
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-  const clearSelection = () => setSelectedIds(new Set());
-  const selectAllVisible = (ids) => setSelectedIds(new Set(ids));
-
-  const bulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} application(s)?`)) return;
-    setIsSyncing(true);
-    try {
-      const ids = Array.from(selectedIds);
-      const { error } = await supabase.from('applications').delete().in('id', ids);
-      if (error) { alert('Bulk delete failed'); return; }
-      announce(`${ids.length} applications deleted`);
-      clearSelection();
-      await loadApplications();
-    } finally { setIsSyncing(false); }
-  };
-
-  const bulkStatus = async (status) => {
-    if (selectedIds.size === 0) return;
-    setIsSyncing(true);
-    try {
-      const ids = Array.from(selectedIds);
-      const { error } = await supabase.from('applications').update({ status }).in('id', ids);
-      if (error) { alert('Bulk update failed'); return; }
-      // Log events for each
-      await Promise.all(ids.map(id => {
-        const old = applications.find(a => a.id === id)?.status;
-        return logEvent(id, {
-          event_type: 'status_change', from_status: old, to_status: status,
-          message: `Bulk status change to ${status}`,
-        });
-      }));
-      announce(`${ids.length} applications updated to ${status}`);
-      clearSelection();
-      await loadApplications();
-    } finally { setIsSyncing(false); }
-  };
-
-  // --------------------------------------------------------------------------
-  // CSV import / export (kept from v1)
-  // --------------------------------------------------------------------------
   const exportToCSV = () => {
-    const headers = ['Company','Position','Date Applied','Contact Person','Status','Interview Date','Job Posting URL','Notes'];
-    const rows = applications.map(a => [
-      a.company, a.position, a.date_applied, a.contact_person, a.status,
-      a.interview_date || '', a.job_posting_url || '', a.notes,
+    const headers = [
+      'Company', 'Position', 'Date Applied', 'Contact Person',
+      'Status', 'Interview Date', 'Job Posting URL', 'Notes'
+    ];
+    const rows = applications.map(app => [
+      app.company,
+      app.position,
+      app.date_applied,
+      app.contact_person,
+      app.status,
+      app.interview_date || '',
+      app.job_posting_url || '',
+      app.notes
     ]);
+
     const csv = [headers, ...rows]
-      .map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(','))
+      .map(row => row.map(cell => `"${(cell ?? '').toString().replace(/"/g, '""')}"`).join(','))
       .join('\n');
+
     const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
+    const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `job-applications-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
+    a.href = url;
+    a.download = `job-applications-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
   const exportToPDF = () => {
-    const w = window.open('', '', 'height=600,width=800');
-    const html = `<!DOCTYPE html><html><head><title>Job Applications</title>
-      <style>body{font-family:Arial;margin:20px}h1{text-align:center}
-      table{width:100%;border-collapse:collapse;font-size:12px}
-      th{background:#222;color:#fff;border:1px solid #000;padding:8px;text-align:left}
-      td{border:1px solid #444;padding:8px}
-      tr:nth-child(even){background:#f4f4f4}</style></head><body>
-      <h1>Job Application Tracker</h1>
-      <p style="text-align:center;color:#444">Generated ${new Date().toLocaleDateString()}</p>
-      <table><thead><tr><th>Company</th><th>Position</th><th>Applied</th><th>Interview</th>
-      <th>Contact</th><th>Status</th><th>Link</th><th>Notes</th></tr></thead><tbody>
-      ${applications.map(a => `<tr>
-        <td>${esc(a.company)}</td><td>${esc(a.position)}</td>
-        <td>${a.date_applied ? new Date(a.date_applied).toLocaleDateString() : '—'}</td>
-        <td>${a.interview_date ? new Date(a.interview_date).toLocaleDateString() : '—'}</td>
-        <td>${esc(a.contact_person) || '—'}</td><td>${esc(a.status)}</td>
-        <td>${a.job_posting_url ? `<a href="${esc(a.job_posting_url)}">link</a>` : '—'}</td>
-        <td>${esc(a.notes)}</td></tr>`).join('')}
-      </tbody></table></body></html>`;
-    w.document.write(html); w.document.close(); w.print();
+    const printWindow = window.open('', '', 'height=600,width=800');
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Job Applications</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; padding: 0; }
+            h1 { text-align: center; margin-bottom: 10px; }
+            .date { text-align: center; color: #666; margin-bottom: 20px; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+            th { background-color: #f0f0f0; border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: bold; }
+            td { border: 1px solid #ddd; padding: 8px; word-break: break-word; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .footer { text-align: right; font-size: 11px; color: #666; margin-top: 20px; }
+            @media print { body { margin: 0; padding: 10px; } }
+          </style>
+        </head>
+        <body>
+          <h1>Job Application Tracker</h1>
+          <div class="date">Generated on ${new Date().toLocaleDateString('de-DE')}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Position</th>
+                <th>Date Applied</th>
+                <th>Interview Date</th>
+                <th>Contact Person</th>
+                <th>Status</th>
+                <th>Job Link</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${applications.map(app => `
+                <tr>
+                  <td>${app.company || ''}</td>
+                  <td>${app.position || ''}</td>
+                  <td>${app.date_applied ? new Date(app.date_applied).toLocaleDateString('de-DE') : '—'}</td>
+                  <td>${app.interview_date ? new Date(app.interview_date).toLocaleDateString('de-DE') : '—'}</td>
+                  <td>${app.contact_person || '—'}</td>
+                  <td>${app.status || ''}</td>
+                  <td>${app.job_posting_url ? `<a href="${app.job_posting_url}">${app.job_posting_url}</a>` : '—'}</td>
+                  <td>${app.notes || ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="footer">Total Applications: ${applications.length}</div>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const parseCSV = (text) => {
-    const lines = text.split('\n').filter(l => l.trim());
+    const lines = text.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
-    const out = [];
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const rows = [];
+
     for (let i = 1; i < lines.length; i++) {
-      const values = []; let cur = ''; let q = false;
-      for (const ch of lines[i]) {
-        if (ch === '"') q = !q;
-        else if (ch === ',' && !q) { values.push(cur.trim().replace(/^"|"$/g,'')); cur = ''; }
-        else cur += ch;
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let char of lines[i]) {
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          values.push(current.trim().replace(/^"|"$/g, ''));
+          current = '';
+        } else {
+          current += char;
+        }
       }
-      values.push(cur.trim().replace(/^"|"$/g,''));
+      values.push(current.trim().replace(/^"|"$/g, ''));
+
       if (values.length === headers.length) {
         const row = {};
-        headers.forEach((h, idx) => { row[h.toLowerCase().replace(/ /g,'_')] = values[idx]; });
-        out.push(row);
+        headers.forEach((header, index) => {
+          row[header.toLowerCase().replace(/ /g, '_')] = values[index];
+        });
+        rows.push(row);
       }
     }
-    return out;
+
+    return rows;
   };
 
-  const validateAndFormatCSV = (rows) => rows
-    .filter(r => r.company && r.position)
-    .map(r => ({
-      company: r.company,
-      position: r.position,
-      date_applied: r.date_applied || new Date().toISOString().split('T')[0],
-      contact_person: r.contact_person || '',
-      status: STATUS_OPTIONS.includes((r.status || '').toLowerCase()) ? r.status.toLowerCase() : 'applied',
-      notes: r.notes || '',
-      interview_date: r.interview_date || null,
-      job_posting_url: r.job_posting_url || null,
-    }));
+  const validateAndFormatCSVData = (rows) => {
+    const validStatuses = ['applied', 'interview', 'offered', 'rejected', 'accepted'];
+    const formatted = [];
+
+    for (const row of rows) {
+      if (!row.company || !row.position) {
+        continue;
+      }
+
+      const status = row.status?.toLowerCase();
+      const formattedRow = {
+        company: row.company,
+        position: row.position,
+        date_applied: row.date_applied || new Date().toISOString().split('T')[0],
+        contact_person: row.contact_person || '',
+        status: validStatuses.includes(status) ? status : 'applied',
+        notes: row.notes || '',
+        interview_date: row.interview_date || null,
+        job_posting_url: row.job_posting_url || null
+      };
+
+      formatted.push(formattedRow);
+    }
+
+    return formatted;
+  };
+
+  const findDuplicates = (newData) => {
+    const duplicates = [];
+
+    for (const newApp of newData) {
+      const isDuplicate = applications.some(existingApp =>
+        existingApp.company.toLowerCase() === newApp.company.toLowerCase() &&
+        existingApp.position.toLowerCase() === newApp.position.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        duplicates.push(newApp);
+      }
+    }
+
+    return duplicates;
+  };
 
   const handleCSVUpload = async (event) => {
-    const file = event.target.files[0]; if (!file) return;
+    const file = event.target.files[0];
+    if (!file) return;
+
     event.target.value = '';
+
     setIsSyncing(true);
     try {
       const text = await file.text();
-      const data = validateAndFormatCSV(parseCSV(text));
-      if (data.length === 0) { alert('No valid rows found'); return; }
-      const dupes = data.filter(d => applications.some(a =>
-        a.company.toLowerCase() === d.company.toLowerCase() &&
-        a.position.toLowerCase() === d.position.toLowerCase()
-      ));
-      if (dupes.length > 0) {
-        const list = dupes.map(d => `${d.company} - ${d.position}`).join('\n');
-        if (!confirm(`Found ${dupes.length} duplicates:\n${list}\n\nImport anyway?`)) return;
+      const parsedData = parseCSV(text);
+
+      if (parsedData.length === 0) {
+        alert('No valid data found in CSV file. Please check the format.');
+        return;
       }
+
+      const validatedData = validateAndFormatCSVData(parsedData);
+
+      if (validatedData.length === 0) {
+        alert('No valid applications found. Make sure each row has Company and Position.');
+        return;
+      }
+
+      const duplicates = findDuplicates(validatedData);
+
+      if (duplicates.length > 0) {
+        const duplicateList = duplicates
+          .map(d => `${d.company} - ${d.position}`)
+          .join('\n');
+
+        const confirmed = confirm(
+          `Found ${duplicates.length} potential duplicate(s):\n\n${duplicateList}\n\nDo you want to import them anyway?`
+        );
+
+        if (!confirmed) {
+          return;
+        }
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from('applications')
-        .insert(data.map(a => ({ ...a, user_id: user.id })));
-      if (error) { alert('Import failed'); return; }
-      announce(`Imported ${data.length} applications`);
+
+      const dataToInsert = validatedData.map(app => ({
+        ...app,
+        user_id: user.id
+      }));
+
+      const { error } = await supabase
+        .from('applications')
+        .insert(dataToInsert);
+
+      if (error) {
+        console.error('CSV upload error:', error);
+        alert('Failed to upload applications. Please try again.');
+        return;
+      }
+
+      alert(`Successfully imported ${validatedData.length} application(s)!`);
       await loadApplications();
-    } catch (e) {
-      console.error(e); alert('CSV processing failed');
-    } finally { setIsSyncing(false); }
+
+      // Award gamification points for each CSV-imported application
+      if (gamificationState) {
+        for (let i = 0; i < validatedData.length; i++) {
+          await applyGamification('create_application', {});
+        }
+      } else {
+        // User may not have a gamification_state row yet — create it now
+        await loadGamificationState();
+      }
+    } catch (error) {
+      console.error('CSV processing error:', error);
+      alert('Failed to process CSV file. Please check the format.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  // --------------------------------------------------------------------------
-  // Smart search (kept + augmented)
-  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // SMART SEARCH
+  // ==========================================================================
+  // Parses a query string into tokens. Supports:
+  //   status:<value>             -> filters by status
+  //   today | yesterday          -> date_applied date filter
+  //   "this week" | "last week"  -> date_applied range filter
+  //   "this month" | "last month"
+  //   "last 7 days" | "last 30 days"
+  //   any remaining words        -> free-text AND search across
+  //                                 company, position, notes, contact_person
+  // ==========================================================================
   const parseSearchQuery = (raw) => {
     const q = (raw || '').toLowerCase().trim();
     const tokens = { status: null, dateRange: null, text: [] };
     if (!q) return tokens;
+
     let remaining = q;
+
+    // status:<value>
     const statusRe = /status:(\w+)/g;
     let m;
-    while ((m = statusRe.exec(q)) !== null) tokens.status = m[1];
-    remaining = remaining.replace(statusRe, ' ');
-    const phrases = ['last 30 days','last 7 days','this week','last week','this month','last month','yesterday','today'];
-    for (const p of phrases) {
-      if (remaining.includes(p)) { tokens.dateRange = p; remaining = remaining.replace(p,' '); break; }
+    while ((m = statusRe.exec(q)) !== null) {
+      tokens.status = m[1];
     }
+    remaining = remaining.replace(statusRe, ' ');
+
+    // Date phrases (longest first to avoid sub-match issues)
+    const datePhrases = [
+      'last 30 days', 'last 7 days',
+      'this week', 'last week',
+      'this month', 'last month',
+      'yesterday', 'today'
+    ];
+    for (const phrase of datePhrases) {
+      if (remaining.includes(phrase)) {
+        tokens.dateRange = phrase;
+        remaining = remaining.replace(phrase, ' ');
+        break; // only one date filter
+      }
+    }
+
     tokens.text = remaining.split(/\s+/).map(s => s.trim()).filter(Boolean);
     return tokens;
   };
@@ -657,116 +850,158 @@ export default function App() {
   const getDateRangeBounds = (phrase) => {
     if (!phrase) return null;
     const now = new Date();
-    const sod = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
-    const eod = (d) => { const x = new Date(d); x.setHours(23,59,59,999); return x; };
-    const map = {
-      'today': () => ({ from: sod(now), to: eod(now) }),
-      'yesterday': () => { const y = new Date(now); y.setDate(y.getDate()-1); return { from: sod(y), to: eod(y) }; },
-      'this week': () => { const d = (now.getDay()+6)%7; const f = new Date(now); f.setDate(now.getDate()-d); return { from: sod(f), to: eod(now) }; },
-      'last week': () => {
-        const d = (now.getDay()+6)%7;
-        const tm = new Date(now); tm.setDate(now.getDate()-d);
-        const lm = new Date(tm); lm.setDate(tm.getDate()-7);
-        const ls = new Date(tm); ls.setDate(tm.getDate()-1);
-        return { from: sod(lm), to: eod(ls) };
-      },
-      'this month': () => ({ from: sod(new Date(now.getFullYear(), now.getMonth(), 1)), to: eod(now) }),
-      'last month': () => ({
-        from: sod(new Date(now.getFullYear(), now.getMonth()-1, 1)),
-        to: eod(new Date(now.getFullYear(), now.getMonth(), 0)),
-      }),
-      'last 7 days': () => { const f = new Date(now); f.setDate(now.getDate()-7); return { from: sod(f), to: eod(now) }; },
-      'last 30 days': () => { const f = new Date(now); f.setDate(now.getDate()-30); return { from: sod(f), to: eod(now) }; },
-    };
-    return map[phrase]?.() ?? null;
+    const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+    const endOfDay = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+
+    if (phrase === 'today') {
+      return { from: startOfDay(now), to: endOfDay(now) };
+    }
+    if (phrase === 'yesterday') {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      return { from: startOfDay(y), to: endOfDay(y) };
+    }
+    if (phrase === 'this week') {
+      // Monday as start of week
+      const day = (now.getDay() + 6) % 7; // 0=Mon ... 6=Sun
+      const from = new Date(now); from.setDate(now.getDate() - day);
+      return { from: startOfDay(from), to: endOfDay(now) };
+    }
+    if (phrase === 'last week') {
+      const day = (now.getDay() + 6) % 7;
+      const thisMonday = new Date(now); thisMonday.setDate(now.getDate() - day);
+      const lastMonday = new Date(thisMonday); lastMonday.setDate(thisMonday.getDate() - 7);
+      const lastSunday = new Date(thisMonday); lastSunday.setDate(thisMonday.getDate() - 1);
+      return { from: startOfDay(lastMonday), to: endOfDay(lastSunday) };
+    }
+    if (phrase === 'this month') {
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: startOfDay(from), to: endOfDay(now) };
+    }
+    if (phrase === 'last month') {
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: startOfDay(from), to: endOfDay(to) };
+    }
+    if (phrase === 'last 7 days') {
+      const from = new Date(now); from.setDate(now.getDate() - 7);
+      return { from: startOfDay(from), to: endOfDay(now) };
+    }
+    if (phrase === 'last 30 days') {
+      const from = new Date(now); from.setDate(now.getDate() - 30);
+      return { from: startOfDay(from), to: endOfDay(now) };
+    }
+    return null;
   };
 
   const matchesSearch = (app, parsed) => {
     if (parsed.status && app.status !== parsed.status) return false;
+
     if (parsed.dateRange) {
-      const b = getDateRangeBounds(parsed.dateRange);
-      if (!b || !app.date_applied) return false;
-      const d = new Date(app.date_applied);
-      if (d < b.from || d > b.to) return false;
+      const bounds = getDateRangeBounds(parsed.dateRange);
+      if (bounds && app.date_applied) {
+        const d = new Date(app.date_applied);
+        if (d < bounds.from || d > bounds.to) return false;
+      } else if (bounds) {
+        return false;
+      }
     }
+
     if (parsed.text.length > 0) {
-      const hay = [app.company, app.position, app.notes, app.contact_person, app.job_posting_url]
-        .filter(Boolean).join(' ').toLowerCase();
-      for (const w of parsed.text) if (!hay.includes(w)) return false;
+      const haystack = [
+        app.company, app.position, app.notes, app.contact_person, app.job_posting_url
+      ].filter(Boolean).join(' ').toLowerCase();
+      // AND match: every word must appear
+      for (const word of parsed.text) {
+        if (!haystack.includes(word)) return false;
+      }
     }
+
     return true;
   };
 
-  // --------------------------------------------------------------------------
-  // Activity timeline
-  // --------------------------------------------------------------------------
-  const openTimeline = async (app) => {
-    setTimelineFor(app);
-    const { data, error } = await supabase
-      .from('application_events').select('*')
-      .eq('application_id', app.id).order('created_at', { ascending: false });
-    if (error) { console.error(error); setTimelineEvents([]); return; }
-    setTimelineEvents(data || []);
-  };
-
-  // --------------------------------------------------------------------------
-  // Loading / login screens
-  // --------------------------------------------------------------------------
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient flex items-center justify-center">
-        <p className="text-slate-400" role="status" aria-live="polite">Loading…</p>
+        <div className="text-center">
+          <p className="text-slate-400">Loading...</p>
+        </div>
       </div>
     );
   }
 
+  // Login/Signup screen
   if (!user) {
     return (
       <div className="auth-container bg-gradient" data-theme={theme}>
-        <SkipLink />
-        <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg" aria-hidden="true"></div>
-        <main id="main-content" className="auth-card">
-          <header className="auth-header">
+        <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
+
+        <div className="auth-card">
+          <div className="auth-header">
             <h1 className="auth-title" style={{ fontSize: '1.2rem' }}>Forge</h1>
             <p className="auth-subtitle">Track your job applications with style</p>
-          </header>
+          </div>
+
           {!resetMode ? (
             <>
-              <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
+              <div className="auth-tabs">
                 <button
-                  role="tab" aria-selected={authMode === 'login'}
                   onClick={() => { setAuthMode('login'); setAuthError(''); }}
-                  className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}>Login</button>
+                  className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
+                >
+                  Login
+                </button>
                 <button
-                  role="tab" aria-selected={authMode === 'signup'}
                   onClick={() => { setAuthMode('signup'); setAuthError(''); }}
-                  className={`auth-tab ${authMode === 'signup' ? 'active' : ''}`}>Sign Up</button>
+                  className={`auth-tab ${authMode === 'signup' ? 'active' : ''}`}
+                >
+                  Sign Up
+                </button>
               </div>
-              <form onSubmit={authMode === 'login' ? handleLogin : handleSignup} className="auth-form" noValidate>
+
+              <form onSubmit={authMode === 'login' ? handleLogin : handleSignup} className="auth-form">
                 <div className="auth-form-group">
-                  <label className="auth-label" htmlFor="auth-email">Email</label>
-                  <input id="auth-email" type="email" autoComplete="email" required
-                    value={email} onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com" className="auth-input" />
+                  <label className="auth-label">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    required
+                    className="auth-input"
+                  />
                 </div>
+
                 <div className="auth-form-group">
-                  <label className="auth-label" htmlFor="auth-password">Password</label>
-                  <input id="auth-password" type="password" required
-                    autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-                    value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••" className="auth-input" />
+                  <label className="auth-label">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="auth-input"
+                  />
                 </div>
+
                 {authError && (
-                  <div className="auth-error" role="alert">
-                    <span aria-hidden="true">⚠️</span><p>{authError}</p>
+                  <div className="auth-error">
+                    <span>⚠️</span>
+                    <p>{authError}</p>
                   </div>
                 )}
+
                 <button type="submit" className="auth-submit">
                   {authMode === 'login' ? 'Login' : 'Sign Up'}
                 </button>
+
                 {authMode === 'login' && (
                   <div className="auth-forgot">
-                    <button type="button" onClick={() => { setResetMode(true); setAuthError(''); }} className="auth-forgot-link">
+                    <button
+                      type="button"
+                      onClick={() => { setResetMode(true); setAuthError(''); }}
+                      className="auth-forgot-link"
+                    >
                       Forgot Password?
                     </button>
                   </div>
@@ -774,435 +1009,597 @@ export default function App() {
               </form>
             </>
           ) : (
-            <form onSubmit={handlePasswordReset} className="auth-form">
-              <div className="auth-form-group">
-                <label className="auth-label" htmlFor="reset-email">Email</label>
-                <input id="reset-email" type="email" required value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  placeholder="your@email.com" className="auth-input" />
-              </div>
-              {authError && <div className="auth-error" role="alert"><span aria-hidden="true">⚠️</span><p>{authError}</p></div>}
-              {resetSuccess && <div className="auth-success" role="status"><span aria-hidden="true">✓</span><p>Password reset email sent!</p></div>}
-              <button type="submit" className="auth-submit">Send Reset Link</button>
-              <div className="auth-back">
-                <button type="button" onClick={() => { setResetMode(false); setResetEmail(''); setAuthError(''); }} className="auth-back-link">
-                  ← Back to Login
+            <>
+              <form onSubmit={handlePasswordReset} className="auth-form">
+                <div className="auth-form-group">
+                  <label className="auth-label">Email</label>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    required
+                    className="auth-input"
+                  />
+                </div>
+
+                {authError && (
+                  <div className="auth-error">
+                    <span>⚠️</span>
+                    <p>{authError}</p>
+                  </div>
+                )}
+
+                {resetSuccess && (
+                  <div className="auth-success">
+                    <span>✓</span>
+                    <p>Password reset email sent! Check your inbox.</p>
+                  </div>
+                )}
+
+                <button type="submit" className="auth-submit">
+                  Send Reset Link
                 </button>
-              </div>
-            </form>
+
+                <div className="auth-back">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetMode(false);
+                      setResetEmail('');
+                      setAuthError('');
+                    }}
+                    className="auth-back-link"
+                  >
+                    ← Back to Login
+                  </button>
+                </div>
+              </form>
+            </>
           )}
-        </main>
+        </div>
       </div>
     );
   }
 
+  // Main app (when logged in)
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient flex items-center justify-center">
-        <p className="text-slate-400" role="status" aria-live="polite">Loading your applications…</p>
+        <div className="text-center">
+          <p className="text-slate-400">Loading your applications...</p>
+        </div>
       </div>
     );
   }
 
-  // --------------------------------------------------------------------------
-  // Derived data
-  // --------------------------------------------------------------------------
   const parsedSearch = parseSearchQuery(searchQuery);
-  const filteredApplications = applications
-    .filter(a => filterStatus === 'all' ? true : a.status === filterStatus)
-    .filter(a => matchesSearch(a, parsedSearch));
 
+  // Apply status filter dropdown first, then search
+  const filteredApplications = applications
+    .filter(app => filterStatus === 'all' ? true : app.status === filterStatus)
+    .filter(app => matchesSearch(app, parsedSearch));
+
+  // Sort applications
   const sortedApplications = [...filteredApplications].sort((a, b) => {
-    let cmp = 0;
-    if (sortColumn === 'company') cmp = a.company.localeCompare(b.company);
-    else if (sortColumn === 'position') cmp = a.position.localeCompare(b.position);
-    else if (sortColumn === 'date_applied') cmp = new Date(a.date_applied) - new Date(b.date_applied);
-    else if (sortColumn === 'interview_date') {
-      cmp = (a.interview_date ? new Date(a.interview_date).getTime() : 0) -
-            (b.interview_date ? new Date(b.interview_date).getTime() : 0);
+    let comparison = 0;
+
+    if (sortColumn === 'company') {
+      comparison = a.company.localeCompare(b.company);
+    } else if (sortColumn === 'position') {
+      comparison = a.position.localeCompare(b.position);
+    } else if (sortColumn === 'date_applied') {
+      comparison = new Date(a.date_applied) - new Date(b.date_applied);
+    } else if (sortColumn === 'interview_date') {
+      const av = a.interview_date ? new Date(a.interview_date).getTime() : 0;
+      const bv = b.interview_date ? new Date(b.interview_date).getTime() : 0;
+      comparison = av - bv;
     }
-    return sortDirection === 'asc' ? cmp : -cmp;
+
+    return sortDirection === 'asc' ? comparison : -comparison;
   });
 
   const handleSort = (column) => {
-    if (sortColumn === column) setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    else { setSortColumn(column); setSortDirection('asc'); }
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
   };
 
-  // Upcoming interviews in next 7 days (incl. today)
-  const upcomingInterviews = applications
-    .filter(a => a.interview_date)
-    .map(a => ({ ...a, _d: new Date(a.interview_date) }))
-    .filter(a => {
-      const now = new Date(); now.setHours(0,0,0,0);
-      const max = new Date(now); max.setDate(now.getDate() + 7);
-      return a._d >= now && a._d <= max;
-    })
-    .sort((a, b) => a._d - b._d);
+  const statusConfig = {
+    applied: { bg: 'bg-blue-500/10', text: 'text-blue-600', label: 'Applied' },
+    interview: { bg: 'bg-green-500/10', text: 'text-green-600', label: 'Interview' },
+    offered: { bg: 'status-gold', text: 'text-yellow-600', label: 'Offered' },
+    rejected: { bg: 'bg-red-500/10', text: 'text-red-600', label: 'Rejected' },
+    accepted: { bg: 'bg-emerald-500/10', text: 'text-emerald-600', label: 'Accepted' }
+  };
 
   const stats = {
     total: applications.length,
     applied: applications.filter(a => a.status === 'applied').length,
     interview: applications.filter(a => a.status === 'interview').length,
-    offered: applications.filter(a => a.status === 'offered').length,
+    offered: applications.filter(a => a.status === 'offered').length
   };
 
-  // --------------------------------------------------------------------------
-  // Render
-  // --------------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gradient" data-theme={theme}>
-      <SkipLink />
-      <LiveRegion message={liveMessage || (isSyncing ? 'Syncing…' : '')} />
-      <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg" aria-hidden="true"></div>
+      <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <header className="mb-8">
+        <div className="mb-8">
           <div className="header-row mb-4">
             <div className="header-title-group">
-              <div className="header-accent" aria-hidden="true"></div>
+              <div className="header-accent"></div>
               <h1 className="text-3xl font-bold text-slate-50" style={{ fontSize: '1.2rem' }}>Forge</h1>
             </div>
-            <nav className="header-actions" aria-label="Primary">
-              <span className="text-slate-400 text-sm" aria-label={`Signed in as ${user.email}`}>{user.email}</span>
-              {[
-                { id: 'applications', label: 'Applications' },
-                { id: 'analytics',    label: 'Analytics' },
-                { id: 'resumes',      label: 'Resumes' },
-                { id: 'assembly',     label: 'Assembly' },
-                { id: 'leaderboard',  label: 'Leaderboard' },
-              ].map(t => (
-                <button key={t.id}
-                  onClick={() => setCurrentView(t.id)}
-                  className={`btn-header-action ${currentView === t.id ? 'active' : ''}`}
-                  aria-current={currentView === t.id ? 'page' : undefined}>
-                  {t.label}
-                </button>
-              ))}
-              <button onClick={() => setShowOnboarding(true)} className="btn-header-action" aria-label="Show tutorial">
-                <HelpCircle size={16} aria-hidden="true" />
+            <div className="header-actions">
+              <span className="text-slate-400 text-sm">{user.email}</span>
+              <button
+                onClick={() => setCurrentView('applications')}
+                className={`btn-header-action ${currentView === 'applications' ? 'active' : ''}`}
+                title="Track your job applications"
+              >
+                Applications
               </button>
-              <button onClick={() => setShowApiSettings(true)} className="btn-header-action" aria-label="Configure API keys">
-                <Settings size={16} aria-hidden="true" />
+              <button
+                onClick={() => setCurrentView('resumes')}
+                className={`btn-header-action ${currentView === 'resumes' ? 'active' : ''}`}
+                title="Manage your resume versions"
+              >
+                Resumes
               </button>
-              <button onClick={() => setHighContrast(v => !v)}
+              <button
+                onClick={() => setCurrentView('assembly')}
+                className={`btn-header-action ${currentView === 'assembly' ? 'active' : ''}`}
+                title="AI-powered resume customization"
+              >
+                Assembly
+              </button>
+              <button
+                onClick={() => setCurrentView('leaderboard')}
+                className={`btn-header-action ${currentView === 'leaderboard' ? 'active' : ''}`}
+                title="View leaderboard and achievements"
+              >
+                Leaderboard
+              </button>
+              <button
+                onClick={() => setShowOnboarding(true)}
                 className="btn-header-action"
-                aria-pressed={highContrast}
-                aria-label={`High contrast mode ${highContrast ? 'on' : 'off'}`}
-                title="Toggle high-contrast mode">
-                <Contrast size={16} aria-hidden="true" />
+                title="Show tutorial"
+              >
+                <HelpCircle size={16} />
               </button>
-              <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-                className="theme-toggle px-3 py-2 rounded-lg"
-                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}>
-                {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+              <button
+                onClick={() => setShowApiSettings(true)}
+                className="btn-header-action"
+                title="Configure API keys (optional)"
+              >
+                <Settings size={16} />
               </button>
-              <button onClick={handleLogout} className="btn-header-action" aria-label="Logout">
-                <LogOut size={16} aria-hidden="true" />
+              <button
+                onClick={toggleTheme}
+                className="theme-toggle px-3 py-2 rounded-lg transition-colors"
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+              >
+                {theme === 'dark' ? '☀️' : '🌙'}
               </button>
-            </nav>
+              <button
+                onClick={handleLogout}
+                className="btn-header-action"
+                title="Logout"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
-            <p className="text-slate-400 text-xs" aria-live="polite">
-              {isSyncing ? '● Syncing…' : '● Synced to cloud'}
-            </p>
+            <p className="text-slate-400 text-xs">{isSyncing ? '● Syncing...' : '● Synced to cloud'}</p>
           </div>
-        </header>
+        </div>
 
-        <main id="main-content" tabIndex={-1}>
-          {/* Conditional Views */}
-          {currentView === 'leaderboard' ? (
-            <Leaderboard currentUserId={user.id} />
-          ) : currentView === 'assembly' ? (
-            <ResumeAssembly user={user} />
-          ) : currentView === 'resumes' ? (
-            <ResumeManager user={user} />
-          ) : currentView === 'analytics' ? (
-            <AnalyticsView applications={applications} />
-          ) : (
-            <>
-              {/* Stats */}
-              <section aria-label="Summary statistics" className="stats-grid">
-                <StatCard label="Total" value={stats.total} className="stat-card-total" />
-                <StatCard label="Applied" value={stats.applied} className="stat-card-applied" />
-                <StatCard label="Interviews" value={stats.interview} className="stat-card-interview" />
-                <StatCard label="Offers" value={stats.offered} className="stat-card-offered" />
-                {gamificationState && (
-                  <div className="stat-card stat-card-total">
-                    <p className="stat-label">Rank</p>
-                    <p className="stat-value" style={{ fontSize: '1.25rem' }}>{gamificationState.rank}</p>
-                    <div className="rank-progress-bar"
-                      role="progressbar"
-                      aria-valuenow={gamification.getRankProgress(gamificationState.points)}
-                      aria-valuemin={0} aria-valuemax={100}
-                      aria-label="Rank progress">
-                      <div className="rank-progress-fill"
-                        style={{ '--progress-width': `${gamification.getRankProgress(gamificationState.points)}%` }} />
-                    </div>
-                    <p className="text-xs text-slate-400" style={{ marginTop: '0.5rem' }}>
-                      {gamificationState.points} pts
-                      {gamificationState.streak_days > 0 && (
-                        <span className="streak-badge" style={{ marginLeft: '0.5rem' }}>
-                          <span aria-hidden="true">🔥</span> {gamificationState.streak_days} day{gamificationState.streak_days !== 1 ? 's' : ''}
-                          <VisuallyHidden> daily login streak</VisuallyHidden>
-                        </span>
-                      )}
-                    </p>
+        {/* Conditional View Rendering */}
+        {currentView === 'leaderboard' ? (
+          <Leaderboard currentUserId={user.id} />
+        ) : currentView === 'assembly' ? (
+          <ResumeAssembly user={user} />
+        ) : currentView === 'resumes' ? (
+          <ResumeManager user={user} />
+        ) : (
+          <>
+            {/* Stats Grid */}
+            <div className="stats-grid">
+              <div className="stat-card stat-card-total" title="Total number of job applications tracked">
+                <p className="stat-label">Total</p>
+                <p className="stat-value">{stats.total}</p>
+              </div>
+              <div className="stat-card stat-card-applied" title="Applications with 'Applied' status">
+                <p className="stat-label">Applied</p>
+                <p className="stat-value">{stats.applied}</p>
+              </div>
+              <div className="stat-card stat-card-interview" title="Applications that reached interview stage">
+                <p className="stat-label">Interviews</p>
+                <p className="stat-value">{stats.interview}</p>
+              </div>
+              <div className="stat-card stat-card-offered" title="Applications with job offers">
+                <p className="stat-label">Offers</p>
+                <p className="stat-value">{stats.offered}</p>
+              </div>
+              {gamificationState !== null && (
+                <div className="stat-card stat-card-total" title="Your current rank based on activity points. Earn points by adding applications, getting interviews, and receiving offers!">
+                  <p className="stat-label">Rank</p>
+                  <p className="stat-value" style={{ fontSize: '1.25rem' }}>{gamificationState.rank}</p>
+                  <div className="rank-progress-bar">
+                    <div
+                      className="rank-progress-fill"
+                      style={{ '--progress-width': `${gamification.getRankProgress(gamificationState.points)}%` }}
+                    />
                   </div>
-                )}
-              </section>
-
-              {/* Upcoming interviews */}
-              {upcomingInterviews.length > 0 && (
-                <aside className="upcoming-banner" role="region" aria-label="Upcoming interviews">
-                  <div className="upcoming-banner-icon" aria-hidden="true"><Bell size={18} /></div>
-                  <div className="upcoming-banner-body">
-                    <strong>{upcomingInterviews.length}</strong> interview{upcomingInterviews.length !== 1 ? 's' : ''} in the next 7 days:
-                    <ul className="upcoming-list">
-                      {upcomingInterviews.slice(0, 3).map(a => (
-                        <li key={a.id}>
-                          <button className="link-button" onClick={() => handleEdit(a)}>
-                            {a.company} — {a.position}
-                          </button>
-                          {' '}on <time dateTime={a.interview_date}>{new Date(a.interview_date).toLocaleDateString()}</time>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </aside>
+                  <p className="text-xs text-slate-400" style={{ marginTop: '0.5rem' }}>
+                    {gamificationState.points} pts
+                    {gamificationState.streak_days > 0 && (
+                      <span className="streak-badge" style={{ marginLeft: '0.5rem' }} title="Daily login streak">
+                        🔥 {gamificationState.streak_days} day{gamificationState.streak_days !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </p>
+                </div>
               )}
+            </div>
 
-              {/* Smart Search */}
-              <div className="smart-search" role="search">
-                <Search size={16} aria-hidden="true" style={{ opacity: 0.6, flexShrink: 0 }} />
-                <label htmlFor="smart-search-input" className="sr-only">Search applications</label>
-                <input id="smart-search-input" type="search"
-                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder='Search… try "google", "status:interview", "last week"'
-                  aria-describedby="search-help" />
-                <span id="search-help" className="sr-only">
-                  Supports free text, status:value filters, and date phrases like "today" or "last week".
-                </span>
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="btn-icon" aria-label="Clear search">
-                    <X size={14} aria-hidden="true" />
-                  </button>
-                )}
+            {/* Smart Search */}
+            <div
+              className="smart-search"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                margin: '1rem 0',
+                padding: '0.5rem 0.75rem',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px'
+              }}
+            >
+              <Search size={16} style={{ opacity: 0.6, flexShrink: 0 }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder='Search… try "google", "status:interview", "last week", "remote status:applied"'
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'inherit',
+                  fontSize: '0.9rem'
+                }}
+                title={
+                  'Smart search supports:\n' +
+                  '  • free text (matches company, position, notes, contact, URL)\n' +
+                  '  • status:applied | status:interview | status:offered | status:rejected | status:accepted\n' +
+                  '  • today, yesterday, this week, last week, this month, last month, last 7 days, last 30 days\n' +
+                  '  • combine tokens (all must match)'
+                }
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="btn-icon"
+                  title="Clear search"
+                  style={{ padding: '4px' }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Controls */}
+            <div className="controls">
+              <button
+                onClick={handleAddNew}
+                className="btn-primary"
+                disabled={isSyncing}
+                title="Add a new job application to track"
+              >
+                <Plus size={18} /> New Application
+              </button>
+              <div className="export-buttons">
+                <label
+                  className="btn-upload"
+                  title="Import multiple applications from a CSV file&#10;&#10;Format: Company, Position, Date Applied, Contact Person, Status, Interview Date, Job Posting URL, Notes&#10;Required: Company and Position&#10;Status: applied, interview, offered, rejected, or accepted"
+                >
+                  <Upload size={16} /> Import CSV
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCSVUpload}
+                    style={{ display: 'none' }}
+                    disabled={isSyncing}
+                  />
+                </label>
+                <button
+                  onClick={exportToCSV}
+                  className="btn-export"
+                  disabled={applications.length === 0}
+                  title="Export all applications to CSV file"
+                >
+                  <Download size={16} /> CSV
+                </button>
+                <button
+                  onClick={exportToPDF}
+                  className="btn-export"
+                  disabled={applications.length === 0}
+                  title="Export all applications to PDF (opens print dialog)"
+                >
+                  <Download size={16} /> PDF
+                </button>
               </div>
 
-              {/* Saved searches */}
-              <div className="saved-searches" role="group" aria-label="Saved searches">
-                {SAVED_SEARCHES.map(p => (
-                  <button key={p.label}
-                    className={`chip ${searchQuery === p.query ? 'chip-active' : ''}`}
-                    onClick={() => setSearchQuery(p.query)}
-                    aria-pressed={searchQuery === p.query}>
-                    {p.label}
+              <div className="filter-buttons">
+                {['all', 'applied', 'interview', 'offered', 'rejected', 'accepted'].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
+                  >
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* Controls */}
-              <div className="controls">
-                <button onClick={handleAddNew} className="btn-primary" disabled={isSyncing}>
-                  <Plus size={18} aria-hidden="true" /> New Application
-                </button>
-                <div className="export-buttons">
-                  <label className="btn-upload">
-                    <Upload size={16} aria-hidden="true" /> Import CSV
-                    <VisuallyHidden>(opens file picker)</VisuallyHidden>
-                    <input type="file" accept=".csv" onChange={handleCSVUpload} style={{ display: 'none' }} disabled={isSyncing} />
-                  </label>
-                  <button onClick={exportToCSV} className="btn-export" disabled={applications.length === 0}>
-                    <Download size={16} aria-hidden="true" /> CSV
-                  </button>
-                  <button onClick={exportToPDF} className="btn-export" disabled={applications.length === 0}>
-                    <Download size={16} aria-hidden="true" /> PDF
-                  </button>
-                </div>
+            {/* Applications Table */}
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th
+                      onClick={() => handleSort('company')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      title="Click to sort by company"
+                    >
+                      Company {sortColumn === 'company' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th
+                      onClick={() => handleSort('position')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      title="Click to sort by position"
+                    >
+                      Position {sortColumn === 'position' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th
+                      onClick={() => handleSort('date_applied')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      title="Click to sort by date"
+                    >
+                      Applied {sortColumn === 'date_applied' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th
+                      onClick={() => handleSort('interview_date')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      title="Click to sort by interview date"
+                    >
+                      Interview {sortColumn === 'interview_date' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th>Contact</th>
+                    <th>Status</th>
+                    <th title="Job posting link">Link</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedApplications.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="empty-state">
+                        {searchQuery ? (
+                          <>No applications match your search. Try different keywords or clear the search.</>
+                        ) : filterStatus !== 'all' ? (
+                          <>No {filterStatus} applications found. Try changing the filter or add a new application.</>
+                        ) : (
+                          <>No applications yet. Click "New Application" above to start tracking your job search!</>
+                        )}
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedApplications.map(app => (
+                      <tr key={app.id}>
+                        <td className="company-name">{app.company}</td>
+                        <td className="position-name">{app.position}</td>
+                        <td className="date">
+                          {app.date_applied ? new Date(app.date_applied).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="date">
+                          {app.interview_date ? new Date(app.interview_date).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="contact">{app.contact_person || '—'}</td>
+                        <td>
+                          <span className={`status-badge ${statusConfig[app.status].bg} ${statusConfig[app.status].text}`}>
+                            {statusConfig[app.status].label}
+                          </span>
+                        </td>
+                        <td>
+                          {app.job_posting_url ? (
+                            <a
+                              href={app.job_posting_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-icon"
+                              title={app.job_posting_url}
+                              style={{ display: 'inline-flex', alignItems: 'center' }}
+                            >
+                              <ExternalLink size={16} />
+                            </a>
+                          ) : (
+                            <span style={{ opacity: 0.4 }}>—</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="action-buttons">
+                            <button onClick={() => handleEdit(app)} className="btn-icon" title="Edit" disabled={isSyncing}>
+                              <Edit2 size={16} />
+                            </button>
+                            <button onClick={() => handleDelete(app.id)} className="btn-icon delete" title="Delete" disabled={isSyncing}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-                {/* View toggle */}
-                <div className="view-toggle" role="group" aria-label="View mode">
-                  <button onClick={() => setTableView('table')}
-                    className={`view-btn ${tableView === 'table' ? 'active' : ''}`}
-                    aria-pressed={tableView === 'table'} aria-label="Table view">
-                    <List size={16} aria-hidden="true" /> Table
-                  </button>
-                  <button onClick={() => setTableView('kanban')}
-                    className={`view-btn ${tableView === 'kanban' ? 'active' : ''}`}
-                    aria-pressed={tableView === 'kanban'} aria-label="Kanban view">
-                    <LayoutGrid size={16} aria-hidden="true" /> Kanban
-                  </button>
-                </div>
-
-                <div className="filter-buttons" role="group" aria-label="Filter by status">
-                  {['all', ...STATUS_OPTIONS].map(s => (
-                    <button key={s}
-                      onClick={() => setFilterStatus(s)}
-                      className={`filter-btn ${filterStatus === s ? 'active' : ''}`}
-                      aria-pressed={filterStatus === s}>
-                      {s.charAt(0).toUpperCase() + s.slice(1)}
-                    </button>
-                  ))}
-                </div>
+            {/* Footer */}
+            {sortedApplications.length > 0 && (
+              <div className="footer">
+                <p>Showing {sortedApplications.length} of {applications.length} applications</p>
               </div>
-
-              {/* Bulk action bar */}
-              {selectedIds.size > 0 && (
-                <div className="bulk-bar" role="region" aria-label="Bulk actions">
-                  <span><strong>{selectedIds.size}</strong> selected</span>
-                  <button className="btn-secondary" onClick={clearSelection}>Clear</button>
-                  <label htmlFor="bulk-status" className="sr-only">Bulk status change</label>
-                  <select id="bulk-status" defaultValue=""
-                    onChange={(e) => { if (e.target.value) { bulkStatus(e.target.value); e.target.value = ''; } }}>
-                    <option value="" disabled>Change status to…</option>
-                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <button className="btn-danger" onClick={bulkDelete}>
-                    <Trash2 size={14} aria-hidden="true" /> Delete selected
-                  </button>
-                </div>
-              )}
-
-              {/* Main content: Table or Kanban */}
-              {tableView === 'table' ? (
-                <ApplicationsTable
-                  applications={sortedApplications}
-                  allCount={applications.length}
-                  searchQuery={searchQuery}
-                  filterStatus={filterStatus}
-                  sortColumn={sortColumn}
-                  sortDirection={sortDirection}
-                  onSort={handleSort}
-                  selectedIds={selectedIds}
-                  toggleSelect={toggleSelect}
-                  selectAllVisible={selectAllVisible}
-                  clearSelection={clearSelection}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  onTimeline={openTimeline}
-                  isSyncing={isSyncing}
-                />
-              ) : (
-                <KanbanBoard
-                  applications={filteredApplications}
-                  onEdit={handleEdit}
-                  onChangeStatus={async (app, newStatus) => {
-                    if (app.status === newStatus) return;
-                    setIsSyncing(true);
-                    try {
-                      await supabase.from('applications').update({ status: newStatus }).eq('id', app.id);
-                      await logEvent(app.id, {
-                        event_type: 'status_change', from_status: app.status, to_status: newStatus,
-                        message: `Moved to ${newStatus}`,
-                      });
-                      announce(`${app.company} moved to ${newStatus}`);
-                      await loadApplications();
-                    } finally { setIsSyncing(false); }
-                  }}
-                />
-              )}
-
-              {sortedApplications.length > 0 && (
-                <p className="footer">
-                  Showing {sortedApplications.length} of {applications.length} applications
-                </p>
-              )}
-            </>
-          )}
-        </main>
+            )}
+          </>
+        )}
       </div>
 
       {/* Modal */}
       {isModalOpen && (
         <div className="modal-backdrop" onClick={handleCancel}>
-          <div ref={modalRef}
-            className="modal"
-            role="dialog" aria-modal="true" aria-labelledby="modal-title"
-            onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 id="modal-title" className="modal-title">
+              <h2 className="modal-title">
                 {editingId ? 'Edit Application' : 'New Application'}
               </h2>
-              <button onClick={handleCancel} className="modal-close" aria-label="Close dialog">
-                <X size={20} aria-hidden="true" />
+              <button
+                onClick={handleCancel}
+                className="modal-close"
+              >
+                <X size={20} />
               </button>
             </div>
 
             <div className="modal-body">
-              <FormField id="f-company" label="Company" required>
-                <input id="f-company" type="text" required value={formData.company}
+              <div className="form-group">
+                <label>Company *</label>
+                <input
+                  type="text"
+                  value={formData.company}
                   onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  placeholder="e.g., Acme Corp" />
-              </FormField>
-              <FormField id="f-position" label="Position" required>
-                <input id="f-position" type="text" required value={formData.position}
+                  placeholder="e.g., Acme Corp"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Position *</label>
+                <input
+                  type="text"
+                  value={formData.position}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  placeholder="e.g., Senior Engineer" />
-              </FormField>
-              <FormField id="f-applied" label="Date Applied">
-                <input id="f-applied" type="date" value={formData.date_applied}
-                  onChange={(e) => setFormData({ ...formData, date_applied: e.target.value })} />
-              </FormField>
-              <FormField id="f-interview" label="Interview Date">
-                <input id="f-interview" type="date" value={formData.interview_date || ''}
-                  onChange={(e) => setFormData({ ...formData, interview_date: e.target.value })} />
-              </FormField>
-              <FormField id="f-url" label="Job Posting URL">
-                <input id="f-url" type="url" value={formData.job_posting_url || ''}
+                  placeholder="e.g., Senior Engineer"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Date Applied</label>
+                <input
+                  type="date"
+                  value={formData.date_applied}
+                  onChange={(e) => setFormData({ ...formData, date_applied: e.target.value })}
+                />
+              </div>
+
+              {/* NEW: Interview Date */}
+              <div className="form-group">
+                <label>Interview Date</label>
+                <input
+                  type="date"
+                  value={formData.interview_date || ''}
+                  onChange={(e) => setFormData({ ...formData, interview_date: e.target.value })}
+                />
+              </div>
+
+              {/* NEW: Job Posting URL */}
+              <div className="form-group">
+                <label>Job Posting URL</label>
+                <input
+                  type="url"
+                  value={formData.job_posting_url || ''}
                   onChange={(e) => setFormData({ ...formData, job_posting_url: e.target.value })}
-                  placeholder="https://company.com/careers/job-id" />
-              </FormField>
-              <FormField id="f-contact" label="Contact Person">
-                <input id="f-contact" type="text" value={formData.contact_person}
+                  placeholder="https://company.com/careers/job-id"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Contact Person</label>
+                <input
+                  type="text"
+                  value={formData.contact_person}
                   onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                  placeholder="e.g., John Doe, Hiring Manager" />
-              </FormField>
-              <FormField id="f-status" label="Status">
-                <select id="f-status" value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
-                  {STATUS_OPTIONS.map(s => (
-                    <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                  placeholder="e.g., John Doe, Hiring Manager"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                >
+                  <option value="applied">Applied</option>
+                  <option value="interview">Interview</option>
+                  <option value="offered">Offered</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="accepted">Accepted</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Resume Version</label>
+                <select
+                  value={formData.resume_version_id || ''}
+                  onChange={(e) => setFormData({ ...formData, resume_version_id: e.target.value || null })}
+                >
+                  <option value="">No resume linked</option>
+                  {resumeVersions.map(version => (
+                    <option key={version.id} value={version.id}>
+                      {version.name}
+                    </option>
                   ))}
                 </select>
-              </FormField>
-              <FormField id="f-resume" label="Resume Version">
-                <select id="f-resume" value={formData.resume_version_id || ''}
-                  onChange={(e) => setFormData({ ...formData, resume_version_id: e.target.value || null })}>
-                  <option value="">No resume linked</option>
-                  {resumeVersions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
-              </FormField>
-              <AttachmentsField
-                attachments={formData.attachments}
-                onChange={(atts) => setFormData({ ...formData, attachments: atts })}
-              />
-              <FormField id="f-notes" label="Notes">
-                <textarea id="f-notes" rows={4} value={formData.notes}
+              </div>
+
+              <div className="form-group">
+                <label>Notes</label>
+                <textarea
+                  value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Follow-up info, recruiter notes, etc." />
-              </FormField>
+                  placeholder="Follow-up info, recruiter notes, etc."
+                  rows={4}
+                />
+              </div>
             </div>
 
             <div className="modal-footer">
-              <button onClick={handleCancel} className="btn-cancel" disabled={isSyncing}>Cancel</button>
-              <button onClick={handleSave} className="btn-save" disabled={isSyncing}>
-                <Check size={18} aria-hidden="true" /> {isSyncing ? 'Saving…' : 'Save'}
+              <button
+                onClick={handleCancel}
+                className="btn-cancel"
+                disabled={isSyncing}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="btn-save"
+                disabled={isSyncing}
+              >
+                <Check size={18} /> {isSyncing ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Timeline modal */}
-      {timelineFor && (
-        <TimelineModal
-          application={timelineFor}
-          events={timelineEvents}
-          onClose={() => { setTimelineFor(null); setTimelineEvents([]); }}
-        />
       )}
 
       {activeMilestone && (
@@ -1219,9 +1616,21 @@ export default function App() {
         />
       )}
 
-      {showOnboarding && <OnboardingTutorial onComplete={() => setShowOnboarding(false)} />}
-      {showApiSettings && <ApiKeySettings isOpen={showApiSettings} onClose={() => setShowApiSettings(false)} />}
-      {activeCelebration && <CelebrationAnimation milestone={activeCelebration} onComplete={() => setActiveCelebration(null)} />}
+      {showOnboarding && (
+        <OnboardingTutorial onComplete={() => setShowOnboarding(false)} />
+      )}
+
+      {showApiSettings && (
+        <ApiKeySettings isOpen={showApiSettings} onClose={() => setShowApiSettings(false)} />
+      )}
+
+      {activeCelebration && (
+        <CelebrationAnimation
+          milestone={activeCelebration}
+          onComplete={() => setActiveCelebration(null)}
+        />
+      )}
+
       {statusCelebration && (
         <CelebrationAnimation
           milestone={{ tier: 'standard', type: statusCelebration.type }}
@@ -1231,384 +1640,4 @@ export default function App() {
       )}
     </div>
   );
-}
-
-// ============================================================================
-// Sub-components
-// ============================================================================
-
-function StatCard({ label, value, className = '' }) {
-  return (
-    <div className={`stat-card ${className}`}>
-      <p className="stat-label">{label}</p>
-      <p className="stat-value">{value}</p>
-    </div>
-  );
-}
-
-function FormField({ id, label, required, children }) {
-  return (
-    <div className="form-group">
-      <label htmlFor={id}>
-        {label}{required && <span aria-hidden="true"> *</span>}
-        {required && <VisuallyHidden> required</VisuallyHidden>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function AttachmentsField({ attachments, onChange }) {
-  const [name, setName] = useState('');
-  const [url, setUrl] = useState('');
-  const [type, setType] = useState('resume');
-
-  const add = () => {
-    if (!name.trim() || !url.trim()) return;
-    onChange([...(attachments || []), { name: name.trim(), url: url.trim(), type }]);
-    setName(''); setUrl(''); setType('resume');
-  };
-
-  const remove = (i) => onChange(attachments.filter((_, idx) => idx !== i));
-
-  return (
-    <fieldset className="form-group attachments-field">
-      <legend><Paperclip size={14} aria-hidden="true" /> Attachments</legend>
-      {attachments?.length > 0 && (
-        <ul className="attachment-list">
-          {attachments.map((a, i) => (
-            <li key={i}>
-              <a href={a.url} target="_blank" rel="noopener noreferrer">
-                {a.name} <VisuallyHidden>({a.type}, opens in new tab)</VisuallyHidden>
-              </a>
-              <span className="attachment-type">{a.type}</span>
-              <button type="button" onClick={() => remove(i)} className="btn-icon" aria-label={`Remove ${a.name}`}>
-                <X size={14} aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="attachment-add">
-        <input type="text" placeholder="Label (e.g. Resume v3)" value={name}
-          onChange={(e) => setName(e.target.value)} aria-label="Attachment label" />
-        <input type="url" placeholder="https://…" value={url}
-          onChange={(e) => setUrl(e.target.value)} aria-label="Attachment URL" />
-        <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Attachment type">
-          <option value="resume">Resume</option>
-          <option value="cover_letter">Cover letter</option>
-          <option value="other">Other</option>
-        </select>
-        <button type="button" onClick={add} className="btn-secondary">Add</button>
-      </div>
-    </fieldset>
-  );
-}
-
-function SortableHeader({ label, column, sortColumn, sortDirection, onSort }) {
-  const active = sortColumn === column;
-  const ariaSort = active ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
-  return (
-    <th aria-sort={ariaSort} scope="col">
-      <button type="button" onClick={() => onSort(column)} className="th-button">
-        {label}
-        <span aria-hidden="true">{active ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
-      </button>
-    </th>
-  );
-}
-
-function ApplicationsTable({
-  applications, allCount, searchQuery, filterStatus,
-  sortColumn, sortDirection, onSort,
-  selectedIds, toggleSelect, selectAllVisible, clearSelection,
-  onEdit, onDelete, onTimeline, isSyncing,
-}) {
-  const allVisibleSelected = applications.length > 0 && applications.every(a => selectedIds.has(a.id));
-
-  return (
-    <div className="table-wrapper">
-      {/* Mobile cards */}
-      <div className="mobile-cards" aria-label="Applications (mobile view)">
-        {applications.length === 0 ? (
-          <p className="empty-state">No applications match.</p>
-        ) : applications.map(a => (
-          <article key={a.id} className="app-card">
-            <header className="app-card-header">
-              <h3>{a.company}</h3>
-              <StatusBadge status={a.status} />
-            </header>
-            <p className="app-card-position">{a.position}</p>
-            <dl className="app-card-meta">
-              <div><dt>Applied</dt><dd>{a.date_applied ? new Date(a.date_applied).toLocaleDateString() : '—'}</dd></div>
-              <div><dt>Interview</dt><dd>{a.interview_date ? new Date(a.interview_date).toLocaleDateString() : '—'}</dd></div>
-            </dl>
-            <div className="action-buttons">
-              <button onClick={() => onEdit(a)} className="btn-icon" aria-label={`Edit ${a.company}`}><Edit2 size={16} aria-hidden="true" /></button>
-              <button onClick={() => onTimeline(a)} className="btn-icon" aria-label={`View timeline for ${a.company}`}><Clock size={16} aria-hidden="true" /></button>
-              <button onClick={() => onDelete(a.id)} className="btn-icon delete" aria-label={`Delete ${a.company}`}><Trash2 size={16} aria-hidden="true" /></button>
-            </div>
-          </article>
-        ))}
-      </div>
-
-      {/* Desktop table */}
-      <table className="desktop-table">
-        <caption className="sr-only">Job applications, sortable.</caption>
-        <thead>
-          <tr>
-            <th scope="col">
-              <input type="checkbox"
-                aria-label={allVisibleSelected ? 'Deselect all visible' : 'Select all visible'}
-                checked={allVisibleSelected}
-                onChange={(e) => e.target.checked
-                  ? selectAllVisible(applications.map(a => a.id))
-                  : clearSelection()
-                } />
-            </th>
-            <SortableHeader label="Company" column="company" sortColumn={sortColumn} sortDirection={sortDirection} onSort={onSort} />
-            <SortableHeader label="Position" column="position" sortColumn={sortColumn} sortDirection={sortDirection} onSort={onSort} />
-            <SortableHeader label="Applied" column="date_applied" sortColumn={sortColumn} sortDirection={sortDirection} onSort={onSort} />
-            <SortableHeader label="Interview" column="interview_date" sortColumn={sortColumn} sortDirection={sortDirection} onSort={onSort} />
-            <th scope="col">Contact</th>
-            <th scope="col">Status</th>
-            <th scope="col">Link</th>
-            <th scope="col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {applications.length === 0 ? (
-            <tr>
-              <td colSpan="9" className="empty-state">
-                {searchQuery
-                  ? 'No applications match your search.'
-                  : filterStatus !== 'all'
-                    ? `No ${filterStatus} applications found.`
-                    : 'No applications yet. Click "New Application" to start.'}
-              </td>
-            </tr>
-          ) : applications.map(a => (
-            <tr key={a.id} aria-selected={selectedIds.has(a.id)}>
-              <td>
-                <input type="checkbox"
-                  aria-label={`Select ${a.company} ${a.position}`}
-                  checked={selectedIds.has(a.id)}
-                  onChange={() => toggleSelect(a.id)} />
-              </td>
-              <td className="company-name">{a.company}</td>
-              <td className="position-name">{a.position}</td>
-              <td className="date">{a.date_applied ? new Date(a.date_applied).toLocaleDateString() : '—'}</td>
-              <td className="date">{a.interview_date ? new Date(a.interview_date).toLocaleDateString() : '—'}</td>
-              <td className="contact">{a.contact_person || '—'}</td>
-              <td><StatusBadge status={a.status} /></td>
-              <td>
-                {a.job_posting_url ? (
-                  <a href={a.job_posting_url} target="_blank" rel="noopener noreferrer"
-                    className="btn-icon" aria-label={`Open job posting for ${a.company} (opens in new tab)`}>
-                    <ExternalLink size={16} aria-hidden="true" />
-                  </a>
-                ) : <span aria-hidden="true" style={{ opacity: 0.4 }}>—</span>}
-              </td>
-              <td>
-                <div className="action-buttons">
-                  <button onClick={() => onEdit(a)} className="btn-icon" disabled={isSyncing}
-                    aria-label={`Edit ${a.company}`}><Edit2 size={16} aria-hidden="true" /></button>
-                  <button onClick={() => onTimeline(a)} className="btn-icon" disabled={isSyncing}
-                    aria-label={`View timeline for ${a.company}`}><Clock size={16} aria-hidden="true" /></button>
-                  <button onClick={() => onDelete(a.id)} className="btn-icon delete" disabled={isSyncing}
-                    aria-label={`Delete ${a.company}`}><Trash2 size={16} aria-hidden="true" /></button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const cfg = STATUS_BADGE[status] || STATUS_BADGE.applied;
-  return (
-    <span className={cfg.className}>
-      <span aria-hidden="true">{cfg.symbol} </span>{cfg.label}
-    </span>
-  );
-}
-
-function KanbanBoard({ applications, onEdit, onChangeStatus }) {
-  const columns = STATUS_OPTIONS;
-  const [dragId, setDragId] = useState(null);
-
-  return (
-    <div className="kanban-board" role="region" aria-label="Kanban board">
-      {columns.map(col => {
-        const cards = applications.filter(a => a.status === col);
-        return (
-          <div key={col} className="kanban-col"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => {
-              if (!dragId) return;
-              const app = applications.find(a => a.id === dragId);
-              if (app) onChangeStatus(app, col);
-              setDragId(null);
-            }}
-            aria-label={`${col} column, ${cards.length} cards`}>
-            <h3 className="kanban-col-title">
-              <StatusBadge status={col} />
-              <span className="kanban-count" aria-label={`${cards.length} cards`}>{cards.length}</span>
-            </h3>
-            <div className="kanban-col-body">
-              {cards.length === 0 ? <p className="kanban-empty">No cards</p> :
-                cards.map(a => (
-                  <article key={a.id} className="kanban-card"
-                    draggable onDragStart={() => setDragId(a.id)}
-                    tabIndex={0} role="button"
-                    onClick={() => onEdit(a)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(a); } }}
-                    aria-label={`${a.company}, ${a.position}. Press Enter to edit.`}>
-                    <strong>{a.company}</strong>
-                    <span>{a.position}</span>
-                    {a.interview_date && (
-                      <small><Bell size={12} aria-hidden="true" /> {new Date(a.interview_date).toLocaleDateString()}</small>
-                    )}
-                    {/* Keyboard alternative to drag for a11y */}
-                    <label className="sr-only" htmlFor={`move-${a.id}`}>Move {a.company} to status</label>
-                    <select id={`move-${a.id}`} className="kanban-move" defaultValue=""
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => { if (e.target.value) { onChangeStatus(a, e.target.value); e.target.value=''; } }}>
-                      <option value="" disabled>Move to…</option>
-                      {STATUS_OPTIONS.filter(s => s !== col).map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </article>
-                ))
-              }
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function AnalyticsView({ applications }) {
-  const total = applications.length;
-  const byStatus = STATUS_OPTIONS.map(s => ({
-    status: s, count: applications.filter(a => a.status === s).length,
-  }));
-  const responses = applications.filter(a => ['interview','offered','accepted','rejected'].includes(a.status)).length;
-  const responseRate = total ? Math.round((responses / total) * 100) : 0;
-
-  // apps per week (last 8 weeks)
-  const now = new Date();
-  const weeks = Array.from({ length: 8 }, (_, i) => {
-    const end = new Date(now); end.setDate(now.getDate() - i * 7); end.setHours(23,59,59,999);
-    const start = new Date(end); start.setDate(end.getDate() - 6); start.setHours(0,0,0,0);
-    const count = applications.filter(a => {
-      if (!a.date_applied) return false;
-      const d = new Date(a.date_applied);
-      return d >= start && d <= end;
-    }).length;
-    return { label: `${start.getMonth()+1}/${start.getDate()}`, count };
-  }).reverse();
-
-  const maxWeek = Math.max(1, ...weeks.map(w => w.count));
-  const maxStatus = Math.max(1, ...byStatus.map(b => b.count));
-
-  // Avg time to interview (days)
-  const interviewApps = applications.filter(a => a.date_applied && a.interview_date);
-  const avgDaysToInterview = interviewApps.length === 0 ? null
-    : Math.round(interviewApps.reduce((acc, a) => {
-        return acc + (new Date(a.interview_date) - new Date(a.date_applied)) / (1000*60*60*24);
-      }, 0) / interviewApps.length);
-
-  return (
-    <section aria-label="Analytics" className="analytics">
-      <h2><BarChart3 size={20} aria-hidden="true" /> Analytics</h2>
-      <div className="analytics-grid">
-        <div className="analytics-card">
-          <p className="stat-label">Total Applications</p>
-          <p className="stat-value">{total}</p>
-        </div>
-        <div className="analytics-card">
-          <p className="stat-label">Response Rate</p>
-          <p className="stat-value">{responseRate}%</p>
-          <p className="stat-sub">{responses} responses of {total}</p>
-        </div>
-        <div className="analytics-card">
-          <p className="stat-label">Avg. days to interview</p>
-          <p className="stat-value">{avgDaysToInterview ?? '—'}</p>
-        </div>
-      </div>
-
-      <h3>Applications per week</h3>
-      <div className="bar-chart" role="img"
-        aria-label={`Bar chart: applications per week. ${weeks.map(w => `${w.label}: ${w.count}`).join(', ')}.`}>
-        {weeks.map((w, i) => (
-          <div key={i} className="bar-col">
-            <div className="bar" style={{ height: `${(w.count / maxWeek) * 100}%` }} aria-hidden="true">
-              <span className="bar-value">{w.count}</span>
-            </div>
-            <span className="bar-label">{w.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <h3>Status distribution</h3>
-      <ul className="status-dist" aria-label="Status distribution">
-        {byStatus.map(b => (
-          <li key={b.status}>
-            <span className="status-dist-label"><StatusBadge status={b.status} /></span>
-            <span className="status-dist-bar" aria-hidden="true">
-              <span style={{ width: `${(b.count / maxStatus) * 100}%` }} />
-            </span>
-            <span className="status-dist-count">{b.count}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function TimelineModal({ application, events, onClose }) {
-  const ref = useRef(null);
-  useFocusTrap(ref, true, onClose);
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div ref={ref} className="modal" role="dialog" aria-modal="true"
-        aria-labelledby="timeline-title" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 id="timeline-title" className="modal-title">
-            <Clock size={18} aria-hidden="true" /> Timeline — {application.company}
-          </h2>
-          <button onClick={onClose} className="modal-close" aria-label="Close timeline">
-            <X size={20} aria-hidden="true" />
-          </button>
-        </div>
-        <div className="modal-body">
-          {events.length === 0 ? (
-            <p>No activity yet.</p>
-          ) : (
-            <ol className="timeline">
-              {events.map(e => (
-                <li key={e.id} className="timeline-item">
-                  <time dateTime={e.created_at}>{new Date(e.created_at).toLocaleString()}</time>
-                  <p>{e.message || e.event_type}</p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// HTML escape helper for PDF export
-function esc(str) {
-  return (str ?? '').toString()
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
