@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alva Logic — Targeted Drill</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0e0e0e; --surface: #161616; --border: #2a2a2a;
+    --text: #e8e8e8; --muted: #666; --accent: #7eeae4;
+    --correct: #4ade80; --wrong: #f87171;
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; padding: 2rem 1rem 4rem;
+  }
+  header {
+    width: 100%; max-width: 720px;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);
+  }
+  .logo { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--accent); letter-spacing: 0.15em; text-transform: uppercase; }
+  .progress-info { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--muted); }
+  .progress-bar { width: 100%; max-width: 720px; height: 2px; background: var(--border); margin-bottom: 1.5rem; border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); transition: width 0.4s ease; }
+
+  /* Skill tag */
+  .skill-tag {
+    display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem;
+    text-transform: uppercase; letter-spacing: 0.1em; padding: 0.25rem 0.6rem;
+    border-radius: 2px; margin-bottom: 1rem;
+  }
+  .tag-fill { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+  .tag-size { background: rgba(96,165,250,0.12); color: #60a5fa; border: 1px solid rgba(96,165,250,0.3); }
+  .tag-rotation { background: rgba(167,139,250,0.12); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3); }
+  .tag-count { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+
+  .question-card { width: 100%; max-width: 720px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2rem; margin-bottom: 1.5rem; }
+  .question-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem; }
+  .question-title { font-size: 0.875rem; font-weight: 300; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6; }
+
+  /* Hint box */
+  .hint-box {
+    background: rgba(126,234,228,0.04); border: 1px solid rgba(126,234,228,0.15);
+    border-radius: 3px; padding: 0.75rem 1rem; margin-bottom: 1.5rem;
+    font-size: 0.8rem; color: #7eeae4; line-height: 1.6;
+  }
+  .hint-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.6; margin-bottom: 0.25rem; }
+
+  .matrix-container { display: flex; justify-content: center; margin: 1.5rem 0; }
+  .matrix { display: grid; grid-template-columns: repeat(3, 90px); grid-template-rows: repeat(3, 90px); gap: 6px; }
+  .cell { width: 90px; height: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; display: flex; align-items: center; justify-content: center; }
+  .cell.missing { border: 1.5px dashed var(--accent); background: rgba(126,234,228,0.03); }
+  .cell svg { width: 64px; height: 64px; }
+
+  .options-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 1rem; }
+  .options-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+  .option-btn {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
+    padding: 0.75rem 0.5rem; cursor: pointer; display: flex; flex-direction: column;
+    align-items: center; gap: 0.5rem; transition: border-color 0.15s, background 0.15s;
+  }
+  .option-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(126,234,228,0.04); }
+  .option-btn.correct { border-color: var(--correct); background: rgba(74,222,128,0.08); }
+  .option-btn.wrong { border-color: var(--wrong); background: rgba(248,113,113,0.08); }
+  .option-btn svg { width: 52px; height: 52px; }
+  .option-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  .explanation { background: var(--bg); border-left: 2px solid var(--accent); border-radius: 0 3px 3px 0; padding: 1rem 1.25rem; margin-top: 1.25rem; display: none; }
+  .explanation.visible { display: block; }
+  .explanation-header { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+  .explanation-header.correct { color: var(--correct); }
+  .explanation-header.wrong { color: var(--wrong); }
+  .explanation p { font-size: 0.85rem; color: #b0b0b0; line-height: 1.7; }
+  .explanation .rule { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--accent); margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(126,234,228,0.05); border-radius: 2px; }
+
+  /* Strategy block */
+  .strategy { margin-top: 0.75rem; padding: 0.75rem; background: rgba(167,139,250,0.06); border: 1px solid rgba(167,139,250,0.2); border-radius: 3px; }
+  .strategy-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #a78bfa; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.35rem; }
+  .strategy p { font-size: 0.8rem; color: #b0b0b0; line-height: 1.6; }
+
+  .timer-text { width: 100%; max-width: 720px; font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--muted); margin-bottom: 0.4rem; text-align: right; }
+  .timer-bar { width: 100%; max-width: 720px; height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 1.5rem; overflow: hidden; }
+  .timer-fill { height: 100%; background: var(--accent); transition: width 1s linear, background 0.3s; }
+  .timer-fill.urgent { background: var(--wrong); }
+
+  .btn { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.65rem 1.5rem; border-radius: 2px; border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; background: transparent; color: var(--text); }
+  .btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn:hover:not(.btn-primary) { border-color: var(--accent); color: var(--accent); }
+  .actions { width: 100%; max-width: 720px; display: flex; justify-content: flex-end; gap: 0.75rem; }
+
+  .score-screen { width: 100%; max-width: 720px; text-align: center; display: none; }
+  .score-screen.visible { display: block; }
+  .score-big { font-family: 'IBM Plex Mono', monospace; font-size: 5rem; color: var(--accent); line-height: 1; margin: 2rem 0 0.5rem; }
+  .score-label { font-size: 0.85rem; color: var(--muted); margin-bottom: 2rem; }
+  .score-breakdown { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem; margin-bottom: 1.5rem; text-align: left; }
+  .score-row { display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+  .score-row:last-child { border-bottom: none; }
+
+  /* Skill summary */
+  .skill-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem; margin-bottom: 2rem; text-align: left; }
+  .skill-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+  .skill-row:last-child { border-bottom: none; }
+  .skill-name { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--muted); }
+  .skill-bar-wrap { flex: 1; margin: 0 1rem; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .skill-bar { height: 100%; border-radius: 2px; transition: width 1s ease; }
+  .skill-score { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--text); min-width: 40px; text-align: right; }
+
+  .question-wrapper { display: block; }
+  .question-wrapper.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Targeted Drill — Fill · Size · Rotation · Count</div>
+  <div class="progress-info" id="progressInfo">Question 1 of 10</div>
+</header>
+
+<div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+<div class="timer-text" id="timerText">2:00 remaining</div>
+<div class="timer-bar"><div class="timer-fill" id="timerFill"></div></div>
+
+<div class="question-wrapper" id="questionWrapper">
+  <div class="question-card">
+    <div id="skillTag"></div>
+    <div class="question-meta" id="questionMeta"></div>
+    <div class="question-title">Which shape correctly completes the 3×3 matrix?</div>
+    <div class="hint-box" id="hintBox"><div class="hint-label">Strategy hint</div><div id="hintText"></div></div>
+    <div class="matrix-container"><div class="matrix" id="matrixGrid"></div></div>
+    <div class="options-label">Select the correct answer</div>
+    <div class="options-grid" id="optionsGrid"></div>
+    <div class="explanation" id="explanation">
+      <div class="explanation-header" id="explanationHeader"></div>
+      <p id="explanationText"></p>
+      <div class="rule" id="explanationRule"></div>
+      <div class="strategy" id="strategyBox">
+        <div class="strategy-label">How to spot this faster next time</div>
+        <p id="strategyText"></p>
+      </div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="skipBtn" onclick="skipQuestion()">Skip</button>
+    <button class="btn btn-primary" id="nextBtn" onclick="nextQuestion()" style="display:none">Next →</button>
+  </div>
+</div>
+
+<div class="score-screen" id="scoreScreen">
+  <div class="logo" style="margin-bottom:1rem">Drill Complete</div>
+  <div class="score-big" id="scoreBig">—</div>
+  <div class="score-label" id="scoreLabel">questions correct</div>
+  <div class="skill-summary" id="skillSummary"></div>
+  <div class="score-breakdown" id="scoreBreakdown"></div>
+  <button class="btn btn-primary" onclick="restartQuiz()">Drill Again</button>
+</div>
+
+<script>
+// ─── SVG helpers ─────────────────────────────────────────────────────────────
+const A = '#7eeae4', FILL = '#7eeae4', NONE = 'none', BG = '#0e0e0e';
+
+function circle(fill=NONE, stroke=A, r=22) {
+  return `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="${fill==='filled'?FILL:fill}" stroke="${stroke}" stroke-width="2.5"/></svg>`;
+}
+function square(fill=NONE, stroke=A, size=40) {
+  const o=(64-size)/2;
+  return `<svg viewBox="0 0 64 64"><rect x="${o}" y="${o}" width="${size}" height="${size}" fill="${fill==='filled'?FILL:fill}" stroke="${stroke}" stroke-width="2.5"/></svg>`;
+}
+function triangle(fill=NONE, stroke=A, scale=1) {
+  const s=scale; const cx=32,top=8*s+(32*(1-s)),bot=56*s+(32*(1-s)),left=6*s+(32*(1-s)),right=58*s+(32*(1-s));
+  return `<svg viewBox="0 0 64 64"><polygon points="${cx},${8+(32-32*s)} ${32+26*s},${56-(32-32*s)} ${32-26*s},${56-(32-32*s)}" fill="${fill==='filled'?FILL:fill}" stroke="${stroke}" stroke-width="2.5"/></svg>`;
+}
+function diamond(fill=NONE, stroke=A) {
+  return `<svg viewBox="0 0 64 64"><polygon points="32,6 58,32 32,58 6,32" fill="${fill==='filled'?FILL:fill}" stroke="${stroke}" stroke-width="2.5"/></svg>`;
+}
+function rotShape(shape, deg, fill=NONE, stroke=A) {
+  const pts = shape==='square' ? `<rect x="14" y="14" width="36" height="36" fill="${fill==='filled'?FILL:fill}" stroke="${stroke}" stroke-width="2.5" transform="rotate(${deg},32,32)"/>` :
+              shape==='triangle' ? `<polygon points="32,10 54,54 10,54" fill="${fill==='filled'?FILL:fill}" stroke="${stroke}" stroke-width="2.5" transform="rotate(${deg},32,32)"/>` :
+              `<polygon points="32,6 58,32 32,58 6,32" fill="${fill==='filled'?FILL:fill}" stroke="${stroke}" stroke-width="2.5" transform="rotate(${deg},32,32)"/>`;
+  return `<svg viewBox="0 0 64 64">${pts}</svg>`;
+}
+function lines(n, stroke=A) {
+  const positions=[12,22,32,42,52];
+  const ls=positions.slice(0,n).map(y=>`<line x1="8" y1="${y}" x2="56" y2="${y}" stroke="${stroke}" stroke-width="2.5"/>`).join('');
+  return `<svg viewBox="0 0 64 64">${ls}</svg>`;
+}
+function dots(n, fill=A) {
+  const pos=[[20,20],[44,20],[20,44],[44,44],[32,32],[20,32],[44,32],[32,20],[32,44]];
+  const pts=pos.slice(0,n).map(([x,y])=>`<circle cx="${x}" cy="${y}" r="6" fill="${fill}"/>`).join('');
+  return `<svg viewBox="0 0 64 64">${pts}</svg>`;
+}
+function sized(shape, r) {
+  if(shape==='circle') return `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="${NONE}" stroke="${A}" stroke-width="2.5"/></svg>`;
+  if(shape==='square') {const s=r*2,o=(64-s)/2; return `<svg viewBox="0 0 64 64"><rect x="${o}" y="${o}" width="${s}" height="${s}" fill="${NONE}" stroke="${A}" stroke-width="2.5"/></svg>`;}
+  return circle(NONE,A,r);
+}
+function empty() { return `<svg viewBox="0 0 64 64"></svg>`; }
+function questionMark() { return `<svg viewBox="0 0 64 64"><text x="32" y="40" text-anchor="middle" fill="${A}" font-size="28" font-family="monospace">?</text></svg>`; }
+
+// ─── Questions ────────────────────────────────────────────────────────────────
+const questions = [
+
+  // ── FILL ALTERNATION (Q2 type) ──────────────────────────────────────────────
+  {
+    type: 'fill', tag: 'tag-fill', tagLabel: 'Fill Alternation',
+    meta: 'Fill Pattern · Level 1',
+    hint: 'Check each row: does fill go empty→filled→empty, or filled→empty→filled? Then verify column 3 matches.',
+    grid: [
+      square(NONE), square('filled'), square(NONE),
+      square('filled'), square(NONE), square('filled'),
+      square(NONE), square('filled'), null
+    ],
+    options: [square(NONE), square('filled'), circle(NONE), diamond(NONE)],
+    labels: ['A','B','C','D'], answer: 0,
+    explanation: 'Row 3: empty → filled → ?. The alternating rule gives empty. Column 3 confirms: empty, filled, empty.',
+    rule: 'Rule: Fill alternates E/F/E per row. Odd rows start empty, even rows start filled.',
+    strategy: 'Always read row 1 first to find the starting fill. Then check if rows alternate or mirror. If row 1 is E-F-E and row 2 is F-E-F, you have a strict alternation — row 3 repeats row 1.'
+  },
+  {
+    type: 'fill', tag: 'tag-fill', tagLabel: 'Fill Alternation',
+    meta: 'Fill Pattern · Level 2',
+    hint: 'The fill isn\'t just alternating — watch for a diagonal fill progression.',
+    grid: [
+      circle(NONE), circle(NONE), circle('filled'),
+      circle(NONE), circle('filled'), circle(NONE),
+      circle('filled'), circle(NONE), null
+    ],
+    options: [circle('filled'), circle(NONE), diamond('filled'), square(NONE)],
+    labels: ['A','B','C','D'], answer: 1,
+    explanation: 'The filled circle moves one step left each row (diagonal). Row 1: col 3. Row 2: col 2. Row 3: col 1. So column 3, row 3 must be empty.',
+    rule: 'Rule: The filled cell moves diagonally — one column left per row. All other cells are empty.',
+    strategy: 'When alternation looks irregular, track WHERE the filled cell is, not just whether each cell is filled. A single filled cell moving diagonally is a classic Alva pattern.'
+  },
+  {
+    type: 'fill', tag: 'tag-fill', tagLabel: 'Fill Alternation',
+    meta: 'Fill Pattern · Level 3',
+    hint: 'Two shapes per cell. Each shape has its own independent fill rule.',
+    grid: [
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${NONE}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${FILL}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${FILL}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${NONE}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${NONE}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${FILL}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${FILL}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${NONE}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${NONE}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${FILL}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${FILL}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${NONE}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${NONE}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${FILL}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${FILL}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${NONE}" stroke="${A}" stroke-width="2"/></svg>`,
+      null
+    ],
+    options: [
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${NONE}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${FILL}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${FILL}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${NONE}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${FILL}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${FILL}" stroke="${A}" stroke-width="2"/></svg>`,
+      `<svg viewBox="0 0 64 64"><circle cx="20" cy="32" r="12" fill="${NONE}" stroke="${A}" stroke-width="2"/><rect x="34" y="20" width="22" height="22" fill="${NONE}" stroke="${A}" stroke-width="2"/></svg>`,
+    ],
+    labels: ['A','B','C','D'], answer: 1,
+    explanation: 'Circle fill: E,F,E,F,E,F,E,F → next is E (empty). Square fill: F,E,F,E,F,E,F,E → next is F (filled). Answer B: empty circle + filled square.',
+    rule: 'Rule: Each shape alternates independently. Circle: E/F/E… Square: F/E/F… They are always opposite each other.',
+    strategy: 'When a cell has 2+ shapes, treat each shape as its own separate alternation sequence. Don\'t look at the cell as a unit — decompose it.'
+  },
+
+  // ── SIZE PROGRESSION (Q3 type) ──────────────────────────────────────────────
+  {
+    type: 'size', tag: 'tag-size', tagLabel: 'Size Progression',
+    meta: 'Size Pattern · Level 1',
+    hint: 'Find the size step between shapes in row 1. Apply the same step to find the missing size.',
+    grid: [
+      sized('circle',8), sized('circle',16), sized('circle',24),
+      sized('circle',12), sized('circle',20), sized('circle',28),
+      sized('circle',16), sized('circle',24), null
+    ],
+    options: [sized('circle',28), sized('circle',32), sized('circle',20), sized('circle',24)],
+    labels: ['A','B','C','D'], answer: 1,
+    explanation: 'Each row increases by +8 radius units per step. Row 3: 16 → 24 → 32. Answer B (r=32).',
+    rule: 'Rule: +8 radius per step horizontally. Each row starts 4 units larger than the row above.',
+    strategy: 'Always calculate the step from the first two cells (cell2 − cell1). Then apply it: cell3 = cell2 + step. Don\'t guess by eye — calculate.'
+  },
+  {
+    type: 'size', tag: 'tag-size', tagLabel: 'Size Progression',
+    meta: 'Size Pattern · Level 2',
+    hint: 'Sizes decrease rather than increase — and the step changes per row.',
+    grid: [
+      sized('circle',28), sized('circle',22), sized('circle',16),
+      sized('circle',24), sized('circle',20), sized('circle',16),
+      sized('circle',20), sized('circle',18), null
+    ],
+    options: [sized('circle',16), sized('circle',12), sized('circle',14), sized('circle',10)],
+    labels: ['A','B','C','D'], answer: 0,
+    explanation: 'Row 1: −6, −6. Row 2: −4, −4. Row 3: −2, −2. So row 3: 20 → 18 → 16. Answer A.',
+    rule: 'Rule: Decreasing by −6, −4, −2 per row. The step itself shrinks by 2 each row.',
+    strategy: 'If the step isn\'t constant across rows, check if the step itself has a pattern (e.g. −6, −4, −2). This is a second-order progression — common in harder Alva questions.'
+  },
+  {
+    type: 'size', tag: 'tag-size', tagLabel: 'Size Progression',
+    meta: 'Size Pattern · Level 3',
+    hint: 'Size progresses diagonally, not just horizontally.',
+    grid: [
+      sized('square',10), sized('square',16), sized('square',22),
+      sized('square',16), sized('square',22), sized('square',28),
+      sized('square',22), sized('square',28), null
+    ],
+    options: [sized('square',28), sized('square',34), sized('square',32), sized('square',22)],
+    labels: ['A','B','C','D'], answer: 1,
+    explanation: 'Each step diagonally (top-left to bottom-right) is +6. The main diagonal is 10,22,? → +12 per diagonal step. Column 3: 22,28,34. Answer B (34).',
+    rule: 'Rule: +6 per step horizontally AND vertically. Equivalent to a size grid where cell(r,c) = 10 + 6*(r+c).',
+    strategy: 'When horizontal and vertical both increase by the same step, the missing cell = (cell above) + step = (cell to left) + step. Both should give the same answer — use this as a cross-check.'
+  },
+
+  // ── ROTATION (Q4 type) ──────────────────────────────────────────────────────
+  {
+    type: 'rotation', tag: 'tag-rotation', tagLabel: 'Rotation',
+    meta: 'Rotation Pattern · Level 1',
+    hint: 'Calculate: what angle is added per step? Check row 1 first.',
+    grid: [
+      rotShape('triangle',0), rotShape('triangle',60), rotShape('triangle',120),
+      rotShape('triangle',60), rotShape('triangle',120), rotShape('triangle',180),
+      rotShape('triangle',120), rotShape('triangle',180), null
+    ],
+    options: [rotShape('triangle',180), rotShape('triangle',240), rotShape('triangle',120), rotShape('triangle',60)],
+    labels: ['A','B','C','D'], answer: 1,
+    explanation: 'Each step adds 60°. Row 3: 120° → 180° → 240°. Answer B.',
+    rule: 'Rule: +60° per step horizontally. Each row starts where the previous row\'s second cell was.',
+    strategy: 'To find rotation step: look at how much the shape visually shifted between cell 1 and cell 2. For triangles, count how many points moved. 60° = one "point" rotation for a triangle.'
+  },
+  {
+    type: 'rotation', tag: 'tag-rotation', tagLabel: 'Rotation',
+    meta: 'Rotation Pattern · Level 2',
+    hint: 'The shape also changes fill as it rotates — track both independently.',
+    grid: [
+      rotShape('diamond',0,NONE), rotShape('diamond',45,NONE), rotShape('diamond',90,'filled'),
+      rotShape('diamond',45,NONE), rotShape('diamond',90,'filled'), rotShape('diamond',135,NONE),
+      rotShape('diamond',90,'filled'), rotShape('diamond',135,NONE), null
+    ],
+    options: [
+      rotShape('diamond',180,'filled'),
+      rotShape('diamond',180,NONE),
+      rotShape('diamond',135,'filled'),
+      rotShape('diamond',45,NONE)
+    ],
+    labels: ['A','B','C','D'], answer: 1,
+    explanation: 'Rotation: +45° per step → missing = 180°. Fill sequence: E,E,F,E,F,E,F,E → next is F... wait — check column 3: F,E,? The fill alternates per column. Column 3: F,E → next is F? No — re-check: fill at positions (0,2)=F,(1,2)=E,(2,2)=? Column fill alternates F/E/F → F. But row 3 fill: F,E,? alternates → F. Both confirm filled. Wait — answer is B (180°, empty). Let me restate: column 3 is F,E,? The pattern is F,E,F but actually look at the full grid fill: row1=(E,E,F) row2=(E,F,E) row3=(F,E,?). Each row is a rotation of the fill pattern. Row3 col3 = E.',
+    rule: 'Rule: +45° rotation per step. Fill: each row shifts the (E,E,F) pattern one position right.',
+    strategy: 'When two variables change simultaneously (rotation + fill), SEPARATE them. Write out just the fills: E,E,F / E,F,E / F,E,? — now the fill pattern is obvious without the rotation distracting you.'
+  },
+
+  // ── LINE / COUNT (Q5 type) ──────────────────────────────────────────────────
+  {
+    type: 'count', tag: 'tag-count', tagLabel: 'Line / Count',
+    meta: 'Count Pattern · Level 1',
+    hint: 'Check if each row sums to the same total. If so, missing = total − (cell1 + cell2).',
+    grid: [
+      lines(1), lines(3), lines(2),
+      lines(4), lines(1), lines(1),
+      lines(2), lines(2), null
+    ],
+    options: [lines(2), lines(3), lines(1), lines(4)],
+    labels: ['A','B','C','D'], answer: 0,
+    explanation: 'Row 1 sum: 1+3+2=6. Row 2 sum: 4+1+1=6. Row 3: 2+2+?=6 → ?=2. Answer A.',
+    rule: 'Rule: Every row sums to 6. Missing = 6 − (row sum so far).',
+    strategy: 'Sum check is the fastest solve for count questions. Calculate row 1 total, verify with row 2. If both match, you have your constant. Then: missing = constant − (cell1 + cell2). Takes under 10 seconds.'
+  },
+  {
+    type: 'count', tag: 'tag-count', tagLabel: 'Line / Count',
+    meta: 'Count Pattern · Level 2',
+    hint: 'Rows AND columns may both have constraints. Check which one is simpler to use.',
+    grid: [
+      dots(1), dots(3), dots(2),
+      dots(3), dots(2), dots(1),
+      dots(2), dots(1), null
+    ],
+    options: [dots(4), dots(2), dots(3), dots(1)],
+    labels: ['A','B','C','D'], answer: 2,
+    explanation: 'Each row contains exactly {1,2,3} in some order (Latin square of counts). Row 3 has 2 and 1, so missing = 3. Column check: col 3 has 2,1 → missing = 3. Both confirm. Answer C.',
+    rule: 'Rule: Each of {1,2,3} appears exactly once per row and once per column.',
+    strategy: 'When you see 3 distinct values appearing, suspect a Latin square. Check: does each value appear once per row? Once per column? If yes, the missing value is simply the one not yet used in that row (and confirm with column).'
+  },
+
+];
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let current=0, score=0, answered=false, results=[], timer=null, timeLeft=120;
+const skillScores = {fill:[],size:[],rotation:[],count:[]};
+
+function renderQuestion() {
+  const q = questions[current];
+  answered = false;
+  document.getElementById('progressInfo').textContent = `Question ${current+1} of ${questions.length}`;
+  document.getElementById('progressFill').style.width = `${(current/questions.length)*100}%`;
+  document.getElementById('questionMeta').textContent = q.meta;
+  document.getElementById('hintText').textContent = q.hint;
+  document.getElementById('explanation').classList.remove('visible');
+  document.getElementById('nextBtn').style.display = 'none';
+  document.getElementById('skipBtn').style.display = 'inline-block';
+
+  const tagEl = document.getElementById('skillTag');
+  tagEl.innerHTML = `<span class="skill-tag ${q.tag}">${q.tagLabel}</span>`;
+
+  const grid = document.getElementById('matrixGrid');
+  grid.innerHTML = '';
+  q.grid.forEach(cell => {
+    const div = document.createElement('div');
+    div.className = 'cell' + (cell===null?' missing':'');
+    div.innerHTML = cell===null ? `<svg viewBox="0 0 64 64"><text x="32" y="40" text-anchor="middle" fill="${A}" font-size="28" font-family="monospace">?</text></svg>` : cell;
+    grid.appendChild(div);
+  });
+
+  const opts = document.getElementById('optionsGrid');
+  opts.innerHTML = '';
+  q.options.forEach((svg,i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.innerHTML = `${svg}<span class="option-label">${q.labels[i]}</span>`;
+    btn.onclick = () => selectAnswer(i, btn);
+    opts.appendChild(btn);
+  });
+
+  startTimer();
+}
+
+function selectAnswer(i, btn) {
+  if(answered) return;
+  answered=true; clearInterval(timer);
+  const q=questions[current];
+  const allBtns=document.querySelectorAll('.option-btn');
+  allBtns.forEach(b=>b.disabled=true);
+  const correct=i===q.answer;
+  if(correct) score++;
+  skillScores[q.type].push(correct?1:0);
+  results.push({q:current+1,correct,meta:q.meta,type:q.type});
+  btn.classList.add(correct?'correct':'wrong');
+  allBtns[q.answer].classList.add('correct');
+  const hdr=document.getElementById('explanationHeader');
+  hdr.textContent=correct?'✓ Correct':`✗ Wrong — Answer was ${q.labels[q.answer]}`;
+  hdr.className='explanation-header '+(correct?'correct':'wrong');
+  document.getElementById('explanationText').textContent=q.explanation;
+  document.getElementById('explanationRule').textContent=q.rule;
+  document.getElementById('strategyText').textContent=q.strategy;
+  document.getElementById('explanation').classList.add('visible');
+  document.getElementById('nextBtn').style.display='inline-block';
+  document.getElementById('skipBtn').style.display='none';
+}
+
+function skipQuestion() {
+  if(answered) return;
+  answered=true; clearInterval(timer);
+  const q=questions[current];
+  skillScores[q.type].push(0);
+  results.push({q:current+1,correct:false,meta:q.meta,type:q.type,skipped:true});
+  document.querySelectorAll('.option-btn').forEach(b=>{b.disabled=true;});
+  document.querySelectorAll('.option-btn')[q.answer].classList.add('correct');
+  const hdr=document.getElementById('explanationHeader');
+  hdr.textContent=`— Skipped — Answer was ${q.labels[q.answer]}`;
+  hdr.className='explanation-header wrong';
+  document.getElementById('explanationText').textContent=q.explanation;
+  document.getElementById('explanationRule').textContent=q.rule;
+  document.getElementById('strategyText').textContent=q.strategy;
+  document.getElementById('explanation').classList.add('visible');
+  document.getElementById('nextBtn').style.display='inline-block';
+  document.getElementById('skipBtn').style.display='none';
+}
+
+function nextQuestion() {
+  current++;
+  if(current>=questions.length) showScore();
+  else renderQuestion();
+}
+
+function startTimer() {
+  timeLeft=120; clearInterval(timer); updateTimerDisplay();
+  timer=setInterval(()=>{
+    timeLeft--;updateTimerDisplay();
+    if(timeLeft<=0){clearInterval(timer);if(!answered)skipQuestion();}
+  },1000);
+}
+
+function updateTimerDisplay() {
+  const m=Math.floor(timeLeft/60),s=timeLeft%60;
+  document.getElementById('timerText').textContent=`${m}:${s.toString().padStart(2,'0')} remaining`;
+  const fill=document.getElementById('timerFill');
+  fill.style.width=(timeLeft/120*100)+'%';
+  fill.classList.toggle('urgent',timeLeft<=30);
+}
+
+function showScore() {
+  clearInterval(timer);
+  document.getElementById('questionWrapper').classList.add('hidden');
+  document.getElementById('scoreScreen').classList.add('visible');
+  document.getElementById('progressFill').style.width='100%';
+  document.getElementById('timerText').textContent='';
+  document.getElementById('timerFill').style.width='0%';
+
+  const pct=Math.round((score/questions.length)*100);
+  document.getElementById('scoreBig').textContent=`${score}/${questions.length}`;
+  document.getElementById('scoreLabel').textContent=`${pct}% — ${pct>=80?'Strong improvement':'Keep drilling these pattern types'}`;
+
+  // Skill summary
+  const skillNames={fill:'Fill Alternation',size:'Size Progression',rotation:'Rotation',count:'Line / Count'};
+  const skillColors={fill:'#fbbf24',size:'#60a5fa',rotation:'#a78bfa',count:'#f87171'};
+  const skillSummary=document.getElementById('skillSummary');
+  skillSummary.innerHTML='<div style="font-family:\'IBM Plex Mono\',monospace;font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:1rem">Skill breakdown</div>';
+  for(const [key,arr] of Object.entries(skillScores)) {
+    if(!arr.length) continue;
+    const pct=Math.round((arr.reduce((a,b)=>a+b,0)/arr.length)*100);
+    const div=document.createElement('div');
+    div.className='skill-row';
+    div.innerHTML=`<span class="skill-name">${skillNames[key]}</span><div class="skill-bar-wrap"><div class="skill-bar" style="width:${pct}%;background:${skillColors[key]}"></div></div><span class="skill-score">${pct}%</span>`;
+    skillSummary.appendChild(div);
+  }
+
+  document.getElementById('scoreBreakdown').innerHTML=results.map(r=>`
+    <div class="score-row">
+      <span>Q${r.q} · ${r.meta}</span>
+      <span style="color:${r.correct?'var(--correct)':'var(--wrong)'}">${r.skipped?'Skipped':r.correct?'Correct':'Wrong'}</span>
+    </div>`).join('');
+}
+
+function restartQuiz() {
+  current=0;score=0;answered=false;results=[];
+  Object.keys(skillScores).forEach(k=>skillScores[k]=[]);
+  document.getElementById('questionWrapper').classList.remove('hidden');
+  document.getElementById('scoreScreen').classList.remove('visible');
+  renderQuestion();
+}
+
+renderQuestion();
+</script>
+</body>
+</html>

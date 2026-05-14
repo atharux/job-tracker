@@ -38,3 +38,4 @@ coverage/
 .nyc_output/
 node_modules/
 dist/
+.DS_Store
