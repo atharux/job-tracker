@@ -91,8 +91,8 @@ function downloadTXT(content, filename) {
   URL.revokeObjectURL(url);
 }
 
-function downloadPDF(content, filename) {
-  generateProfessionalPDF(content, filename);
+function downloadPDF(content, filename, type = 'resume') {
+  generateProfessionalPDF(content, filename, type);
 }
 
 // ─── STEP INDICATORS ─────────────────────────────────────────────────────────
@@ -1289,7 +1289,7 @@ Rules:
                       </button>
                       <button
                         className="ra-btn ra-btn--ghost"
-                        onClick={() => downloadPDF(finalCLContent, `${clVersionName || 'cover-letter'}.pdf`)}
+                        onClick={() => downloadPDF(finalCLContent, `${clVersionName || 'cover-letter'}.pdf`, 'coverletter')}
                       >
                         <Download size={15} /> PDF
                       </button>

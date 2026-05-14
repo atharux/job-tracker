@@ -1965,6 +1965,27 @@ export default function App() {
                 />
               </div>
 
+              {/* NEW: Interview Date */}
+              <div className="form-group">
+                <label>Interview Date</label>
+                <input
+                  type="date"
+                  value={formData.interview_date || ''}
+                  onChange={(e) => setFormData({ ...formData, interview_date: e.target.value })}
+                />
+              </div>
+
+              {/* NEW: Job Posting URL */}
+              <div className="form-group">
+                <label>Job Posting URL</label>
+                <input
+                  type="url"
+                  value={formData.job_posting_url || ''}
+                  onChange={(e) => setFormData({ ...formData, job_posting_url: e.target.value })}
+                  placeholder="https://company.com/careers/job-id"
+                />
+              </div>
+
               <div className="form-group">
                 <label>Contact Person</label>
                 <input
