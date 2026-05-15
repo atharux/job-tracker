@@ -1552,13 +1552,13 @@ export default function App() {
               >
                 <HelpCircle size={16} />
               </button>
-              <button
+              {/* <button
                 onClick={() => setShowApiSettings(true)}
                 className="btn-header-action"
                 title="Configure API keys (optional)"
               >
                 <Settings size={16} />
-              </button>
+              </button> */}
               <button
                 onClick={() => setHighContrast(v => !v)}
                 className="btn-header-action"
