@@ -395,7 +395,20 @@ const [model, setModel] = useState("openrouter/free");
           </div>
         )}
       </div>
+<div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm backdrop-blur">
+  <p className="opacity-80">
+    AI features require an OpenRouter API key.
+  </p>
 
+  <a
+    href="https://openrouter.ai/keys"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="mt-2 inline-flex items-center gap-2 font-medium underline underline-offset-4 opacity-90 hover:opacity-100"
+  >
+    Get a free OpenRouter key →
+  </a>
+</div>
      {/* Model Selector + API Key */}
 <div
   style={{

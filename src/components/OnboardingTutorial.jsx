@@ -26,8 +26,14 @@ export default function OnboardingTutorial({ onComplete }) {
     },
     {
       icon: Wand2,
-      title: 'AI Resume Assembly',
-      description: 'Paste a job description and let AI customize your resume to match. Powered by Groq (free & fast) or Claude.',
+      title: 'ResumeAIAssistant',
+      description: 'Ten AI Assisted tools to help with CV and Interview readiness, powered with Open Router',
+      color: '#f59e0b'
+    },
+    {
+      icon: Wand2,
+      title: 'Logic Prep',
+      description: 'Logic Test Simulator 20 questions · 2 minutes per question · Full result analysis',
       color: '#f59e0b'
     },
     {
