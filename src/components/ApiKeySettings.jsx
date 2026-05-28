@@ -2,22 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { X, Key, ExternalLink, Save, Eye, EyeOff } from 'lucide-react';
 
 export default function ApiKeySettings({ isOpen, onClose }) {
+  const [openRouterKey, setOpenRouterKey] = useState('');
   const [groqKey, setGroqKey] = useState('');
   const [claudeKey, setClaudeKey] = useState('');
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [showClaudeKey, setShowClaudeKey] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    // Load keys from localStorage
-    const savedGroqKey = localStorage.getItem('groq_api_key') || '';
-    const savedClaudeKey = localStorage.getItem('anthropic_api_key') || '';
-    setGroqKey(savedGroqKey);
-    setClaudeKey(savedClaudeKey);
+    setOpenRouterKey(localStorage.getItem('openrouter_api_key') || '');
+    setGroqKey(localStorage.getItem('groq_api_key') || '');
+    setClaudeKey(localStorage.getItem('anthropic_api_key') || '');
   }, [isOpen]);
 
   const handleSave = () => {
-    // Save to localStorage
+    if (openRouterKey.trim()) {
+      localStorage.setItem('openrouter_api_key', openRouterKey.trim());
+    } else {
+      localStorage.removeItem('openrouter_api_key');
+    }
+
     if (groqKey.trim()) {
       localStorage.setItem('groq_api_key', groqKey.trim());
     } else {
@@ -286,6 +291,40 @@ export default function ApiKeySettings({ isOpen, onClose }) {
 
         <div className="api-settings-description">
           <strong>Optional:</strong> Add your own API keys to use AI features. Keys are stored locally in your browser and never sent to our servers. Groq offers 50 free credits per month!
+        </div>
+
+        {/* OpenRouter API Key */}
+        <div className="api-settings-section">
+          <div className="api-settings-label">
+            <span>OpenRouter API Key (Required for Agents)</span>
+            <a
+              href="https://openrouter.ai/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="api-settings-link"
+            >
+              Get Key <ExternalLink size={12} />
+            </a>
+          </div>
+          <div className="api-settings-input-wrapper">
+            <input
+              type={showOpenRouterKey ? 'text' : 'password'}
+              className="api-settings-input"
+              placeholder="sk-or-..."
+              value={openRouterKey}
+              onChange={(e) => setOpenRouterKey(e.target.value)}
+            />
+            <button
+              className="api-settings-toggle"
+              onClick={() => setShowOpenRouterKey(!showOpenRouterKey)}
+              type="button"
+            >
+              {showOpenRouterKey ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <div className="api-settings-hint">
+            Required for Scout &amp; all AI agents • Free credits available • Supports 200+ models
+          </div>
         </div>
 
         {/* Groq API Key */}

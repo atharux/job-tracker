@@ -48,7 +48,7 @@ This becomes the intelligence layer of Forge.
 
 This is scalable and professional.
 
-WHY THIS IS BETTER
+sWHY THIS IS BETTER
 
 Right now:
 

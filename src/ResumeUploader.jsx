@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-<<<<<<< HEAD
 import { Upload, FileText, Loader, AlertCircle, CheckCircle } from 'lucide-react';
 import { extractTextFromFile, parseResumeText } from '../utils/smartResumeParser';
 
@@ -11,17 +10,6 @@ export default function ResumeUploader({ onResumeProcessed, isProcessing, setIsP
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-=======
-import { Upload, FileText, Loader } from 'lucide-react';
-
-// NOTE: This component expects you to provide a secure backend
-// endpoint that calls your AI provider (e.g. Claude) with an API key.
-// The current implementation calls the Anthropics API directly and
-// MUST be updated to route through your own serverless function.
-
-export default function ResumeUploader({ onResumeProcessed, isProcessing, setIsProcessing }) {
-  const [dragActive, setDragActive] = useState(false);
->>>>>>> 5df3dea574210052156d98133a081a630a7c5efb
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -50,20 +38,15 @@ export default function ResumeUploader({ onResumeProcessed, isProcessing, setIsP
     }
   };
 
-<<<<<<< HEAD
   /**
    * Validate file type and size
    */
   const validateFile = (file) => {
-=======
-  const handleFile = async (file) => {
->>>>>>> 5df3dea574210052156d98133a081a630a7c5efb
     const validTypes = [
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/plain'
     ];
-<<<<<<< HEAD
     
     const validExtensions = ['.pdf', '.docx', '.txt'];
     const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
@@ -97,22 +80,12 @@ export default function ResumeUploader({ onResumeProcessed, isProcessing, setIsP
     const validation = validateFile(file);
     if (!validation.valid) {
       setError(validation.error);
-=======
-    if (!validTypes.includes(file.type)) {
-      alert('Please upload a PDF, DOCX, or TXT file');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File too large. Maximum size is 5MB.');
->>>>>>> 5df3dea574210052156d98133a081a630a7c5efb
       return;
     }
 
     setIsProcessing(true);
 
     try {
-<<<<<<< HEAD
       // Extract text content
       const text = await extractTextFromFile(file);
       
@@ -165,97 +138,11 @@ export default function ResumeUploader({ onResumeProcessed, isProcessing, setIsP
       console.error('File processing error:', error);
       setError(error.message || 'Failed to process file. Please try again.');
     } finally {
-=======
-      const reader = new FileReader();
-      
-      reader.onload = async (e) => {
-        const content = e.target.result;
-        
-        // TODO: Replace this direct API call with your own backend endpoint.
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            // 'x-api-key': 'YOUR_API_KEY_HERE' // move to backend!
-          },
-          body: JSON.stringify({
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 4000,
-            messages: [
-              {
-                role: 'user',
-                content: `Analyze this resume and break it into modular sections. Return ONLY valid JSON with this exact structure:
-
-{
-  "summary": "Professional summary text",
-  "experience": [
-    {
-      "company": "Company Name",
-      "position": "Job Title",
-      "duration": "Start - End",
-      "achievements": ["Achievement 1", "Achievement 2"]
-    }
-  ],
-  "skills": {
-    "technical": ["skill1", "skill2"],
-    "soft": ["skill1", "skill2"]
-  },
-  "education": [
-    {
-      "institution": "School Name",
-      "degree": "Degree",
-      "year": "Year"
-    }
-  ],
-  "certifications": ["cert1", "cert2"]
-}
-
-Resume content:
-${String(content).substring(0, 10000)}`
-              }
-            ]
-          })
-        });
-
-        const data = await response.json();
-        const moduleText = data?.content?.[0]?.text || '';
-        
-        let jsonText = moduleText;
-        if (moduleText.includes('```json')) {
-          jsonText = moduleText.split('```json')[1].split('```')[0].trim();
-        } else if (moduleText.includes('```')) {
-          jsonText = moduleText.split('```')[1].split('```')[0].trim();
-        }
-        
-        const modules = JSON.parse(jsonText);
-        
-        onResumeProcessed({
-          filename: file.name,
-          base_content: content,
-          modules
-        });
-      };
-
-      reader.onerror = () => {
-        alert('Failed to read file');
-        setIsProcessing(false);
-      };
-
-      if (file.type === 'application/pdf') {
-        reader.readAsDataURL(file);
-      } else {
-        reader.readAsText(file);
-      }
-    } catch (error) {
-      console.error('Resume processing error:', error);
-      alert('Failed to process resume. Please try again.');
->>>>>>> 5df3dea574210052156d98133a081a630a7c5efb
       setIsProcessing(false);
     }
   };
 
   return (
-<<<<<<< HEAD
     <div className="resume-uploader-container">
       <div
         className={`resume-uploader ${dragActive ? 'drag-active' : ''} ${error ? 'has-error' : ''} ${success ? 'has-success' : ''}`}
@@ -312,40 +199,3 @@ ${String(content).substring(0, 10000)}`
     </div>
   );
 }
-=======
-    <div
-      className={`resume-uploader ${dragActive ? 'drag-active' : ''}`}
-      onDragEnter={handleDrag}
-      onDragLeave={handleDrag}
-      onDragOver={handleDrag}
-      onDrop={handleDrop}
-    >
-      <input
-        type="file"
-        id="resume-upload"
-        accept=".pdf,.docx,.txt"
-        onChange={handleChange}
-        disabled={isProcessing}
-        style={{ display: 'none' }}
-      />
-      
-      <label htmlFor="resume-upload" className="upload-label">
-        {isProcessing ? (
-          <>
-            <Loader className="upload-icon spinning" size={48} />
-            <p className="upload-text">Processing resume...</p>
-            <p className="upload-subtext">AI is analyzing and modularizing your content</p>
-          </>
-        ) : (
-          <>
-            <FileText className="upload-icon" size={48} />
-            <p className="upload-text">Drop resume here or click to upload</p>
-            <p className="upload-subtext">Supports PDF, DOCX, TXT (max 5MB)</p>
-          </>
-        )}
-      </label>
-    </div>
-  );
-}
-
->>>>>>> 5df3dea574210052156d98133a081a630a7c5efb

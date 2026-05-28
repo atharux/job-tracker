@@ -1,0 +1,22 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "job-tracker-browser-worker",
+  "main": "browser-worker.js",
+  "compatibility_date": "2025-05-27",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Browser Rendering — always remote (no local simulation)
+  "browser": {
+    "binding": "BROWSER"
+  },
+
+  // Secrets (set via: wrangler secret put WORKER_SECRET)
+  // ANTHROPIC_API_KEY — used for AI field mapping
+  // SUPABASE_URL      — for screenshot uploads
+  // SUPABASE_SERVICE_KEY — for screenshot uploads (service role, bypasses RLS)
+  // WORKER_SECRET     — shared secret the React app must send in X-Worker-Secret header
+
+  "observability": {
+    "enabled": true
+  }
+}

@@ -163,12 +163,12 @@
 .milestone-toast.tier-rank-up {
   animation: milestone-rank-up 4s ease-out forwards,
              milestone-rank-up-glow 4s ease-in-out;
-  border-color: #00d9ff;
+  border-color: #06b6d4;
   background: linear-gradient(135deg, rgba(0, 217, 255, 0.2), rgba(10, 14, 26, 0.95));
 }
 
 .milestone-toast.tier-rank-up::before {
-  background: linear-gradient(90deg, transparent, #00d9ff, #8b5cf6, #ff006e, transparent);
+  background: linear-gradient(90deg, transparent, #06b6d4, #8b5cf6, #ef4444, transparent);
   animation: border-flow 2s linear infinite;
 }
 
@@ -197,7 +197,7 @@
   margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-family: 'Space Mono', 'Courier New', monospace;
   text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
 }
 
@@ -231,7 +231,7 @@
   position: absolute;
   width: 8px;
   height: 8px;
-  background: linear-gradient(135deg, #00d9ff, #8b5cf6);
+  background: linear-gradient(135deg, #06b6d4, #8b5cf6);
   border-radius: 50%;
   animation: milestone-rank-up-particles 1.5s ease-out forwards;
   box-shadow: 0 0 10px rgba(0, 217, 255, 0.8);
@@ -251,7 +251,7 @@
 
 .rank-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #00d9ff, #8b5cf6, #ff006e);
+  background: linear-gradient(90deg, #06b6d4, #8b5cf6, #ef4444);
   background-size: 200% 100%;
   border-radius: 999px;
   animation: rank-progress-fill 1s ease-out forwards, progress-shimmer 2s linear infinite;
@@ -269,9 +269,9 @@
   align-items: center;
   gap: 0.25rem;
   font-size: 0.875rem;
-  color: #ff006e;
+  color: #ef4444;
   font-weight: 700;
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-family: 'Space Mono', 'Courier New', monospace;
   text-shadow: 0 0 10px rgba(255, 0, 110, 0.5);
 }
 

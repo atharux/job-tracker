@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── SVG Shape Helpers ────────────────────────────────────────────────────────
-const A = "#00d9ff";
-const FILL = "#00d9ff";
+const A = "#06b6d4";
+const FILL = "#06b6d4";
 const NONE = "none";
 
 function circle(fill = NONE, stroke = A, r = 22) {
@@ -114,10 +114,10 @@ const QUESTIONS = [
 ];
 
 const TYPE_LABELS = { fill:"Fill Alternation", size:"Size Progression", rotation:"Rotation", count:"Line / Count" };
-const TYPE_COLORS = { fill:"#fbbf24", size:"#00d9ff", rotation:"#8b5cf6", count:"#ff006e" };
-const DIFF_COLORS = { easy:"#4ade80", medium:"#fbbf24", hard:"#ff006e" };
+const TYPE_COLORS = { fill:"#fbbf24", size:"#00d9ff", rotation:"#8b5cf6", count:"#f97316" };
+const DIFF_COLORS = { easy:"#4ade80", medium:"#fbbf24", hard:"#ef4444" };
 const TOTAL_TIME = 120;
-const MONO = "'JetBrains Mono','Courier New',monospace";
+const MONO = "'Space Mono','Courier New',monospace";
 
 export default function AlvaPrepModule() {
   const [phase, setPhase] = useState("intro");
@@ -196,7 +196,7 @@ export default function AlvaPrepModule() {
       <div style={{ marginBottom:"28px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"6px" }}>
           <div style={{ width:"8px", height:"32px", background:"linear-gradient(180deg,#00d9ff 0%,#8b5cf6 100%)", borderRadius:"2px", animation:"accentGlow 3s ease-in-out infinite", flexShrink:0 }} />
-          <h1 style={{ fontFamily:MONO, fontSize:"18px", fontWeight:800, margin:0, color:"#fff", textTransform:"uppercase", letterSpacing:"0.1em", textShadow:"0 0 20px rgba(0,217,255,0.3)" }}>Logic Test Simulator</h1>
+          <h1 style={{ fontFamily:"'Syne', sans-serif", fontSize:"1rem", fontWeight:700, margin:0, color:"#e2e8f0", textTransform:"uppercase" }}>Logic Test Simulator</h1>
         </div>
         <p style={{ color:"rgba(148,163,184,0.7)", fontSize:"13px", margin:"0 0 0 20px", paddingLeft:"20px" }}>20 questions · 2 minutes per question · Full result analysis</p>
       </div>
@@ -254,7 +254,7 @@ export default function AlvaPrepModule() {
         <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"24px" }}>
           <div style={{ width:"8px", height:"32px", background:"linear-gradient(180deg,#00d9ff 0%,#8b5cf6 100%)", borderRadius:"2px", animation:"accentGlow 3s ease-in-out infinite", flexShrink:0 }} />
           <div>
-            <h1 style={{ fontFamily:MONO, fontSize:"16px", fontWeight:800, margin:0, color:"#fff", textTransform:"uppercase", letterSpacing:"0.1em" }}>Test Complete</h1>
+            <h1 style={{ fontFamily:"'Syne', sans-serif", fontSize:"1rem", fontWeight:700, margin:0, color:"#e2e8f0", textTransform:"uppercase" }}>Test Complete</h1>
             <p style={{ color:"rgba(148,163,184,0.6)", fontSize:"12px", margin:0 }}>Full result analysis</p>
           </div>
         </div>

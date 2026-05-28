@@ -18,6 +18,7 @@
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Trash2, Plus, Edit2, X, Check, Download, LogOut, Upload,
   FileText, HelpCircle, Settings, Search, ExternalLink,
@@ -252,7 +253,7 @@ function AnalyticsView({ applications }) {
       ) / interviewApps.length);
   return (
     <section aria-label="Analytics" className="analytics">
-      <h2><BarChart3 size={20} aria-hidden="true" /> Analytics</h2>
+      <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase', margin: '0 0 1rem' }}>Analytics</h2>
       <div className="analytics-grid">
         <div className="analytics-card"><p className="stat-label">Total Applications</p><p className="stat-value">{total}</p></div>
         <div className="analytics-card"><p className="stat-label">Response Rate</p><p className="stat-value">{responseRate}%</p><p className="stat-sub">{responses} of {total}</p></div>
@@ -1300,7 +1301,7 @@ export default function App() {
 
         <div className="auth-card">
           <div className="auth-header">
-            <h1 className="auth-title" style={{ fontSize: '1.2rem' }}>Forge</h1>
+            <h1 className="auth-title">Forge</h1>
             <p className="auth-subtitle">Track your job applications with style</p>
           </div>
 
@@ -1497,7 +1498,7 @@ export default function App() {
           <div className="header-row mb-4">
             <div className="header-title-group">
               <div className="header-accent"></div>
-              <h1 className="text-3xl font-bold text-slate-50" style={{ fontSize: '1.2rem' }}>Forge</h1>
+              <h1 className="text-3xl font-bold text-slate-50" style={{ fontFamily: 'Syne, sans-serif', fontSize: '1.1rem', fontWeight: 800, letterSpacing: '0.02em' }}>Forge</h1>
             </div>
             <div className="header-actions">
               <span className="text-slate-400 text-sm">{user.email}</span>
@@ -1552,13 +1553,13 @@ export default function App() {
               >
                 <HelpCircle size={16} />
               </button>
-              {/* <button
+              <button
                 onClick={() => setShowApiSettings(true)}
                 className="btn-header-action"
-                title="Configure API keys (optional)"
+                title="Configure API keys"
               >
                 <Settings size={16} />
-              </button> */}
+              </button>
               <button
                 onClick={() => setHighContrast(v => !v)}
                 className="btn-header-action"
@@ -1574,6 +1575,14 @@ export default function App() {
               >
                 {theme === 'dark' ? '☀️' : '🌙'}
               </button>
+              <Link
+                to="/review-queue"
+                className="btn-header-action"
+                title="AI Review Queue"
+                style={{ textDecoration: 'none' }}
+              >
+                Review Queue
+              </Link>
               <button
                 onClick={handleLogout}
                 className="btn-header-action"
@@ -1751,25 +1760,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Table or Kanban */}
-            {tableView === 'kanban' ? (
-              <KanbanBoard
-                applications={filteredApplications}
-                onEdit={handleEdit}
-                onChangeStatus={async (app, newStatus) => {
-                  if (app.status === newStatus) return;
-                  setIsSyncing(true);
-                  try {
-                    await supabase.from('applications').update({ status: newStatus }).eq('id', app.id);
-                    await logEvent(app.id, { event_type: 'status_change', from_status: app.status, to_status: newStatus, message: `Moved to ${newStatus}` });
-                    announce(`${app.company} moved to ${newStatus}`);
-                    await loadApplications();
-                  } finally { setIsSyncing(false); }
-                }}
-              />
-            ) : null}
-            
-
             {/* Smart Search */}
             <div className="smart-search">
               <Search size={16} style={{ opacity: 0.6, flexShrink: 0 }} aria-hidden="true" />
@@ -1944,7 +1934,6 @@ export default function App() {
                 />
               </div>
 
-              {/* NEW: Interview Date */}
               <div className="form-group">
                 <label>Interview Date</label>
                 <input
@@ -1954,28 +1943,6 @@ export default function App() {
                 />
               </div>
 
-              {/* NEW: Job Posting URL */}
-              <div className="form-group">
-                <label>Job Posting URL</label>
-                <input
-                  type="url"
-                  value={formData.job_posting_url || ''}
-                  onChange={(e) => setFormData({ ...formData, job_posting_url: e.target.value })}
-                  placeholder="https://company.com/careers/job-id"
-                />
-              </div>
-
-              {/* NEW: Interview Date */}
-              <div className="form-group">
-                <label>Interview Date</label>
-                <input
-                  type="date"
-                  value={formData.interview_date || ''}
-                  onChange={(e) => setFormData({ ...formData, interview_date: e.target.value })}
-                />
-              </div>
-
-              {/* NEW: Job Posting URL */}
               <div className="form-group">
                 <label>Job Posting URL</label>
                 <input

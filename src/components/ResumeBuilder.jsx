@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, Download, Copy } from 'lucide-react';
+import { Plus, FileText, Download, Copy, Eye, EyeOff } from 'lucide-react';
 import ResumeUploader from './ResumeUploader';
 import ModuleLibrary from './ModuleLibrary';
 import ModuleEditor from './ModuleEditor';
 import VersionManager from './VersionManager';
+import ResumeVersionPreview from './ResumeVersionPreview';
 import { 
   fetchResumeVersions, 
   fetchResumeModules, 
@@ -26,6 +27,7 @@ export default function ResumeBuilder({ user }) {
   const [versions, setVersions] = useState([]);
   const [selectedModule, setSelectedModule] = useState(null);
   const [selectedVersion, setSelectedVersion] = useState(null);
+  const [previewVersion, setPreviewVersion] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -335,6 +337,14 @@ export default function ResumeBuilder({ user }) {
                 </div>
                 <div className="version-actions">
                   <button
+                    onClick={() => setPreviewVersion(previewVersion?.id === version.id ? null : version)}
+                    className="btn-icon"
+                    title={previewVersion?.id === version.id ? 'Close preview' : 'Preview document'}
+                    style={{ color: previewVersion?.id === version.id ? '#06b6d4' : undefined }}
+                  >
+                    {previewVersion?.id === version.id ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                  <button
                     onClick={() => {
                       setSelectedVersion(version);
                       setView('manage-version');
@@ -370,6 +380,16 @@ export default function ResumeBuilder({ user }) {
           >
             <Plus size={16} /> New Version
           </button>
+        </div>
+      )}
+
+      {/* Document Preview */}
+      {previewVersion && (
+        <div style={{ marginTop: '1.5rem', maxHeight: '80vh' }}>
+          <ResumeVersionPreview
+            version={previewVersion}
+            onClose={() => setPreviewVersion(null)}
+          />
         </div>
       )}
     </div>

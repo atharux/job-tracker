@@ -76,7 +76,7 @@ const ResumeAppAI = () => {
 
   return (
     <div>
-      <h1>AI-Assisted Resume Application</h1>
+      <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase', margin: '0 0 1rem' }}>AI-Assisted Resume Application</h1>
       <form onSubmit={(e) => e.preventDefault()}>
         <label>Name:</label>
         <input type="text" name="name" value={resumeData.name} onChange={handleChange} required />

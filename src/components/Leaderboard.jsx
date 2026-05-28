@@ -129,7 +129,7 @@ export default function Leaderboard({ currentUserId }) {
 
   return (
     <div className="leaderboard-container">
-      <h2 className="leaderboard-title">🏆 Leaderboard</h2>
+      <h2 className="leaderboard-title">Leaderboard</h2>
       <div className="leaderboard-list">
         {leaderboardData.map(entry => (
           <div 
