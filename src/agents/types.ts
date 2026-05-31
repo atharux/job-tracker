@@ -5,7 +5,9 @@ export interface ScoutResult {
   company: string
   location: string
   url: string
-  source: 'linkedin' | 'greenhouse' | 'lever' | 'remotive' | 'relocate' | 'arbeitnow' | 'germantechjobs' | 'euremotejobs' | 'smartrecruiters' | 'recruitee'
+  source: 'linkedin' | 'greenhouse' | 'lever' | 'remotive' | 'relocate' | 'arbeitnow'
+    | 'germantechjobs' | 'euremotejobs' | 'smartrecruiters' | 'recruitee'
+    | 'himalayas' | 'wttj' | 'thehub' | 'workable' | 'personio' | 'ashby'
   raw_jd: string
   scraped_at: string
 }

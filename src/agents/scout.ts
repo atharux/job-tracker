@@ -1,9 +1,22 @@
 import type { ScoutResult } from './types'
 
+// ── Role matching ──────────────────────────────────────────────────────────────
+// Expanded keyword set covering all three CV tracks (ux / pm / devrel)
+
 const ROLE_KEYWORDS = [
-  'ux engineer', 'ux designer', 'product designer', 'ui/ux',
-  'product manager', 'developer relations', 'devrel', 'developer advocate',
-  'interaction designer', 'experience designer', 'ui designer',
+  // UX / Design
+  'ux engineer', 'ux designer', 'product designer', 'ui/ux', 'ui designer',
+  'interaction designer', 'experience designer', 'design engineer',
+  'frontend designer', 'design systems', 'figma',
+  // Product
+  'product manager', 'product owner', 'senior pm', 'lead pm',
+  'head of product', 'director of product',
+  // DevRel / Community
+  'developer relations', 'devrel', 'developer advocate', 'developer experience',
+  'dx engineer', 'community manager', 'technical evangelist',
+  'platform evangelist', 'solutions engineer',
+  // AI / Tooling (adjacent roles Athar is qualified for)
+  'ai product manager', 'ai ux', 'conversational designer',
 ]
 
 function matchesRole(text: string): boolean {
@@ -15,8 +28,40 @@ function now(): string {
   return new Date().toISOString()
 }
 
+function safeDate(raw: string): string {
+  try {
+    return raw ? new Date(raw).toISOString() : now()
+  } catch {
+    return now()
+  }
+}
+
+// ── RSS helper ─────────────────────────────────────────────────────────────────
+
+interface RssItem {
+  title: string
+  link: string
+  description: string
+  pubDate: string
+}
+
+function parseRss(xml: string): RssItem[] {
+  const doc = new DOMParser().parseFromString(xml, 'text/xml')
+  return Array.from(doc.querySelectorAll('item')).map(item => ({
+    title: item.querySelector('title')?.textContent?.trim() ?? '',
+    link:
+      item.querySelector('link')?.textContent?.trim() ||
+      item.getElementsByTagName('link')[0]?.textContent?.trim() ||
+      '',
+    description: item.querySelector('description')?.textContent?.trim() ?? '',
+    pubDate: item.querySelector('pubDate')?.textContent?.trim() ?? '',
+  }))
+}
+
 // ── Arbeitnow REST API ─────────────────────────────────────────────────────────
 // https://www.arbeitnow.com/api/job-board-api — free, no key, CORS-enabled
+// FIX: removed early-exit on empty page — a page with no matches doesn't mean
+// subsequent pages won't have any. Only stop on HTTP error or empty data array.
 
 interface ArbeitnowJob {
   title: string
@@ -26,19 +71,20 @@ interface ArbeitnowJob {
   description: string
   tags: string[]
   remote: boolean
+  created_at?: string
 }
 
 async function fetchArbeitnow(): Promise<ScoutResult[]> {
   const results: ScoutResult[] = []
 
-  for (let page = 1; page <= 4; page++) {
+  for (let page = 1; page <= 6; page++) {
     const res = await fetch(`https://www.arbeitnow.com/api/job-board-api?page=${page}`)
     if (!res.ok) break
     const data = await res.json() as { data: ArbeitnowJob[] }
+    if (!data.data?.length) break  // genuinely empty page — stop
     const matching = data.data.filter(
       j => matchesRole(j.title) || matchesRole((j.tags ?? []).join(' '))
     )
-    if (matching.length === 0) break
     results.push(
       ...matching.map(j => ({
         title: j.title,
@@ -47,7 +93,7 @@ async function fetchArbeitnow(): Promise<ScoutResult[]> {
         url: j.url,
         source: 'arbeitnow' as const,
         raw_jd: j.description,
-        scraped_at: now(),
+        scraped_at: safeDate(j.created_at ?? ''),
       }))
     )
   }
@@ -68,13 +114,13 @@ interface RemotiveJob {
 }
 
 async function fetchRemotive(): Promise<ScoutResult[]> {
-  const categories = ['Design', 'Product', 'Marketing']
+  const categories = ['Design', 'Product', 'Marketing', 'Software Development']
   const results: ScoutResult[] = []
 
   await Promise.allSettled(
     categories.map(async category => {
       const res = await fetch(
-        `https://remotive.com/api/remote-jobs?category=${encodeURIComponent(category)}&limit=50`
+        `https://remotive.com/api/remote-jobs?category=${encodeURIComponent(category)}&limit=100`
       )
       if (!res.ok) return
       const data = await res.json() as { jobs: RemotiveJob[] }
@@ -96,39 +142,7 @@ async function fetchRemotive(): Promise<ScoutResult[]> {
   return results
 }
 
-// ── RSS helper ─────────────────────────────────────────────────────────────────
-
-interface RssItem {
-  title: string
-  link: string
-  description: string
-  pubDate: string
-}
-
-function parseRss(xml: string): RssItem[] {
-  const doc = new DOMParser().parseFromString(xml, 'text/xml')
-  return Array.from(doc.querySelectorAll('item')).map(item => ({
-    title: item.querySelector('title')?.textContent?.trim() ?? '',
-    // <link> in RSS is a text node sibling of the element, not a child
-    link:
-      item.querySelector('link')?.textContent?.trim() ||
-      item.getElementsByTagName('link')[0]?.textContent?.trim() ||
-      '',
-    description: item.querySelector('description')?.textContent?.trim() ?? '',
-    pubDate: item.querySelector('pubDate')?.textContent?.trim() ?? '',
-  }))
-}
-
-function safeDate(raw: string): string {
-  try {
-    return raw ? new Date(raw).toISOString() : now()
-  } catch {
-    return now()
-  }
-}
-
 // ── GermanTechJobs RSS ─────────────────────────────────────────────────────────
-// Format: "Role @ Company [salary range]"
 
 function parseGTJTitle(raw: string): { role: string; company: string } {
   const match = raw.match(/^(.+?)\s+@\s+(.+?)(?:\s+\[.+\])?$/)
@@ -176,9 +190,282 @@ async function fetchEURemoteJobs(): Promise<ScoutResult[]> {
     }))
 }
 
+// ── Himalayas RSS ──────────────────────────────────────────────────────────────
+// https://himalayas.app — quality remote-first job board, CORS-enabled RSS
+
+async function fetchHimalayas(): Promise<ScoutResult[]> {
+  // Fetch per-category RSS feeds
+  const feeds = [
+    'https://himalayas.app/jobs/categories/design/feed',
+    'https://himalayas.app/jobs/categories/product/feed',
+    'https://himalayas.app/jobs/categories/developer-relations/feed',
+  ]
+  const results: ScoutResult[] = []
+
+  await Promise.allSettled(
+    feeds.map(async feedUrl => {
+      const res = await fetch(feedUrl)
+      if (!res.ok) return
+      const xml = await res.text()
+      const matching = parseRss(xml).filter(item => matchesRole(item.title))
+      results.push(
+        ...matching.map(item => ({
+          title: item.title,
+          company: '',
+          location: 'Remote',
+          url: item.link,
+          source: 'himalayas' as const,
+          raw_jd: item.description,
+          scraped_at: safeDate(item.pubDate),
+        }))
+      )
+    })
+  )
+
+  return results
+}
+
+// ── Welcome to the Jungle (Otta) RSS ──────────────────────────────────────────
+// https://www.welcometothejungle.com — major EU job board with RSS per category
+
+async function fetchWelcomeToTheJungle(): Promise<ScoutResult[]> {
+  // WTTJ provides RSS per job category tag
+  const feeds = [
+    'https://www.welcometothejungle.com/en/jobs.rss?refinementList%5Bjob_category.en%5D%5B0%5D=Design',
+    'https://www.welcometothejungle.com/en/jobs.rss?refinementList%5Bjob_category.en%5D%5B0%5D=Product',
+  ]
+  const results: ScoutResult[] = []
+
+  await Promise.allSettled(
+    feeds.map(async feedUrl => {
+      const res = await fetch(feedUrl)
+      if (!res.ok) return
+      const xml = await res.text()
+      const matching = parseRss(xml).filter(item => matchesRole(item.title))
+      results.push(
+        ...matching.map(item => ({
+          title: item.title,
+          company: '',
+          location: 'Europe',
+          url: item.link,
+          source: 'wttj' as const,
+          raw_jd: item.description,
+          scraped_at: safeDate(item.pubDate),
+        }))
+      )
+    })
+  )
+
+  return results
+}
+
+// ── The Hub (thehub.io) ────────────────────────────────────────────────────────
+// Nordic + Berlin tech startup job board — free JSON API, CORS-enabled
+
+interface HubJob {
+  id: number
+  title: string
+  company: { name: string }
+  locations: Array<{ city: string; country: string }>
+  url: string
+  description: string
+  createdAt: string
+}
+
+async function fetchTheHub(): Promise<ScoutResult[]> {
+  // The Hub public search API — returns JSON
+  const keywords = ['ux designer', 'product manager', 'developer relations', 'ux engineer']
+  const results: ScoutResult[] = []
+  const seen = new Set<string>()
+
+  await Promise.allSettled(
+    keywords.map(async kw => {
+      const res = await fetch(
+        `https://thehub.io/api/v1/jobs?query=${encodeURIComponent(kw)}&limit=50`
+      )
+      if (!res.ok) return
+      const data = await res.json() as { jobs?: HubJob[] }
+      for (const job of data.jobs ?? []) {
+        if (seen.has(String(job.id)) || !matchesRole(job.title)) continue
+        seen.add(String(job.id))
+        const loc = job.locations?.[0]
+        results.push({
+          title: job.title,
+          company: job.company?.name ?? '',
+          location: loc ? `${loc.city}, ${loc.country}` : 'Unknown',
+          url: job.url ?? `https://thehub.io/jobs/${job.id}`,
+          source: 'thehub' as const,
+          raw_jd: job.description ?? '',
+          scraped_at: safeDate(job.createdAt),
+        })
+      }
+    })
+  )
+
+  return results
+}
+
+// ── Workable ───────────────────────────────────────────────────────────────────
+// Many Berlin/EU startups use Workable. Public board shortlinks resolve to
+// jobs.workable.com/<slug> — we list target companies with known slugs.
+// To add a company: find their Workable URL and extract the slug.
+
+interface WorkableJob {
+  id: string
+  title: string
+  full_title: string
+  shortcode: string
+  url: string
+  location: { city: string; country: string; remote?: boolean }
+  department: string
+  description: string
+  created_at: string
+}
+
+const WORKABLE_COMPANIES = [
+  { slug: 'taktile',      name: 'Taktile' },
+  { slug: 'gorillas',     name: 'Gorillas' },
+  { slug: 'sumup',        name: 'SumUp' },
+  { slug: 'n26',          name: 'N26' },
+  { slug: 'hellofresh',   name: 'HelloFresh' },
+  { slug: 'personio',     name: 'Personio' },
+  { slug: 'contentful',   name: 'Contentful' },
+  { slug: 'ecosia',       name: 'Ecosia' },
+  { slug: 'eyeo',         name: 'eyeo (Adblock Plus)' },
+]
+
+async function fetchWorkable(): Promise<ScoutResult[]> {
+  const results: ScoutResult[] = []
+
+  await Promise.allSettled(
+    WORKABLE_COMPANIES.map(async ({ slug, name }) => {
+      const res = await fetch(`https://apply.workable.com/api/v2/accounts/${slug}/jobs`)
+      if (!res.ok) return
+      const data = await res.json() as { results?: WorkableJob[] }
+      const matching = (data.results ?? []).filter(j => matchesRole(j.title))
+      results.push(
+        ...matching.map(j => ({
+          title: j.title,
+          company: name,
+          location: j.location?.remote
+            ? 'Remote'
+            : `${j.location?.city ?? ''}, ${j.location?.country ?? ''}`.replace(/^, |, $/, ''),
+          url: j.url ?? `https://apply.workable.com/${slug}/j/${j.shortcode}`,
+          source: 'workable' as const,
+          raw_jd: j.description ?? '',
+          scraped_at: safeDate(j.created_at),
+        }))
+      )
+    })
+  )
+
+  return results
+}
+
+// ── Personio Career Pages ──────────────────────────────────────────────────────
+// Many DACH startups host careers on career.personio.de/<slug>
+// Public JSON API — free, no key
+
+interface PersonioJob {
+  id: number
+  name: string
+  office: string
+  department: string
+  employment_type: string
+  seniority: string
+  schedule: string
+  created_at: string
+  occupation: string
+  occupation_category: string
+}
+
+const PERSONIO_COMPANIES = [
+  { slug: 'almedia',    name: 'Almedia' },
+  { slug: 'truffls',   name: 'Truffls' },
+  { slug: 'malt',      name: 'Malt' },
+  { slug: 'yepoda',    name: 'Yepoda' },
+  { slug: 'forto',     name: 'Forto' },
+  { slug: 'scalable',  name: 'Scalable Capital' },
+  { slug: 'phoronix',  name: 'Phoronix' },
+  { slug: 'unu',       name: 'unu Motors' },
+]
+
+async function fetchPersonio(): Promise<ScoutResult[]> {
+  const results: ScoutResult[] = []
+
+  await Promise.allSettled(
+    PERSONIO_COMPANIES.map(async ({ slug, name }) => {
+      const res = await fetch(`https://api.personio.de/v1/recruiting/companies/${slug}/jobs`)
+      if (!res.ok) return
+      const data = await res.json() as { data?: PersonioJob[] }
+      const matching = (data.data ?? []).filter(j => matchesRole(j.name))
+      results.push(
+        ...matching.map(j => ({
+          title: j.name,
+          company: name,
+          location: j.office ?? 'Germany',
+          url: `https://career.personio.de/${slug}/job/${j.id}`,
+          source: 'personio' as const,
+          raw_jd: '',  // description requires a detail fetch; classifier can work with title+company
+          scraped_at: safeDate(j.created_at),
+        }))
+      )
+    })
+  )
+
+  return results
+}
+
+// ── Ashby ──────────────────────────────────────────────────────────────────────
+// Many VC-backed Berlin/EU startups use Ashby (jobs.ashbyhq.com/<slug>)
+// Public JSON API — free, no key
+
+interface AshbyJob {
+  id: string
+  title: string
+  team: string
+  location: string
+  isRemote: boolean
+  jobUrl: string
+  descriptionHtml: string
+  publishedDate: string
+}
+
+const ASHBY_COMPANIES = [
+  { slug: 'wefox',         name: 'wefox' },
+  { slug: 'lemon.markets', name: 'Lemon Markets' },
+  { slug: 'stacked',       name: 'Stacked' },
+  { slug: 'proxify',       name: 'Proxify' },
+  { slug: 'pitch',         name: 'Pitch' },
+]
+
+async function fetchAshby(): Promise<ScoutResult[]> {
+  const results: ScoutResult[] = []
+
+  await Promise.allSettled(
+    ASHBY_COMPANIES.map(async ({ slug, name }) => {
+      const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`)
+      if (!res.ok) return
+      const data = await res.json() as { jobs?: AshbyJob[] }
+      const matching = (data.jobs ?? []).filter(j => matchesRole(j.title))
+      results.push(
+        ...matching.map(j => ({
+          title: j.title,
+          company: name,
+          location: j.isRemote ? 'Remote' : (j.location ?? 'Unknown'),
+          url: j.jobUrl ?? `https://jobs.ashbyhq.com/${slug}/${j.id}`,
+          source: 'ashby' as const,
+          raw_jd: j.descriptionHtml ?? '',
+          scraped_at: safeDate(j.publishedDate),
+        }))
+      )
+    })
+  )
+
+  return results
+}
+
 // ── Greenhouse ─────────────────────────────────────────────────────────────────
-// Public board API — free, no key, CORS-enabled
-// Add more companies by appending to GREENHOUSE_COMPANIES
 
 interface GreenhouseJob {
   id: number
@@ -190,9 +477,15 @@ interface GreenhouseJob {
 }
 
 const GREENHOUSE_COMPANIES = [
-  { slug: 'talonone',     name: 'Talon.one' },
-  { slug: 'awin',         name: 'Awin Global' },
-  { slug: 'getyourguide', name: 'GetYourGuide' },
+  { slug: 'talonone',       name: 'Talon.one' },
+  { slug: 'awin',           name: 'Awin Global' },
+  { slug: 'getyourguide',   name: 'GetYourGuide' },
+  { slug: 'zalando',        name: 'Zalando' },
+  { slug: 'klarna',         name: 'Klarna' },
+  { slug: 'soundcloud',     name: 'SoundCloud' },
+  { slug: 'adjust',         name: 'Adjust' },
+  { slug: 'babbel',         name: 'Babbel' },
+  { slug: 'omio',           name: 'Omio' },
 ]
 
 async function fetchGreenhouse(): Promise<ScoutResult[]> {
@@ -224,8 +517,6 @@ async function fetchGreenhouse(): Promise<ScoutResult[]> {
 }
 
 // ── SmartRecruiters ────────────────────────────────────────────────────────────
-// Public postings API — free, no key
-// Add more companies by appending to SMARTRECRUITERS_COMPANIES
 
 interface SRPosting {
   id: string
@@ -242,6 +533,8 @@ interface SRJobDetail {
 
 const SMARTRECRUITERS_COMPANIES = [
   { slug: 'DeliveryHero', name: 'Delivery Hero' },
+  { slug: 'Tier',         name: 'Tier Mobility' },
+  { slug: 'Taxfix',       name: 'Taxfix' },
 ]
 
 async function fetchSmartRecruiters(): Promise<ScoutResult[]> {
@@ -249,8 +542,7 @@ async function fetchSmartRecruiters(): Promise<ScoutResult[]> {
 
   await Promise.allSettled(
     SMARTRECRUITERS_COMPANIES.map(async ({ slug, name }) => {
-      // Search with role keywords to avoid fetching all 1000+ jobs
-      const searches = ROLE_KEYWORDS.slice(0, 4).map(kw =>
+      const searches = ROLE_KEYWORDS.slice(0, 5).map(kw =>
         fetch(`https://api.smartrecruiters.com/v1/companies/${slug}/postings?limit=100&q=${encodeURIComponent(kw)}`)
           .then(r => r.ok ? r.json() as Promise<{ content: SRPosting[] }> : { content: [] })
       )
@@ -268,7 +560,6 @@ async function fetchSmartRecruiters(): Promise<ScoutResult[]> {
         }
       }
 
-      // Fetch full description for each matched job
       await Promise.allSettled(
         matching.map(async job => {
           let description = ''
@@ -300,8 +591,6 @@ async function fetchSmartRecruiters(): Promise<ScoutResult[]> {
 }
 
 // ── Lever ──────────────────────────────────────────────────────────────────────
-// Public postings API — free, no key, full description inline
-// Add companies here as discovered
 
 interface LeverPosting {
   id: string
@@ -313,7 +602,11 @@ interface LeverPosting {
 }
 
 const LEVER_COMPANIES: Array<{ slug: string; name: string }> = [
-  // Add companies here, e.g: { slug: 'somecompany', name: 'Some Company' }
+  { slug: 'unu',           name: 'unu Motors' },
+  { slug: 'thermondo',     name: 'Thermondo' },
+  { slug: 'sennder',       name: 'sennder' },
+  { slug: 'moonfare',      name: 'Moonfare' },
+  // Add companies here as discovered
 ]
 
 async function fetchLever(): Promise<ScoutResult[]> {
@@ -344,8 +637,6 @@ async function fetchLever(): Promise<ScoutResult[]> {
 }
 
 // ── Recruitee ──────────────────────────────────────────────────────────────────
-// Subdomain API — free, no key, full description inline
-// Add companies here as discovered
 
 interface RecruiteeOffer {
   id: number
@@ -358,7 +649,9 @@ interface RecruiteeOffer {
 }
 
 const RECRUITEE_COMPANIES = [
-  { slug: 'airapps', name: 'Air Apps' },
+  { slug: 'airapps',    name: 'Air Apps' },
+  { slug: 'billbee',   name: 'Billbee' },
+  { slug: 'raisin',    name: 'Raisin' },
 ]
 
 async function fetchRecruitee(): Promise<ScoutResult[]> {
@@ -395,6 +688,12 @@ export async function runScout(): Promise<ScoutResult[]> {
     fetchRemotive(),
     fetchGermanTechJobs(),
     fetchEURemoteJobs(),
+    fetchHimalayas(),
+    fetchWelcomeToTheJungle(),
+    fetchTheHub(),
+    fetchWorkable(),
+    fetchPersonio(),
+    fetchAshby(),
     fetchGreenhouse(),
     fetchSmartRecruiters(),
     fetchLever(),
