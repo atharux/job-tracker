@@ -95,7 +95,7 @@ const EXPERIENCE = [
     role: 'Co-founder & Technical Lead',
     dates: 'Dec 2023 – Present',
     bullets: [
-      'Launched brand-aligned digital presence from zero by building responsive React website with full design system and component library, tracked through consistent brand engagement across all digital touchpoints',
+      'Launched brand-aligned digital presence from zero by designing and building responsive Squarespace website with full brand identity and component guidelines, tracked through consistent brand engagement across all digital touchpoints',
       'Accelerated partnership pipeline for sustainability fashion events by leading co-brand strategy and digital presence with Frank Peralta Clothing',
     ],
   },

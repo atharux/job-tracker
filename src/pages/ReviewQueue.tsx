@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, RefreshCw, Search } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Search, Key } from 'lucide-react'
 import { supabase } from '../supabaseClient'
 import type { ReviewQueueRecord } from '../agents/types'
 import { runScoutOnly } from '../services/agentOrchestrator'
 import JobQueueList from './review-queue/JobQueueList'
 import JobDetailPanel from './review-queue/JobDetailPanel'
+import ApiKeySettings from '../components/ApiKeySettings'
 
 type StatusFilter = 'all' | 'pending_review' | 'approved' | 'submitted' | 'rejected'
 
@@ -17,13 +18,20 @@ const STATUS_LABELS: Record<StatusFilter, string> = {
   rejected: 'Rejected',
 }
 
-export default function ReviewQueue() {
+interface Props {
+  onOpenSettings?: () => void
+}
+
+export default function ReviewQueue({ onOpenSettings }: Props) {
   const [records, setRecords] = useState<ReviewQueueRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [scouting, setScouting] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filter, setFilter] = useState<StatusFilter>('pending_review')
   const [scoutError, setScoutError] = useState<string | null>(null)
+  const [showApiSettings, setShowApiSettings] = useState(false)
+
+  const handleOpenSettings = onOpenSettings ?? (() => setShowApiSettings(true))
 
   const loadQueue = useCallback(async () => {
     setLoading(true)
@@ -112,8 +120,18 @@ export default function ReviewQueue() {
       </div>
 
       {scoutError && (
-        <div style={{ padding: '0.5rem 1.5rem', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem' }}>
-          ⚠ {scoutError}
+        <div style={{ padding: '0.6rem 1.5rem', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={{ color: '#ef4444', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem' }}>
+            ⚠ {scoutError}
+          </span>
+          {/api key|settings/i.test(scoutError) && (
+            <button
+              onClick={handleOpenSettings}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.6rem', background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)', borderRadius: '3px', color: '#c4b5fd', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem' }}
+            >
+              <Key size={10} /> ADD API KEY
+            </button>
+          )}
         </div>
       )}
 
@@ -175,6 +193,8 @@ export default function ReviewQueue() {
           )}
         </div>
       </div>
+
+      <ApiKeySettings isOpen={showApiSettings} onClose={() => setShowApiSettings(false)} />
     </div>
   )
 }

@@ -58,8 +58,11 @@ export default function CoverLetterPreview({ letter, jobId, onSaved }: Props) {
   }
 
   function handleCancel() {
-    setSubject(letter.subject_line)
-    setBody(letter.body)
+    // Reset to last-saved values (tracked in useEffect when letter changes)
+    if (letter) {
+      setSubject(letter.subject_line)
+      setBody(letter.body)
+    }
     setEditing(false)
     setError(null)
   }

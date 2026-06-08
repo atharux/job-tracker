@@ -133,6 +133,13 @@ function FullResumeView({
         })
       }
 
+      if (current.languages && current.languages.length > 0) {
+        modules.push({
+          type: 'languages',
+          content: { languages: current.languages },
+        })
+      }
+
       const createdModules = await batchCreateModules(modules) as Array<{ id: string }>
       const version = await createResumeVersion({ name: versionName.trim(), template_id: 'default' }) as { id: string }
       await Promise.all(

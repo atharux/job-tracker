@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../supabaseClient'
 import type { ReviewQueueRecord, TailoredResume, CoverLetter, FormMapping, ScreenshotResult } from '../../agents/types'
+import type { SubmissionResult } from '../../agents/submitter'
 import ResumeDiffViewer from './ResumeDiffViewer'
 import CoverLetterPreview from './CoverLetterPreview'
 import FormMappingTable from './FormMappingTable'
@@ -29,6 +30,7 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
   const [loadingArtifacts, setLoadingArtifacts] = useState(true)
   const [generatingDocs, setGeneratingDocs] = useState(false)
   const [docError, setDocError] = useState<string | null>(null)
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null)
 
   useEffect(() => {
     loadArtifacts()
@@ -86,7 +88,8 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
   }
 
   async function handleApprove(jobId: string, notes?: string) {
-    await approveAndSubmit(jobId, notes)
+    const result = await approveAndSubmit(jobId, notes)
+    setSubmissionResult(result)
     onStatusChange()
   }
 
@@ -193,6 +196,7 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
         jobId={record.job_id}
         status={record.status}
         generatingDocs={generatingDocs}
+        submissionResult={submissionResult}
         onApprove={handleApprove}
         onReject={handleReject}
         onRunDocuments={handleRunDocuments}

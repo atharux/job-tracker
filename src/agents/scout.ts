@@ -1,13 +1,45 @@
 import type { ScoutResult } from './types'
 
+// ── Edge Function proxy (CORS-blocked sources) ─────────────────────────────────
+// Fetches from Himalayas, WTTJ, TheHub, Workable, Personio via Supabase Edge Function.
+// Deploy: supabase functions deploy job-scout-proxy
+
+const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/job-scout-proxy`
+const PROXY_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+async function fetchViaProxy(): Promise<ScoutResult[]> {
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${PROXY_ANON_KEY}`,
+        'apikey': PROXY_ANON_KEY,
+      },
+    })
+    if (!res.ok) {
+      console.warn('[scout] proxy returned', res.status, '— skipping proxied sources')
+      return []
+    }
+    const data = await res.json() as { jobs: ScoutResult[] }
+    return data.jobs ?? []
+  } catch (err) {
+    console.warn('[scout] proxy fetch failed:', err)
+    return []
+  }
+}
+
 // ── Role matching ──────────────────────────────────────────────────────────────
 // Expanded keyword set covering all three CV tracks (ux / pm / devrel)
 
 const ROLE_KEYWORDS = [
-  // UX / Design
-  'ux engineer', 'ux designer', 'product designer', 'ui/ux', 'ui designer',
-  'interaction designer', 'experience designer', 'design engineer',
-  'frontend designer', 'design systems', 'figma',
+  // UX / Design — both slash orderings are common in real postings
+  'ux engineer', 'ux designer', 'ux/ui', 'ui/ux', 'ui designer',
+  'product designer', 'interaction designer', 'experience designer',
+  'design engineer', 'frontend designer', 'design systems',
+  'visual designer', 'ux researcher', 'user researcher',
+  'head of design', 'design lead', 'lead designer', 'vp of design',
+  'director of design', 'figma',
   // Product
   'product manager', 'product owner', 'senior pm', 'lead pm',
   'head of product', 'director of product',
@@ -15,7 +47,7 @@ const ROLE_KEYWORDS = [
   'developer relations', 'devrel', 'developer advocate', 'developer experience',
   'dx engineer', 'community manager', 'technical evangelist',
   'platform evangelist', 'solutions engineer',
-  // AI / Tooling (adjacent roles Athar is qualified for)
+  // AI / Tooling
   'ai product manager', 'ai ux', 'conversational designer',
 ]
 
@@ -171,254 +203,11 @@ async function fetchGermanTechJobs(): Promise<ScoutResult[]> {
     })
 }
 
-// ── EURemoteJobs RSS ───────────────────────────────────────────────────────────
-
-async function fetchEURemoteJobs(): Promise<ScoutResult[]> {
-  const res = await fetch('https://euremotejobs.com/feed/')
-  if (!res.ok) return []
-  const xml = await res.text()
-  return parseRss(xml)
-    .filter(item => matchesRole(item.title))
-    .map(item => ({
-      title: item.title,
-      company: '',
-      location: 'Remote Europe',
-      url: item.link,
-      source: 'euremotejobs' as const,
-      raw_jd: item.description,
-      scraped_at: safeDate(item.pubDate),
-    }))
-}
-
-// ── Himalayas RSS ──────────────────────────────────────────────────────────────
-// https://himalayas.app — quality remote-first job board, CORS-enabled RSS
-
-async function fetchHimalayas(): Promise<ScoutResult[]> {
-  // Fetch per-category RSS feeds
-  const feeds = [
-    'https://himalayas.app/jobs/categories/design/feed',
-    'https://himalayas.app/jobs/categories/product/feed',
-    'https://himalayas.app/jobs/categories/developer-relations/feed',
-  ]
-  const results: ScoutResult[] = []
-
-  await Promise.allSettled(
-    feeds.map(async feedUrl => {
-      const res = await fetch(feedUrl)
-      if (!res.ok) return
-      const xml = await res.text()
-      const matching = parseRss(xml).filter(item => matchesRole(item.title))
-      results.push(
-        ...matching.map(item => ({
-          title: item.title,
-          company: '',
-          location: 'Remote',
-          url: item.link,
-          source: 'himalayas' as const,
-          raw_jd: item.description,
-          scraped_at: safeDate(item.pubDate),
-        }))
-      )
-    })
-  )
-
-  return results
-}
-
-// ── Welcome to the Jungle (Otta) RSS ──────────────────────────────────────────
-// https://www.welcometothejungle.com — major EU job board with RSS per category
-
-async function fetchWelcomeToTheJungle(): Promise<ScoutResult[]> {
-  // WTTJ provides RSS per job category tag
-  const feeds = [
-    'https://www.welcometothejungle.com/en/jobs.rss?refinementList%5Bjob_category.en%5D%5B0%5D=Design',
-    'https://www.welcometothejungle.com/en/jobs.rss?refinementList%5Bjob_category.en%5D%5B0%5D=Product',
-  ]
-  const results: ScoutResult[] = []
-
-  await Promise.allSettled(
-    feeds.map(async feedUrl => {
-      const res = await fetch(feedUrl)
-      if (!res.ok) return
-      const xml = await res.text()
-      const matching = parseRss(xml).filter(item => matchesRole(item.title))
-      results.push(
-        ...matching.map(item => ({
-          title: item.title,
-          company: '',
-          location: 'Europe',
-          url: item.link,
-          source: 'wttj' as const,
-          raw_jd: item.description,
-          scraped_at: safeDate(item.pubDate),
-        }))
-      )
-    })
-  )
-
-  return results
-}
-
-// ── The Hub (thehub.io) ────────────────────────────────────────────────────────
-// Nordic + Berlin tech startup job board — free JSON API, CORS-enabled
-
-interface HubJob {
-  id: number
-  title: string
-  company: { name: string }
-  locations: Array<{ city: string; country: string }>
-  url: string
-  description: string
-  createdAt: string
-}
-
-async function fetchTheHub(): Promise<ScoutResult[]> {
-  // The Hub public search API — returns JSON
-  const keywords = ['ux designer', 'product manager', 'developer relations', 'ux engineer']
-  const results: ScoutResult[] = []
-  const seen = new Set<string>()
-
-  await Promise.allSettled(
-    keywords.map(async kw => {
-      const res = await fetch(
-        `https://thehub.io/api/v1/jobs?query=${encodeURIComponent(kw)}&limit=50`
-      )
-      if (!res.ok) return
-      const data = await res.json() as { jobs?: HubJob[] }
-      for (const job of data.jobs ?? []) {
-        if (seen.has(String(job.id)) || !matchesRole(job.title)) continue
-        seen.add(String(job.id))
-        const loc = job.locations?.[0]
-        results.push({
-          title: job.title,
-          company: job.company?.name ?? '',
-          location: loc ? `${loc.city}, ${loc.country}` : 'Unknown',
-          url: job.url ?? `https://thehub.io/jobs/${job.id}`,
-          source: 'thehub' as const,
-          raw_jd: job.description ?? '',
-          scraped_at: safeDate(job.createdAt),
-        })
-      }
-    })
-  )
-
-  return results
-}
-
-// ── Workable ───────────────────────────────────────────────────────────────────
-// Many Berlin/EU startups use Workable. Public board shortlinks resolve to
-// jobs.workable.com/<slug> — we list target companies with known slugs.
-// To add a company: find their Workable URL and extract the slug.
-
-interface WorkableJob {
-  id: string
-  title: string
-  full_title: string
-  shortcode: string
-  url: string
-  location: { city: string; country: string; remote?: boolean }
-  department: string
-  description: string
-  created_at: string
-}
-
-const WORKABLE_COMPANIES = [
-  { slug: 'taktile',      name: 'Taktile' },
-  { slug: 'gorillas',     name: 'Gorillas' },
-  { slug: 'sumup',        name: 'SumUp' },
-  { slug: 'n26',          name: 'N26' },
-  { slug: 'hellofresh',   name: 'HelloFresh' },
-  { slug: 'personio',     name: 'Personio' },
-  { slug: 'contentful',   name: 'Contentful' },
-  { slug: 'ecosia',       name: 'Ecosia' },
-  { slug: 'eyeo',         name: 'eyeo (Adblock Plus)' },
-]
-
-async function fetchWorkable(): Promise<ScoutResult[]> {
-  const results: ScoutResult[] = []
-
-  await Promise.allSettled(
-    WORKABLE_COMPANIES.map(async ({ slug, name }) => {
-      const res = await fetch(`https://apply.workable.com/api/v2/accounts/${slug}/jobs`)
-      if (!res.ok) return
-      const data = await res.json() as { results?: WorkableJob[] }
-      const matching = (data.results ?? []).filter(j => matchesRole(j.title))
-      results.push(
-        ...matching.map(j => ({
-          title: j.title,
-          company: name,
-          location: j.location?.remote
-            ? 'Remote'
-            : `${j.location?.city ?? ''}, ${j.location?.country ?? ''}`.replace(/^, |, $/, ''),
-          url: j.url ?? `https://apply.workable.com/${slug}/j/${j.shortcode}`,
-          source: 'workable' as const,
-          raw_jd: j.description ?? '',
-          scraped_at: safeDate(j.created_at),
-        }))
-      )
-    })
-  )
-
-  return results
-}
-
-// ── Personio Career Pages ──────────────────────────────────────────────────────
-// Many DACH startups host careers on career.personio.de/<slug>
-// Public JSON API — free, no key
-
-interface PersonioJob {
-  id: number
-  name: string
-  office: string
-  department: string
-  employment_type: string
-  seniority: string
-  schedule: string
-  created_at: string
-  occupation: string
-  occupation_category: string
-}
-
-const PERSONIO_COMPANIES = [
-  { slug: 'almedia',    name: 'Almedia' },
-  { slug: 'truffls',   name: 'Truffls' },
-  { slug: 'malt',      name: 'Malt' },
-  { slug: 'yepoda',    name: 'Yepoda' },
-  { slug: 'forto',     name: 'Forto' },
-  { slug: 'scalable',  name: 'Scalable Capital' },
-  { slug: 'phoronix',  name: 'Phoronix' },
-  { slug: 'unu',       name: 'unu Motors' },
-]
-
-async function fetchPersonio(): Promise<ScoutResult[]> {
-  const results: ScoutResult[] = []
-
-  await Promise.allSettled(
-    PERSONIO_COMPANIES.map(async ({ slug, name }) => {
-      const res = await fetch(`https://api.personio.de/v1/recruiting/companies/${slug}/jobs`)
-      if (!res.ok) return
-      const data = await res.json() as { data?: PersonioJob[] }
-      const matching = (data.data ?? []).filter(j => matchesRole(j.name))
-      results.push(
-        ...matching.map(j => ({
-          title: j.name,
-          company: name,
-          location: j.office ?? 'Germany',
-          url: `https://career.personio.de/${slug}/job/${j.id}`,
-          source: 'personio' as const,
-          raw_jd: '',  // description requires a detail fetch; classifier can work with title+company
-          scraped_at: safeDate(j.created_at),
-        }))
-      )
-    })
-  )
-
-  return results
-}
+// EURemoteJobs removed — CORS-blocked from browser
 
 // ── Ashby ──────────────────────────────────────────────────────────────────────
-// Many VC-backed Berlin/EU startups use Ashby (jobs.ashbyhq.com/<slug>)
-// Public JSON API — free, no key
+// VC-backed EU/Berlin startups — public JSON API, CORS-enabled
+// Verify slug at: https://api.ashbyhq.com/posting-api/job-board/<slug>
 
 interface AshbyJob {
   id: string
@@ -431,15 +220,13 @@ interface AshbyJob {
   publishedDate: string
 }
 
-const ASHBY_COMPANIES = [
-  { slug: 'wefox',         name: 'wefox' },
-  { slug: 'lemon.markets', name: 'Lemon Markets' },
-  { slug: 'stacked',       name: 'Stacked' },
-  { slug: 'proxify',       name: 'Proxify' },
-  { slug: 'pitch',         name: 'Pitch' },
+const ASHBY_COMPANIES: Array<{ slug: string; name: string }> = [
+  // Add verified slugs here — check https://jobs.ashbyhq.com/<company>
+  // to find the correct slug before adding
 ]
 
 async function fetchAshby(): Promise<ScoutResult[]> {
+  if (ASHBY_COMPANIES.length === 0) return []
   const results: ScoutResult[] = []
 
   await Promise.allSettled(
@@ -476,16 +263,11 @@ interface GreenhouseJob {
   updated_at: string
 }
 
+// Verified slugs only — test at: https://boards-api.greenhouse.io/v1/boards/<slug>/jobs
 const GREENHOUSE_COMPANIES = [
   { slug: 'talonone',       name: 'Talon.one' },
   { slug: 'awin',           name: 'Awin Global' },
   { slug: 'getyourguide',   name: 'GetYourGuide' },
-  { slug: 'zalando',        name: 'Zalando' },
-  { slug: 'klarna',         name: 'Klarna' },
-  { slug: 'soundcloud',     name: 'SoundCloud' },
-  { slug: 'adjust',         name: 'Adjust' },
-  { slug: 'babbel',         name: 'Babbel' },
-  { slug: 'omio',           name: 'Omio' },
 ]
 
 async function fetchGreenhouse(): Promise<ScoutResult[]> {
@@ -542,7 +324,9 @@ async function fetchSmartRecruiters(): Promise<ScoutResult[]> {
 
   await Promise.allSettled(
     SMARTRECRUITERS_COMPANIES.map(async ({ slug, name }) => {
-      const searches = ROLE_KEYWORDS.slice(0, 5).map(kw =>
+      // One query per track — broad enough to catch varied titles
+      const SR_QUERIES = ['ux designer', 'product designer', 'product manager', 'developer relations']
+      const searches = SR_QUERIES.map(kw =>
         fetch(`https://api.smartrecruiters.com/v1/companies/${slug}/postings?limit=100&q=${encodeURIComponent(kw)}`)
           .then(r => r.ok ? r.json() as Promise<{ content: SRPosting[] }> : { content: [] })
       )
@@ -601,12 +385,9 @@ interface LeverPosting {
   createdAt: number
 }
 
+// Verify slug at: https://api.lever.co/v0/postings/<slug>
 const LEVER_COMPANIES: Array<{ slug: string; name: string }> = [
-  { slug: 'unu',           name: 'unu Motors' },
-  { slug: 'thermondo',     name: 'Thermondo' },
-  { slug: 'sennder',       name: 'sennder' },
-  { slug: 'moonfare',      name: 'Moonfare' },
-  // Add companies here as discovered
+  // Add verified slugs here
 ]
 
 async function fetchLever(): Promise<ScoutResult[]> {
@@ -648,10 +429,9 @@ interface RecruiteeOffer {
   created_at: string
 }
 
+// Verify slug at: https://<slug>.recruitee.com/api/offers/
 const RECRUITEE_COMPANIES = [
   { slug: 'airapps',    name: 'Air Apps' },
-  { slug: 'billbee',   name: 'Billbee' },
-  { slug: 'raisin',    name: 'Raisin' },
 ]
 
 async function fetchRecruitee(): Promise<ScoutResult[]> {
@@ -684,20 +464,17 @@ async function fetchRecruitee(): Promise<ScoutResult[]> {
 
 export async function runScout(): Promise<ScoutResult[]> {
   const settled = await Promise.allSettled([
+    // Direct (CORS-enabled from browser)
     fetchArbeitnow(),
     fetchRemotive(),
     fetchGermanTechJobs(),
-    fetchEURemoteJobs(),
-    fetchHimalayas(),
-    fetchWelcomeToTheJungle(),
-    fetchTheHub(),
-    fetchWorkable(),
-    fetchPersonio(),
     fetchAshby(),
     fetchGreenhouse(),
     fetchSmartRecruiters(),
     fetchLever(),
     fetchRecruitee(),
+    // Proxied via Supabase Edge Function (CORS-blocked sources)
+    fetchViaProxy(),
   ])
 
   const all: ScoutResult[] = settled.flatMap(r =>

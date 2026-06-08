@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
-import { Check, X, Edit2 } from 'lucide-react'
+import { Check, X, Edit2, ExternalLink } from 'lucide-react'
+import type { SubmissionResult } from '../../agents/submitter'
 
 interface Props {
   jobId: string
   status: 'pending_review' | 'approved' | 'rejected' | 'submitted' | 'archived'
   generatingDocs?: boolean
+  submissionResult?: SubmissionResult | null
   onApprove: (jobId: string, notes?: string) => Promise<void>
   onReject: (jobId: string, notes?: string) => Promise<void>
   onRunDocuments: (jobId: string) => Promise<void>
@@ -14,6 +16,7 @@ export default function ApprovalControls({
   jobId,
   status,
   generatingDocs = false,
+  submissionResult,
   onApprove,
   onReject,
   onRunDocuments,
@@ -120,6 +123,55 @@ export default function ApprovalControls({
           </span>
         )}
       </div>
+
+      {/* Submission result banner */}
+      {submissionResult && (
+        <div style={{
+          margin: '0 1rem 1rem',
+          padding: '0.75rem 1rem',
+          borderRadius: '4px',
+          background: submissionResult.success
+            ? 'rgba(6,182,212,0.08)'
+            : submissionResult.requiresManual
+              ? 'rgba(249,115,22,0.08)'
+              : 'rgba(239,68,68,0.08)',
+          border: `1px solid ${submissionResult.success ? 'rgba(6,182,212,0.25)' : submissionResult.requiresManual ? 'rgba(249,115,22,0.25)' : 'rgba(239,68,68,0.25)'}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          flexWrap: 'wrap',
+        }}>
+          <div>
+            <p style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', color: submissionResult.success ? '#67e8f9' : submissionResult.requiresManual ? '#fdba74' : '#fca5a5', margin: '0 0 2px' }}>
+              {submissionResult.success ? 'SUBMITTED' : submissionResult.requiresManual ? 'MANUAL APPLY REQUIRED' : 'SUBMISSION FAILED'}
+            </p>
+            <p style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', color: '#64748b', margin: 0 }}>
+              {submissionResult.message}
+              {submissionResult.reference && ` — ref: ${submissionResult.reference}`}
+            </p>
+          </div>
+          {submissionResult.requiresManual && submissionResult.applicationUrl && (
+            <a
+              href={submissionResult.applicationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.4rem',
+                padding: '0.4rem 0.75rem',
+                background: 'rgba(249,115,22,0.15)',
+                border: '1px solid rgba(249,115,22,0.35)',
+                borderRadius: '3px',
+                fontFamily: 'Space Mono, monospace', fontSize: '0.65rem',
+                color: '#fdba74', textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              APPLY MANUALLY <ExternalLink size={11} />
+            </a>
+          )}
+        </div>
+      )}
 
       {showNotesModal && (
         <div

@@ -8,7 +8,9 @@ import { mapForm } from '../agents/formMapper'
 import { captureScreenshots } from '../agents/screenshotCapturer'
 import * as gatekeeper from '../agents/reviewGatekeeper'
 import { syncStatus, watchJob } from '../agents/statusTracker'
-import type { ScoutResult, ClassifierResult } from '../agents/types'
+import { submitApplication } from '../agents/submitter'
+import type { SubmissionResult } from '../agents/submitter'
+import type { ScoutResult, ClassifierResult, TailoredResume, CoverLetter } from '../agents/types'
 
 // ---------------------------------------------------------------------------
 // Auth helper
@@ -85,7 +87,24 @@ async function saveArtifact(
 // Job persistence helpers
 // ---------------------------------------------------------------------------
 
-async function upsertJob(result: ScoutResult, userId: string): Promise<string> {
+// Returns the existing job ID if it was seen within the last 7 days, null otherwise.
+async function getRecentJobId(url: string, userId: string): Promise<string | null> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data } = await supabase
+    .from('jobs')
+    .select('id, updated_at')
+    .eq('user_id', userId)
+    .eq('url', url)
+    .gte('updated_at', cutoff)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
+async function upsertJob(result: ScoutResult, userId: string): Promise<string | null> {
+  // Skip if this URL was already processed within the last 7 days
+  const existingId = await getRecentJobId(result.url, userId)
+  if (existingId) return null
+
   const { data, error } = await supabase
     .from('jobs')
     .upsert(
@@ -110,15 +129,28 @@ async function upsertJob(result: ScoutResult, userId: string): Promise<string> {
   return data.id as string
 }
 
-async function getJobRawJd(jobId: string): Promise<{ raw_jd: string; title: string; company: string; url: string }> {
+async function getJobRawJd(jobId: string): Promise<{ raw_jd: string; title: string; company: string; url: string; source: string }> {
   const { data, error } = await supabase
     .from('jobs')
-    .select('raw_jd, title, company, url')
+    .select('raw_jd, title, company, url, source')
     .eq('id', jobId)
     .single()
 
   if (error || !data) throw new Error(`Job not found: ${jobId}`)
-  return data as { raw_jd: string; title: string; company: string; url: string }
+  return data as { raw_jd: string; title: string; company: string; url: string; source: string }
+}
+
+async function loadLatestArtifacts(jobId: string): Promise<{ resume: TailoredResume | null; letter: CoverLetter | null }> {
+  const { data } = await supabase
+    .from('application_artifacts')
+    .select('artifact_type, content, created_at')
+    .eq('job_id', jobId)
+    .in('artifact_type', ['resume_tailored', 'cover_letter'])
+    .order('created_at', { ascending: false })
+
+  const resume = (data?.find(r => r.artifact_type === 'resume_tailored')?.content ?? null) as TailoredResume | null
+  const letter = (data?.find(r => r.artifact_type === 'cover_letter')?.content ?? null) as CoverLetter | null
+  return { resume, letter }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,14 +164,18 @@ async function runScoutStep(userId: string): Promise<Array<ScoutResult & { id: s
   try {
     const results = await runScout()
 
-    const withIds = await Promise.all(
-      results.map(async (r) => ({
-        ...r,
-        id: await upsertJob(r, userId),
-      }))
-    )
+    // upsertJob returns null for jobs seen within the last 7 days — filter those out
+    const withIds = (
+      await Promise.all(
+        results.map(async (r) => {
+          const id = await upsertJob(r, userId)
+          if (!id) return null
+          return { ...r, id }
+        })
+      )
+    ).filter((r): r is ScoutResult & { id: string } => r !== null)
 
-    await completeRun(runId, withIds, undefined, Date.now() - t0)
+    await completeRun(runId, { total: results.length, fresh: withIds.length }, undefined, Date.now() - t0)
     return withIds
   } catch (err) {
     await failRun(runId, err)
@@ -317,13 +353,49 @@ export async function runDocumentsForJob(jobId: string): Promise<void> {
   await runDocumentStep(jobId, classification, userId)
 }
 
-export async function approveAndSubmit(jobId: string, notes?: string): Promise<void> {
+export async function approveAndSubmit(jobId: string, notes?: string): Promise<SubmissionResult> {
   const userId = await getCurrentUserId()
   await gatekeeper.approve(jobId, notes)
-  await gatekeeper.submit(jobId)
+
+  const job = await getJobRawJd(jobId)
+  const { resume, letter } = await loadLatestArtifacts(jobId)
+
+  // Attempt actual API submission
+  let submission: SubmissionResult
+  if (resume && letter) {
+    const submitRunId = await startRun('submitter', jobId, { source: job.source, method: job.source }, userId)
+    try {
+      submission = await submitApplication({ id: jobId, ...job }, resume, letter, userId)
+      await completeRun(submitRunId, submission)
+    } catch (err) {
+      await failRun(submitRunId, err)
+      submission = {
+        success: false,
+        method: 'manual',
+        message: `Submission error: ${(err as Error).message}`,
+        applicationUrl: job.url,
+        requiresManual: true,
+      }
+    }
+  } else {
+    submission = {
+      success: false,
+      method: 'manual',
+      message: 'No tailored resume or cover letter found — generate documents first',
+      applicationUrl: job.url,
+      requiresManual: true,
+    }
+  }
+
+  // Store submission result as artifact
+  await saveArtifact(jobId, 'submission_result', submission)
+
+  // Only mark submitted in queue if API submission succeeded
+  if (submission.success) {
+    await gatekeeper.submit(jobId)
+  }
 
   // Create entry in the applications tracker so the Kanban board reflects the submission
-  const job = await getJobRawJd(jobId)
   const today = new Date().toISOString().split('T')[0]
 
   const { data: existing } = await supabase
@@ -340,7 +412,7 @@ export async function approveAndSubmit(jobId: string, notes?: string): Promise<v
       position: job.title,
       date_applied: today,
       job_posting_url: job.url ?? null,
-      status: 'applied',
+      status: submission.success ? 'applied' : 'in-progress',
       notes: notes ?? null,
       attachments: [],
     })
@@ -353,6 +425,8 @@ export async function approveAndSubmit(jobId: string, notes?: string): Promise<v
   } catch (err) {
     await failRun(watchRunId, err)
   }
+
+  return submission
 }
 
 export async function runStatusSync(): Promise<void> {

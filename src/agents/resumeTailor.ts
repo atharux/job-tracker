@@ -75,5 +75,25 @@ export async function tailorResume(
     ],
   })
 
-  return JSON.parse(stripMarkdown(text)) as TailoredResume
+  const parsed = JSON.parse(stripMarkdown(text)) as TailoredResume
+
+  // Free LLMs sometimes return null for static sections despite the prompt.
+  // Fall back to base resume values so they are never silently dropped.
+  if (!parsed.languages || parsed.languages.length === 0) {
+    parsed.languages = baseResume.languages ?? []
+  }
+  if (!parsed.certifications || parsed.certifications.length === 0) {
+    parsed.certifications = baseResume.certifications ?? []
+  }
+  if (!parsed.education || parsed.education.length === 0) {
+    parsed.education = baseResume.education ?? []
+  }
+  if (!parsed.projects || parsed.projects.length === 0) {
+    parsed.projects = baseResume.projects ?? []
+  }
+  if (!parsed.contact) {
+    parsed.contact = baseResume.contact
+  }
+
+  return parsed
 }
