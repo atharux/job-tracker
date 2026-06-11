@@ -43,7 +43,7 @@ describe('cvSelector', () => {
       single: vi.fn().mockResolvedValue({ data: mockUXVersion, error: null }),
     } as unknown as ReturnType<typeof supabase.from>)
 
-    const result = await selectCV('ux')
+    const result = await selectCV('ux', 'test-user-id')
     expect(result.track).toBe('ux')
     expect(result.label).toBe('UX Engineer')
     expect(result.accent_color).toBe('#06b6d4')
@@ -58,7 +58,7 @@ describe('cvSelector', () => {
       single: vi.fn().mockResolvedValue({ data: null, error: { message: 'Not found' } }),
     } as unknown as ReturnType<typeof supabase.from>)
 
-    await expect(selectCV('pm')).rejects.toThrow('CV version not found for track: pm')
+    await expect(selectCV('pm', 'test-user-id')).rejects.toThrow('CV version not found for track')
   })
 
   it('returns content object with summary, experience, skills', async () => {
@@ -69,7 +69,7 @@ describe('cvSelector', () => {
       single: vi.fn().mockResolvedValue({ data: mockUXVersion, error: null }),
     } as unknown as ReturnType<typeof supabase.from>)
 
-    const result = await selectCV('ux')
+    const result = await selectCV('ux', 'test-user-id')
     expect(result.content).toHaveProperty('summary')
     expect(result.content).toHaveProperty('experience')
     expect(result.content).toHaveProperty('skills')

@@ -236,7 +236,7 @@ async function runDocumentStep(
   const t0tailor = Date.now()
   let tailored
   try {
-    tailored = await tailorResume(cvVersion.content, job.raw_jd)
+    tailored = await tailorResume(cvVersion.content, job.raw_jd ?? '', classification.cv_track)
     await saveArtifact(jobId, 'resume_tailored', tailored, tailored.diff)
     await completeRun(tailorRunId, tailored, undefined, Date.now() - t0tailor)
   } catch (err) {
@@ -248,7 +248,7 @@ async function runDocumentStep(
   const clRunId = await startRun('coverLetterWriter', jobId, { title: job.title }, userId)
   const t0cl = Date.now()
   try {
-    const letter = await writeCoverLetter(job.title, job.company, job.raw_jd)
+    const letter = await writeCoverLetter(job.title, job.company, job.raw_jd ?? '', classification.cv_track)
     await saveArtifact(jobId, 'cover_letter', letter)
     await completeRun(clRunId, letter, undefined, Date.now() - t0cl)
   } catch (err) {

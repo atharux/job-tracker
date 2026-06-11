@@ -93,6 +93,7 @@ export interface TailoredResume {
 
 export interface CoverLetter {
   subject_line: string
+  key_requirements?: string[]
   body: string
   word_count: number
 }

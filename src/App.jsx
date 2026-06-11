@@ -42,6 +42,7 @@ import * as gamification from './gamification.js';
 import './App.css';
 import './animations.css';
 import './accessibility.css';
+import './theme.css';
 
 // ----------------------------------------------------------------------------
 // Constants
@@ -366,7 +367,10 @@ export default function App() {
   const [timelineFor, setTimelineFor] = useState(null);
   const [timelineEvents, setTimelineEvents] = useState([]);
   const [liveMessage, setLiveMessage] = useState('');
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const modalRef = useRef(null);
+  const toolsTriggerRef = useRef(null);
+  const toolsMenuRef = useRef(null);
   useFocusTrap(modalRef, isModalOpen, () => handleCancel());
 
   useEffect(() => {
@@ -375,6 +379,44 @@ export default function App() {
   }, [highContrast]);
 
   useEffect(() => { localStorage.setItem('forge.view', tableView); }, [tableView]);
+
+  // Pending review count — refreshes every 60s
+  useEffect(() => {
+    if (!user) return;
+    const fetchPending = async () => {
+      const { count } = await supabase
+        .from('application_review_queue')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending_review');
+      setPendingReviewCount(count ?? 0);
+    };
+    fetchPending();
+    const interval = setInterval(fetchPending, 60000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // Tools dropdown keyboard navigation
+  useEffect(() => {
+    if (!showToolsMenu) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        setShowToolsMenu(false);
+        toolsTriggerRef.current?.focus();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const items = toolsMenuRef.current?.querySelectorAll('[role="menuitem"]');
+        if (!items?.length) return;
+        const idx = Array.from(items).indexOf(document.activeElement);
+        const next = e.key === 'ArrowDown'
+          ? (idx + 1) % items.length
+          : (idx - 1 + items.length) % items.length;
+        items[next].focus();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    setTimeout(() => toolsMenuRef.current?.querySelector('[role="menuitem"]')?.focus(), 0);
+    return () => document.removeEventListener('keydown', handler);
+  }, [showToolsMenu]);
 
   const announce = useCallback((msg) => {
     setLiveMessage(msg);
@@ -1502,11 +1544,12 @@ export default function App() {
               <div className="header-accent"></div>
               <h1 className="text-3xl font-bold text-slate-50" style={{ fontFamily: 'Syne, sans-serif', fontSize: '1.1rem', fontWeight: 800, letterSpacing: '0.02em' }}>Forge</h1>
             </div>
-            <div className="header-actions">
-              <span className="text-slate-400 text-sm">{user.email}</span>
+            <nav className="header-actions" aria-label="Main navigation">
+              <span className="text-slate-400 text-sm" aria-hidden="true">{user.email}</span>
               <button
                 onClick={() => setCurrentView('applications')}
                 className={`btn-header-action ${currentView === 'applications' ? 'active' : ''}`}
+                aria-current={currentView === 'applications' ? 'page' : undefined}
                 title="Track your job applications"
               >
                 Applications
@@ -1514,6 +1557,7 @@ export default function App() {
               <button
                 onClick={() => setCurrentView('analytics')}
                 className={`btn-header-action ${currentView === 'analytics' ? 'active' : ''}`}
+                aria-current={currentView === 'analytics' ? 'page' : undefined}
                 title="Analytics dashboard"
               >
                 Analytics
@@ -1521,125 +1565,164 @@ export default function App() {
               <button
                 onClick={() => setCurrentView('resumes')}
                 className={`btn-header-action ${currentView === 'resumes' ? 'active' : ''}`}
+                aria-current={currentView === 'resumes' ? 'page' : undefined}
                 title="Manage your resume versions"
               >
                 Resumes
               </button>
-            
-<div style={{ position: 'relative' }}>
-  <button
-    onClick={() => setShowToolsMenu(m => !m)}
-    className={`btn-header-action ${currentView === 'resumeAI' || currentView === 'alvaPrep' ? 'active' : ''}`}
-    title="Tools"
-    aria-haspopup="true"
-    aria-expanded={showToolsMenu}
-  >
-    Tools ▾
-  </button>
-  {showToolsMenu && (
-    <>
-      <div
-        style={{ position: 'fixed', inset: 0, zIndex: 99 }}
-        onClick={() => setShowToolsMenu(false)}
-      />
-      <div style={{
-        position: 'absolute',
-        top: 'calc(100% + 6px)',
-        right: 0,
-        zIndex: 100,
-        background: '#0d1117',
-        border: '1px solid #1e2a1e',
-        borderTop: '2px solid #06b6d4',
-        borderRadius: '4px',
-        minWidth: '160px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-        overflow: 'hidden',
-      }}>
-        {[
-          { view: 'resumeAI', label: 'Resume AI', desc: 'AI-powered resume assistant' },
-          { view: 'alvaPrep', label: 'Logic Prep', desc: 'Logic test practice' },
-        ].map(({ view, label, desc }) => (
-          <button
-            key={view}
-            onClick={() => { setCurrentView(view); setShowToolsMenu(false); }}
-            title={desc}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '9px 14px',
-              background: currentView === view ? 'rgba(6,182,212,0.08)' : 'transparent',
-              border: 'none',
-              borderLeft: currentView === view ? '2px solid #06b6d4' : '2px solid transparent',
-              color: currentView === view ? '#06b6d4' : '#94a3b8',
-              fontFamily: "'Space Mono', monospace",
-              fontSize: '11px',
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'background 0.1s, color 0.1s',
-            }}
-            onMouseEnter={e => { if (currentView !== view) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#e2e8f0'; } }}
-            onMouseLeave={e => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; } }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    </>
-  )}
-</div>
+
+              {/* Tools dropdown — keyboard accessible */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  ref={toolsTriggerRef}
+                  onClick={() => setShowToolsMenu(m => !m)}
+                  className={`btn-header-action ${currentView === 'resumeAI' || currentView === 'alvaPrep' ? 'active' : ''}`}
+                  aria-haspopup="menu"
+                  aria-expanded={showToolsMenu}
+                  aria-controls="tools-menu"
+                  title="Tools — Resume AI and Logic Prep"
+                >
+                  Tools ▾
+                </button>
+                {showToolsMenu && (
+                  <>
+                    <div
+                      style={{ position: 'fixed', inset: 0, zIndex: 99 }}
+                      onClick={() => setShowToolsMenu(false)}
+                      aria-hidden="true"
+                    />
+                    <div
+                      id="tools-menu"
+                      ref={toolsMenuRef}
+                      role="menu"
+                      aria-label="Tools submenu"
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 6px)',
+                        right: 0,
+                        zIndex: 100,
+                        background: '#0d1117',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderTop: '2px solid #06b6d4',
+                        borderRadius: '4px',
+                        minWidth: '160px',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {[
+                        { view: 'resumeAI', label: 'Resume AI', desc: 'AI-powered resume assistant' },
+                        { view: 'alvaPrep', label: 'Logic Prep', desc: 'Logic test practice' },
+                      ].map(({ view, label, desc }) => (
+                        <button
+                          key={view}
+                          role="menuitem"
+                          onClick={() => { setCurrentView(view); setShowToolsMenu(false); }}
+                          aria-label={desc}
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '9px 14px',
+                            background: currentView === view ? 'rgba(6,182,212,0.08)' : 'transparent',
+                            border: 'none',
+                            borderLeft: currentView === view ? '2px solid #06b6d4' : '2px solid transparent',
+                            color: currentView === view ? '#06b6d4' : '#94a3b8',
+                            fontFamily: "'Space Mono', monospace",
+                            fontSize: '11px',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            transition: 'background 0.1s, color 0.1s',
+                          }}
+                          onMouseEnter={e => { if (currentView !== view) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#e2e8f0'; } }}
+                          onMouseLeave={e => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; } }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
 
               <button
                 onClick={() => setCurrentView('leaderboard')}
                 className={`btn-header-action ${currentView === 'leaderboard' ? 'active' : ''}`}
+                aria-current={currentView === 'leaderboard' ? 'page' : undefined}
                 title="View leaderboard and achievements"
               >
                 Leaderboard
               </button>
+
+              {/* Review Queue — shows pending count badge */}
+              <Link
+                to="/review-queue"
+                className="btn-header-action"
+                title="AI Review Queue — approve or reject pipeline applications"
+                aria-label={pendingReviewCount > 0 ? `Review Queue — ${pendingReviewCount} pending` : 'Review Queue'}
+                style={{ textDecoration: 'none', position: 'relative' }}
+              >
+                Review Queue
+                {pendingReviewCount > 0 && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute', top: '-5px', right: '-5px',
+                      background: '#8b5cf6', color: '#fff',
+                      borderRadius: '9999px', fontSize: '9px',
+                      fontFamily: "'Space Mono', monospace", fontWeight: 700,
+                      minWidth: '16px', height: '16px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '0 3px', lineHeight: 1,
+                      boxShadow: '0 0 8px rgba(139,92,246,0.5)',
+                    }}
+                  >
+                    {pendingReviewCount}
+                  </span>
+                )}
+              </Link>
+
               <button
                 onClick={() => setShowOnboarding(true)}
                 className="btn-header-action"
+                aria-label="Show app tutorial"
                 title="Show tutorial"
               >
-                <HelpCircle size={16} />
+                <HelpCircle size={16} aria-hidden="true" />
               </button>
               <button
                 onClick={() => setShowApiSettings(true)}
                 className="btn-header-action"
+                aria-label="Configure API keys"
                 title="Configure API keys"
               >
-                <Settings size={16} />
+                <Settings size={16} aria-hidden="true" />
               </button>
               <button
                 onClick={() => setHighContrast(v => !v)}
                 className="btn-header-action"
                 aria-pressed={highContrast}
+                aria-label="Toggle high-contrast mode"
                 title="Toggle high-contrast mode"
               >
-                <Contrast size={16} />
+                <Contrast size={16} aria-hidden="true" />
               </button>
               <button
                 onClick={toggleTheme}
                 className="theme-toggle px-3 py-2 rounded-lg transition-colors"
+                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
               >
                 {theme === 'dark' ? '☀️' : '🌙'}
               </button>
-              <Link
-                to="/review-queue"
-                className="btn-header-action"
-                title="AI Review Queue"
-                style={{ textDecoration: 'none' }}
-              >
-                Review Queue
-              </Link>
               <button
                 onClick={handleLogout}
                 className="btn-header-action"
+                aria-label="Log out"
                 title="Logout"
               >
-                <LogOut size={16} />
+                <LogOut size={16} aria-hidden="true" />
               </button>
-            </div>
+            </nav>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
@@ -1648,6 +1731,7 @@ export default function App() {
         </div>
 
         {/* Conditional View Rendering */}
+        <main id="main-content" tabIndex={-1} style={{ outline: 'none' }}>
         {currentView === 'leaderboard' ? (
           <Leaderboard currentUserId={user.id} />
         ) : currentView === 'resumes' ? (
@@ -1935,6 +2019,7 @@ export default function App() {
             )}
           </>
         )}
+        </main>
       </div>
 
       {/* Modal */}

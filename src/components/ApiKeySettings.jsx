@@ -278,25 +278,32 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         }
       `}</style>
 
-      <div className="api-settings-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="api-settings-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="api-settings-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="api-settings-header">
-          <div className="api-settings-title">
-            <Key size={20} style={{ color: '#06b6d4' }} />
+          <div className="api-settings-title" id="api-settings-title">
+            <Key size={20} style={{ color: '#06b6d4' }} aria-hidden="true" />
             API Key Settings
           </div>
-          <button className="api-settings-close" onClick={onClose}>
-            <X size={20} />
+          <button className="api-settings-close" onClick={onClose} aria-label="Close API key settings">
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 
         <div className="api-settings-description">
-          <strong>Optional:</strong> Add your own API keys to use AI features. Keys are stored locally in your browser and never sent to our servers. Groq offers 50 free credits per month!
+          Add at least one key to activate the AI agents. Keys are stored in your browser only — never sent to our servers.{' '}
+          <strong style={{ color: '#06b6d4' }}>Groq is free</strong> — start there.
         </div>
 
         {/* OpenRouter API Key */}
         <div className="api-settings-section">
           <div className="api-settings-label">
-            <span>OpenRouter API Key (Required for Agents)</span>
+            <span>OpenRouter API Key</span>
             <a
               href="https://openrouter.ai/keys"
               target="_blank"
@@ -323,14 +330,14 @@ export default function ApiKeySettings({ isOpen, onClose }) {
             </button>
           </div>
           <div className="api-settings-hint">
-            Required for Scout &amp; all AI agents • Free credits available • Supports 200+ models
+            For Scout &amp; all AI agents • Free credits available • Supports 200+ models
           </div>
         </div>
 
         {/* Groq API Key */}
         <div className="api-settings-section">
           <div className="api-settings-label">
-            <span>Groq API Key (Recommended - Free)</span>
+            <span>Groq API Key <span style={{ fontFamily: "'Space Mono', monospace", fontSize: '9px', letterSpacing: '0.08em', background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.25)', borderRadius: '2px', padding: '1px 5px', marginLeft: '6px' }}>FREE — START HERE</span></span>
             <a
               href="https://console.groq.com/keys"
               target="_blank"
