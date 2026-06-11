@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 
 /**
  * MILESTONE TOAST COMPONENT
- * Presentational only - receives props, renders animation, auto-dismisses
- * Zero coupling to App state or gamification engine
+ * Presentational only - receives props, renders animation, auto-dismisses.
+ * Zero coupling to App state or gamification engine.
  */
 
 export default function MilestoneToast({ milestone, onDismiss }) {
@@ -36,14 +36,10 @@ export default function MilestoneToast({ milestone, onDismiss }) {
 
   const getIcon = () => {
     switch (milestone.tier) {
-      case 'rank-up':
-        return '🏆';
-      case 'achievement':
-        return '🎯';
-      case 'standard':
-        return '✨';
-      default:
-        return '✅';
+      case 'rank-up':    return '▲';
+      case 'achievement': return '◆';
+      case 'standard':   return '→';
+      default:           return '→';
     }
   };
 
@@ -66,11 +62,11 @@ export default function MilestoneToast({ milestone, onDismiss }) {
           ))}
         </div>
       )}
-      
+
       <div className="milestone-toast-icon">
         {getIcon()}
       </div>
-      
+
       <div className="milestone-toast-content">
         <div className="milestone-toast-title">
           {milestone.title}

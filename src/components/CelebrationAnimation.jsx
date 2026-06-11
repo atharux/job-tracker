@@ -16,7 +16,7 @@ import UnicornSprite from './UnicornSprite';
 /**
  * @typedef {Object} CelebrationAnimationProps
  * @property {Milestone} milestone - The milestone that triggered the celebration
- * @property {string} [emoji] - Optional emoji to use instead of unicorn (e.g., '🦋', '🐲')
+ * @property {string} [emoji] - Optional symbol override
  * @property {() => void} onComplete - Callback invoked when animation completes
  */
 
@@ -26,26 +26,16 @@ import UnicornSprite from './UnicornSprite';
 
 /**
  * @typedef {Object} CelebrationConfig
- * @property {number} unicornCount - Number of unicorns to spawn (3-10)
- * @property {number} duration - Duration of each unicorn animation in seconds
- * @property {number} spawnInterval - Time between unicorn spawns in milliseconds
- * @property {TrajectoryType[]} trajectories - Available trajectory types for this celebration
- */
-
-/**
- * @typedef {Object} UnicornData
- * @property {string} id - Unique identifier for the unicorn
- * @property {number} startX - Starting X position in pixels
- * @property {number} startY - Starting Y position in pixels
- * @property {number} duration - Animation duration in seconds
- * @property {number} delay - Delay before animation starts in milliseconds
- * @property {TrajectoryType} trajectory - The flight path type
+ * @property {number} unicornCount - Number of nodes to spawn (3–8)
+ * @property {number} duration - Duration of each node animation in seconds
+ * @property {number} spawnInterval - Time between node spawns in milliseconds
+ * @property {TrajectoryType[]} trajectories - Available trajectory types for this tier
  */
 
 /**
  * Get celebration configuration based on milestone tier
- * @param {MilestoneTier} tier - The milestone tier
- * @returns {CelebrationConfig} Configuration for the celebration
+ * @param {MilestoneTier} tier
+ * @returns {CelebrationConfig}
  */
 function getCelebrationConfig(tier) {
   switch (tier) {
@@ -74,12 +64,19 @@ function getCelebrationConfig(tier) {
   }
 }
 
+/** Map tier → terminal glyph */
+function symbolForTier(tier) {
+  switch (tier) {
+    case 'rank-up':    return '▲';
+    case 'achievement': return '◆';
+    default:            return '→';
+  }
+}
+
 /**
  * CELEBRATION ANIMATION COMPONENT
- * Renders flying emoji animations when milestones are achieved
- * Spawns multiple emojis with staggered timing based on milestone tier
- * 
- * @param {CelebrationAnimationProps} props
+ * Spawns rising data-node particles when milestones are achieved.
+ * Tier determines count, duration, and spawn cadence.
  */
 export default function CelebrationAnimation({ milestone, emoji, onComplete }) {
   const [unicorns, setUnicorns] = useState([]);
@@ -90,49 +87,45 @@ export default function CelebrationAnimation({ milestone, emoji, onComplete }) {
 
   useEffect(() => {
     const config = getCelebrationConfig(milestone.tier);
+    const symbol = emoji ?? symbolForTier(milestone.tier);
     const newUnicorns = [];
 
-    // Spawn unicorns with staggered timing
     for (let i = 0; i < config.unicornCount; i++) {
       const trajectory = config.trajectories[i % config.trajectories.length];
-      const unicorn = {
-        id: `unicorn-${Date.now()}-${i}`,
+      newUnicorns.push({
+        id: `node-${Date.now()}-${i}`,
         startX: Math.random() * window.innerWidth,
-        startY: window.innerHeight * (0.3 + Math.random() * 0.4),
+        // Spawn from bottom third so nodes visibly rise upward
+        startY: window.innerHeight * (0.65 + Math.random() * 0.2),
         duration: config.duration,
         delay: i * config.spawnInterval,
-        trajectory
-      };
-      newUnicorns.push(unicorn);
+        trajectory,
+        symbol,
+      });
     }
 
     setUnicorns(newUnicorns);
 
-    // Calculate total animation duration and trigger completion callback
     const totalDuration = (config.unicornCount - 1) * config.spawnInterval + config.duration * 1000;
     const completionTimer = setTimeout(() => {
-      if (onComplete) {
-        onComplete();
-      }
+      if (onComplete) onComplete();
     }, totalDuration);
 
-    return () => {
-      clearTimeout(completionTimer);
-    };
+    return () => clearTimeout(completionTimer);
   }, [milestone, onComplete]);
 
   return (
     <div className="celebration-animation">
-      {unicorns.map(unicorn => (
+      {unicorns.map(node => (
         <UnicornSprite
-          key={unicorn.id}
-          id={unicorn.id}
-          startX={unicorn.startX}
-          startY={unicorn.startY}
-          duration={unicorn.duration}
-          delay={unicorn.delay}
-          trajectory={unicorn.trajectory}
-          emoji={emoji}
+          key={node.id}
+          id={node.id}
+          startX={node.startX}
+          startY={node.startY}
+          duration={node.duration}
+          delay={node.delay}
+          trajectory={node.trajectory}
+          emoji={node.symbol}
           onAnimationEnd={handleUnicornComplete}
         />
       ))}

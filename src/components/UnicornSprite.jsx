@@ -1,76 +1,61 @@
 import React, { useEffect, useRef } from 'react';
 
 /**
- * @typedef {'diagonal' | 'arc' | 'wave' | 'straight'} TrajectoryType
+ * DATA NODE — replaces the flying unicorn sprite.
+ * Renders a small glowing glyph that rises and fades.
+ * API is intentionally identical to the old UnicornSprite so
+ * CelebrationAnimation needs no changes.
  */
-
-/**
- * @typedef {Object} UnicornSpriteProps
- * @property {string} id - Unique identifier for the unicorn
- * @property {number} startX - Starting X position in pixels
- * @property {number} startY - Starting Y position in pixels
- * @property {number} duration - Animation duration in seconds
- * @property {number} delay - Delay before animation starts in milliseconds
- * @property {TrajectoryType} trajectory - The flight path type
- * @property {string} [emoji] - Optional emoji to display (defaults to 🦄)
- * @property {(id: string) => void} onAnimationEnd - Callback when animation completes
- */
-
-/**
- * UNICORN SPRITE COMPONENT
- * Individual animated emoji element
- * Uses emoji (🦄, 🦋, 🐲) for quick implementation
- * Structured to allow easy image swapping later
- * 
- * @param {UnicornSpriteProps} props
- */
-export default function UnicornSprite({ 
-  id, 
-  startX, 
-  startY, 
-  duration, 
-  delay, 
+export default function UnicornSprite({
+  id,
+  startX,
+  startY,
+  duration,
+  delay,
   trajectory,
-  emoji = '🦄',
-  onAnimationEnd 
+  emoji = '◆',
+  onAnimationEnd,
 }) {
-  const unicornRef = useRef(null);
+  const nodeRef = useRef(null);
 
   useEffect(() => {
-    // Set up animation end handler
-    const element = unicornRef.current;
-    if (!element) return;
-
-    const handleAnimationEnd = () => {
-      if (onAnimationEnd) {
-        onAnimationEnd(id);
-      }
-    };
-
-    element.addEventListener('animationend', handleAnimationEnd);
-
-    return () => {
-      element.removeEventListener('animationend', handleAnimationEnd);
-    };
+    const el = nodeRef.current;
+    if (!el) return;
+    const handle = () => { if (onAnimationEnd) onAnimationEnd(id); };
+    el.addEventListener('animationend', handle);
+    return () => el.removeEventListener('animationend', handle);
   }, [id, onAnimationEnd]);
+
+  // Vary drift direction slightly per trajectory type so higher tiers
+  // feel more kinetic without being chaotic.
+  const driftMap = {
+    diagonal: 40,
+    arc: -30,
+    wave: 20,
+    straight: 0,
+  };
+  const baseDrift = driftMap[trajectory] ?? 0;
+  const drift = baseDrift + (Math.random() - 0.5) * 40;
 
   const style = {
     position: 'fixed',
     left: `${startX}px`,
     top: `${startY}px`,
-    fontSize: '3rem',
+    fontFamily: "'Space Mono', monospace",
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#06b6d4',
+    textShadow: '0 0 8px rgba(6,182,212,0.9), 0 0 20px rgba(6,182,212,0.4)',
     pointerEvents: 'none',
     zIndex: 9999,
-    animation: `unicorn-${trajectory} ${duration}s ease-in-out ${delay}ms forwards`,
-    willChange: 'transform, opacity'
+    userSelect: 'none',
+    '--node-drift': `${drift}px`,
+    animation: `node-rise ${duration}s ease-out ${delay}ms forwards`,
+    willChange: 'transform, opacity',
   };
 
   return (
-    <div 
-      ref={unicornRef}
-      className={`unicorn-sprite trajectory-${trajectory}`}
-      style={style}
-    >
+    <div ref={nodeRef} className="unicorn-sprite" style={style}>
       {emoji}
     </div>
   );
