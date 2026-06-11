@@ -73,17 +73,25 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
     setArtifacts(fresh)
     setLoadingArtifacts(false)
 
-    // Auto-generate if no documents exist yet
+    // Auto-generate if no documents exist yet and API keys are present.
     const hasAny = fresh.tailored || fresh.letter || fresh.mapping || fresh.screenshots
-    if (!hasAny) {
+    const hasKey = !!(localStorage.getItem('openrouter_api_key') || localStorage.getItem('groq_api_key'))
+    if (!hasAny && hasKey) {
       setGeneratingDocs(true)
       setDocError(null)
       runDocumentsForJob(record.job_id)
         .then(() => loadArtifacts())
         .catch(err => {
-          setDocError(err instanceof Error ? err.message : 'Failed to generate documents')
+          const msg = err instanceof Error ? err.message : 'Failed to generate documents'
+          const isCvMissing = msg.includes('CV version not found')
+          setDocError(isCvMissing
+            ? `${msg} — run: npx tsx scripts/importResume.ts`
+            : msg
+          )
         })
         .finally(() => setGeneratingDocs(false))
+    } else if (!hasAny && !hasKey) {
+      setDocError('No API key configured. Open Settings (⚙) and add an OpenRouter or Groq key to generate documents.')
     }
   }
 
@@ -112,6 +120,10 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
   }
 
   const job = record.job
+  const trackColor = record.cv_track === 'ux' ? '#06b6d4'
+    : record.cv_track === 'pm' ? '#8b5cf6'
+    : record.cv_track === 'devrel' ? '#f97316'
+    : '#475569'
   const tabs: Array<{ key: Tab; label: string }> = [
     { key: 'diff', label: 'Resume Diff' },
     { key: 'letter', label: 'Cover Letter' },
@@ -137,7 +149,7 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
             </a>
           )}
           {record.cv_track && (
-            <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', color: '#8b5cf6' }}>
+            <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', color: trackColor, border: `1px solid ${trackColor}33`, padding: '1px 6px', borderRadius: '3px' }}>
               {record.cv_track.toUpperCase()} TRACK
             </span>
           )}
@@ -154,7 +166,7 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
               padding: '0.75rem 1rem',
               background: 'transparent',
               border: 'none',
-              borderBottom: tab === key ? '2px solid #8b5cf6' : '2px solid transparent',
+              borderBottom: tab === key ? `2px solid ${trackColor}` : '2px solid transparent',
               color: tab === key ? '#e2e8f0' : '#475569',
               cursor: 'pointer',
               fontFamily: 'Space Mono, monospace',

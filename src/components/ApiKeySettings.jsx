@@ -35,6 +35,8 @@ export default function ApiKeySettings({ isOpen, onClose }) {
       localStorage.removeItem('anthropic_api_key');
     }
 
+    // Notify same-tab listeners (e.g. ResumeAIAssistant) — native 'storage' only fires cross-tab.
+    window.dispatchEvent(new CustomEvent('api-keys-saved'));
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -66,14 +68,14 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         }
 
         .api-settings-modal {
-          background: linear-gradient(135deg, rgba(15, 20, 25, 0.98), rgba(20, 25, 35, 0.98));
-          border: 1px solid rgba(110, 231, 183, 0.2);
-          border-radius: 20px;
-          padding: 32px;
-          max-width: 600px;
+          background: #0d1117;
+          border: 1px solid #1e2a1e;
+          border-top: 2px solid #06b6d4;
+          border-radius: 6px;
+          padding: 28px 32px;
+          max-width: 560px;
           width: 100%;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-          animation: slideUp 0.3s ease;
+          animation: slideUp 0.2s ease;
           position: relative;
           max-height: 90vh;
           overflow-y: auto;
@@ -125,14 +127,15 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         }
 
         .api-settings-description {
-          font-size: 14px;
-          color: #94a3b8;
+          font-size: 12px;
+          font-family: 'Space Mono', monospace;
+          color: #64748b;
           line-height: 1.6;
           margin-bottom: 24px;
-          padding: 16px;
-          background: rgba(110, 231, 183, 0.05);
-          border: 1px solid rgba(110, 231, 183, 0.2);
-          border-radius: 12px;
+          padding: 12px 14px;
+          background: rgba(6, 182, 212, 0.05);
+          border: 1px solid rgba(6, 182, 212, 0.15);
+          border-radius: 4px;
         }
 
         .api-settings-section {
@@ -151,7 +154,7 @@ export default function ApiKeySettings({ isOpen, onClose }) {
 
         .api-settings-link {
           font-size: 12px;
-          color: #6ee7b7;
+          color: #06b6d4;
           text-decoration: none;
           display: flex;
           align-items: center;
@@ -169,19 +172,20 @@ export default function ApiKeySettings({ isOpen, onClose }) {
 
         .api-settings-input {
           width: 100%;
-          background: rgba(0, 0, 0, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 10px;
+          background: #0a0a0f;
+          border: 1px solid #1e2a1e;
+          border-radius: 4px;
           color: #e2e8f0;
-          font-size: 14px;
-          padding: 12px 40px 12px 16px;
-          font-family: 'Courier New', monospace;
+          font-size: 13px;
+          padding: 10px 40px 10px 12px;
+          font-family: 'Space Mono', 'Courier New', monospace;
           outline: none;
-          transition: border-color 0.2s;
+          transition: border-color 0.15s;
+          box-sizing: border-box;
         }
 
         .api-settings-input:focus {
-          border-color: rgba(110, 231, 183, 0.4);
+          border-color: #06b6d4;
         }
 
         .api-settings-input::placeholder {
@@ -237,19 +241,18 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         }
 
         .api-settings-btn-primary {
-          background: linear-gradient(135deg, #6ee7b7, #3b82f6);
-          color: #0d1117;
+          background: #06b6d4;
+          color: #0a0a0f;
+          font-weight: 700;
         }
 
         .api-settings-btn-primary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(110, 231, 183, 0.3);
+          background: #22d3ee;
         }
 
         .api-settings-btn-primary:disabled {
           opacity: 0.5;
           cursor: not-allowed;
-          transform: none;
         }
 
         .api-settings-btn-secondary {
@@ -265,11 +268,8 @@ export default function ApiKeySettings({ isOpen, onClose }) {
 
         @media (max-width: 640px) {
           .api-settings-modal {
-            padding: 24px;
-          }
-
-          .api-settings-title {
-            font-size: 20px;
+            padding: 20px;
+            border-radius: 4px;
           }
 
           .api-settings-actions {
@@ -281,7 +281,7 @@ export default function ApiKeySettings({ isOpen, onClose }) {
       <div className="api-settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="api-settings-header">
           <div className="api-settings-title">
-            <Key size={24} style={{ color: '#6ee7b7' }} />
+            <Key size={20} style={{ color: '#06b6d4' }} />
             API Key Settings
           </div>
           <button className="api-settings-close" onClick={onClose}>

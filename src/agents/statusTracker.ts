@@ -19,8 +19,10 @@ async function classifyEmailResponse(
   jobTitle: string,
   company: string
 ): Promise<EmailResponseType> {
+  const anthropicKey = localStorage.getItem('anthropic_api_key')
+  if (!anthropicKey) throw new Error('Anthropic API key not configured — add it in Settings to use the Status Tracker.')
   const client = new Anthropic({
-    apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
+    apiKey: anthropicKey,
     dangerouslyAllowBrowser: true,
   })
 
@@ -57,8 +59,10 @@ Return ONLY one of: no_reply | rejection | screening | interview`,
 async function searchGmailForJob(
   job: Job
 ): Promise<{ found: boolean; emailContent: string }> {
+  const anthropicKey = localStorage.getItem('anthropic_api_key')
+  if (!anthropicKey) throw new Error('Anthropic API key not configured — add it in Settings to use the Status Tracker.')
   const client = new Anthropic({
-    apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
+    apiKey: anthropicKey,
     dangerouslyAllowBrowser: true,
   })
 

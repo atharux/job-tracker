@@ -79,17 +79,19 @@ const TOOLS = [
 // -----------------------------------------------------------------------------
 
 const useOpenRouterKey = () => {
-  const [key, setKey] = useState("");
+  // Lazy init reads the current value immediately — no empty flash on mount.
+  const [key, setKey] = useState(() => localStorage.getItem("openrouter_api_key") || "");
   useEffect(() => {
-    const stored = localStorage.getItem("openrouter_api_key");
-    if (stored) setKey(stored);
-  }, []);
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === "openrouter_api_key") setKey(e.newValue || "");
+    const sync = () => setKey(localStorage.getItem("openrouter_api_key") || "");
+    // Cross-tab writes fire the native 'storage' event.
+    const handleStorage = (e) => { if (e.key === "openrouter_api_key") setKey(e.newValue || "") };
+    // Same-tab writes: ApiKeySettings dispatches 'api-keys-saved' after localStorage.setItem.
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("api-keys-saved", sync);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("api-keys-saved", sync);
     };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
   return [key, setKey];
 };
