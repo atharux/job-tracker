@@ -22,6 +22,13 @@ interface Props {
   onOpenSettings?: () => void
 }
 
+function hasApiKey(): boolean {
+  return !!(
+    localStorage.getItem('openrouter_api_key') ||
+    localStorage.getItem('groq_api_key')
+  )
+}
+
 export default function ReviewQueue({ onOpenSettings }: Props) {
   const [records, setRecords] = useState<ReviewQueueRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -30,8 +37,22 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   const [filter, setFilter] = useState<StatusFilter>('pending_review')
   const [scoutError, setScoutError] = useState<string | null>(null)
   const [showApiSettings, setShowApiSettings] = useState(false)
+  const [keyPresent, setKeyPresent] = useState(hasApiKey)
 
-  const handleOpenSettings = onOpenSettings ?? (() => setShowApiSettings(true))
+  const openSettings = onOpenSettings ?? (() => setShowApiSettings(true))
+
+  const handleOpenSettings = () => {
+    setScoutError(null)
+    openSettings()
+  }
+
+  // Re-check key status when settings modal closes
+  const handleSettingsClose = () => {
+    setShowApiSettings(false)
+    setKeyPresent(hasApiKey())
+    // If a key was just added, clear any prior error
+    if (hasApiKey()) setScoutError(null)
+  }
 
   const loadQueue = useCallback(async () => {
     setLoading(true)
@@ -54,13 +75,24 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   }, [loadQueue])
 
   const handleRunScout = async () => {
+    // Pre-flight: open settings immediately if no key present
+    if (!hasApiKey()) {
+      setKeyPresent(false)
+      handleOpenSettings()
+      return
+    }
     setScouting(true)
     setScoutError(null)
     try {
       await runScoutOnly()
       await loadQueue()
     } catch (err) {
-      setScoutError(err instanceof Error ? err.message : 'Scout failed')
+      const msg = err instanceof Error ? err.message : 'Scout failed'
+      setScoutError(msg)
+      // If the error is still about missing key, open settings automatically
+      if (/api key|no key|not found/i.test(msg)) {
+        handleOpenSettings()
+      }
     } finally {
       setScouting(false)
     }
@@ -108,30 +140,56 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
             REFRESH
           </button>
 
-          <button
-            onClick={handleRunScout}
-            disabled={scouting}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', background: scouting ? '#1e1e2e' : '#8b5cf6', border: 'none', borderRadius: '4px', color: scouting ? '#475569' : '#fff', cursor: scouting ? 'not-allowed' : 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em' }}
-          >
-            <Search size={12} />
-            {scouting ? 'SCOUTING...' : 'RUN SCOUT'}
-          </button>
+          {!keyPresent ? (
+            <button
+              onClick={handleOpenSettings}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', background: '#f97316', border: 'none', borderRadius: '4px', color: '#07080c', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em' }}
+            >
+              <Key size={12} />
+              ADD API KEY
+            </button>
+          ) : (
+            <button
+              onClick={handleRunScout}
+              disabled={scouting}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', background: scouting ? '#1e1e2e' : '#8b5cf6', border: 'none', borderRadius: '4px', color: scouting ? '#475569' : '#fff', cursor: scouting ? 'not-allowed' : 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em' }}
+            >
+              <Search size={12} />
+              {scouting ? 'SCOUTING...' : 'RUN SCOUT'}
+            </button>
+          )}
         </div>
       </div>
 
-      {scoutError && (
+      {/* No-key banner (persistent until key added) */}
+      {!keyPresent && (
+        <div style={{ padding: '0.65rem 1.5rem', background: 'rgba(249,115,22,0.07)', borderBottom: '1px solid rgba(249,115,22,0.2)', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Key size={13} style={{ color: '#fb923c', flexShrink: 0 }} />
+          <span style={{ color: '#94a3b8', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', flex: 1 }}>
+            Agents need an API key to run. Groq is free —&nbsp;
+            <button
+              onClick={handleOpenSettings}
+              style={{ background: 'none', border: 'none', padding: 0, color: '#fb923c', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', textDecoration: 'underline', textUnderlineOffset: '2px' }}
+            >
+              add one in Settings ↗
+            </button>
+          </span>
+        </div>
+      )}
+
+      {/* Scout error banner (non-key errors) */}
+      {scoutError && keyPresent && (
         <div style={{ padding: '0.6rem 1.5rem', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <span style={{ color: '#ef4444', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem' }}>
             ⚠ {scoutError}
           </span>
-          {/api key|settings/i.test(scoutError) && (
-            <button
-              onClick={handleOpenSettings}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.6rem', background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)', borderRadius: '3px', color: '#c4b5fd', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem' }}
-            >
-              <Key size={10} /> ADD API KEY
-            </button>
-          )}
+          <button
+            onClick={() => setScoutError(null)}
+            style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', padding: '0 4px' }}
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
         </div>
       )}
 
@@ -194,7 +252,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
         </div>
       </div>
 
-      <ApiKeySettings isOpen={showApiSettings} onClose={() => setShowApiSettings(false)} />
+      <ApiKeySettings isOpen={showApiSettings} onClose={handleSettingsClose} />
     </div>
   )
 }
