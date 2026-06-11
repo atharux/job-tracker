@@ -9,6 +9,7 @@ import JobDetailPanel from './review-queue/JobDetailPanel'
 import ApiKeySettings from '../components/ApiKeySettings'
 
 type StatusFilter = 'all' | 'pending_review' | 'approved' | 'submitted' | 'rejected'
+type TrackFilter = 'all' | 'ux' | 'pm' | 'devrel'
 
 const STATUS_LABELS: Record<StatusFilter, string> = {
   all: 'All',
@@ -16,6 +17,13 @@ const STATUS_LABELS: Record<StatusFilter, string> = {
   approved: 'Approved',
   submitted: 'Submitted',
   rejected: 'Rejected',
+}
+
+const TRACK_META: Record<TrackFilter, { label: string; color: string }> = {
+  all:    { label: 'All Tracks',  color: '#475569' },
+  ux:     { label: 'UX Engineer', color: '#06b6d4' },
+  pm:     { label: 'PM',          color: '#8b5cf6' },
+  devrel: { label: 'DevRel',      color: '#f97316' },
 }
 
 interface Props {
@@ -35,6 +43,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   const [scouting, setScouting] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filter, setFilter] = useState<StatusFilter>('pending_review')
+  const [trackFilter, setTrackFilter] = useState<TrackFilter>('all')
   const [scoutError, setScoutError] = useState<string | null>(null)
   const [showApiSettings, setShowApiSettings] = useState(false)
   const [keyPresent, setKeyPresent] = useState(hasApiKey)
@@ -98,9 +107,11 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
     }
   }
 
-  const filteredRecords = records.filter((r) =>
-    filter === 'all' ? true : r.status === filter
-  )
+  const filteredRecords = records.filter((r) => {
+    const statusOk = filter === 'all' || r.status === filter
+    const trackOk = trackFilter === 'all' || r.cv_track === trackFilter
+    return statusOk && trackOk
+  })
 
   const selectedRecord = records.find((r) => r.id === selectedId) ?? null
 
@@ -218,6 +229,38 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
             </span>
           </button>
         ))}
+      </div>
+
+      {/* Track filters */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.5rem', borderBottom: '1px solid #0f0f1a', background: 'rgba(255,255,255,0.01)' }}>
+        <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#374151', marginRight: '0.25rem', letterSpacing: '0.08em' }}>TRACK</span>
+        {(Object.keys(TRACK_META) as TrackFilter[]).map((t) => {
+          const { label, color } = TRACK_META[t]
+          const active = trackFilter === t
+          return (
+            <button
+              key={t}
+              onClick={() => setTrackFilter(t)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+                padding: '0.25rem 0.6rem',
+                background: active ? `${color}18` : 'transparent',
+                border: `1px solid ${active ? color : '#1e1e2e'}`,
+                borderRadius: '3px',
+                color: active ? color : '#475569',
+                cursor: 'pointer',
+                fontFamily: 'Space Mono, monospace',
+                fontSize: '0.62rem',
+                transition: 'all 0.1s',
+              }}
+            >
+              {t !== 'all' && (
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: active ? color : '#374151', flexShrink: 0 }} />
+              )}
+              {label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Main split layout */}

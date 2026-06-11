@@ -180,6 +180,16 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
         ))}
       </div>
 
+      {/* Persistent submission confirmation */}
+      {record.status === 'submitted' && record.submitted_at && !submissionResult && (
+        <div style={{ padding: '0.55rem 1.5rem', background: 'rgba(6,182,212,0.06)', borderBottom: '1px solid rgba(6,182,212,0.18)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', color: '#22d3ee' }}>✓ SUBMITTED</span>
+          <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#475569' }}>
+            {new Date(record.submitted_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+          </span>
+        </div>
+      )}
+
       {/* Error banner */}
       {docError && (
         <div style={{ padding: '0.5rem 1.5rem', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem' }}>

@@ -5,7 +5,7 @@
  * Usage:
  *   IMPORT_EMAIL=you@example.com IMPORT_PASSWORD=yourpassword npx tsx scripts/importResume.ts
  *
- * Source files this data was derived from:
+ * Source files:
  *   /Users/a1/2026 Resume/2026CVversions/resume_ats_english.md
  *   /Users/a1/2026 Resume/2026Portfolio/EN_Athar_Resume v2026_ATS.md
  */
@@ -75,27 +75,64 @@ const CERTIFICATIONS = [
 
 const PROJECTS = [
   {
-    name: 'NeuroFlow Learning Platform',
-    url: 'https://atharux.com/cases/Neuro',
+    name: 'Forge — Job Tracker',
+    url: 'https://job-tracker-a5x.pages.dev/',
+    github: 'https://github.com/atharux/job-tracker',
     description:
-      'React-based learning platform with drag-and-drop kanban, XP progression, 82 coding exercises with Monaco editor, 3D isometric skills graph via ReactFlow, and AI-recommended learning paths across 7 programming courses.',
+      '9-agent autonomous job search pipeline: Scout discovers roles across 8+ live job boards, ' +
+      'Classifier scores fit, agents tailor resume and cover letter per CV track, ' +
+      'Review Gatekeeper enforces human approval before any submission fires. ' +
+      '3 real users. Stack: React + TypeScript, Supabase, Groq, OpenRouter, Cloudflare Pages.',
   },
   {
-    name: 'Job Tracker — Forge',
-    url: 'https://job-tracker-a5x.pages.dev/',
+    name: 'Venue Outreach DB',
+    url: 'https://github.com/atharux/venue-outreach-db',
     description:
-      'AI-powered job application automation platform: autonomous scout agents, LLM-tailored CVs per track, cover letter generation, human-in-the-loop review queue. Stack: React, Supabase, Groq, OpenRouter.',
+      'Agentic venue intelligence and outreach platform deployed as live POC for Hydrat3 ' +
+      '(Berlin electrolyte brand). Scrapes 9 European city regions via OpenStreetMap and ' +
+      'Foursquare, extracts booking contact emails from venue websites, and manages outreach ' +
+      'status across discovered leads. Stack: React + TypeScript, Supabase, ScrapeGraphAI.',
   },
 ]
 
-// Bullets follow the XYZ formula: Accomplished [X] as measured by [Y] by doing [Z]
+// Bullets use the XYZ formula: Accomplished [X] as measured by [Y] by doing [Z]
 const EXPERIENCE = [
+  {
+    company: 'Forge — Job Tracker (Open Source)',
+    role: 'AI Systems Architect & Full-Stack Developer',
+    dates: '2024 – Present',
+    bullets: [
+      'Shipped a 9-agent autonomous job application pipeline — Scout, Classifier, CV Selector, Resume Tailor, Cover Letter Writer, Form Mapper, Screenshot Capturer, Review Gatekeeper, Status Tracker — actively used by 3 real users including the author',
+      'Enforced human oversight of all AI-generated documents by implementing a hard review gate as the final pipeline step, blocking submission until a human approves each tailored resume and cover letter',
+      'Scaled job discovery from 150 to 500+ candidates per scan by rewriting sequential page fetching to parallel Promise.allSettled across 20 job board API pages simultaneously',
+      'Delivered production-grade agentic architecture on Cloudflare Pages with Supabase backend and multi-model routing via Groq and OpenRouter for cost-optimised inference',
+    ],
+  },
+  {
+    company: 'Venue Outreach DB — Hydrat3 POC (Client Project)',
+    role: 'Agentic Scraping & Outreach Automation Developer',
+    dates: '2025 – Present',
+    bullets: [
+      'Delivered live venue intelligence POC for Hydrat3 electrolyte brand targeting nightclub and festival buyers across Europe by building agentic scraping pipeline covering 9 city regions from OpenStreetMap and Foursquare',
+      'Maximised cold outreach deliverability by architecting two-layer contact extraction — venue website URL from public listing data, booking email scraped directly from the venue\'s own site',
+      'Prevented duplicate scraping on resume after interruption by designing idempotent multi-region state machine persisting rotation state across 9 regions in Supabase',
+    ],
+  },
+  {
+    company: 'AgentCon Berlin 2026',
+    role: 'Organiser & Co-host',
+    dates: '2026',
+    bullets: [
+      'Produced inaugural AgentCon Berlin at CODE University — Berlin\'s first conference dedicated to agentic AI systems — with speakers from Neo4j (Michael Hunger) and Microsoft (Lee Stott) and sponsors including Neo4j, Microsoft, Qdrant, and MemVerge',
+      'Built full event from scratch: speaker programme, sponsorship outreach, venue, registration, and day-of AV — drawing 100+ attendees to a first-edition community event',
+    ],
+  },
   {
     company: 'Rising Tide Berlin',
     role: 'Co-founder & Technical Lead',
     dates: 'Dec 2023 – Present',
     bullets: [
-      'Launched brand-aligned digital presence from zero by designing and building responsive Squarespace website with full brand identity and component guidelines, tracked through consistent brand engagement across all digital touchpoints',
+      'Launched brand-aligned digital presence from zero by designing and building responsive website with full brand identity and component guidelines',
       'Accelerated partnership pipeline for sustainability fashion events by leading co-brand strategy and digital presence with Frank Peralta Clothing',
     ],
   },
@@ -104,18 +141,8 @@ const EXPERIENCE = [
     role: 'Fractional Director UX Design & React Developer',
     dates: 'May 2024',
     bullets: [
-      'Delivered 30-page tokenized Figma design system in a single contract engagement by architecting Shadcn/ui component library, reducing design-to-dev handoff friction for complex SaaS desktop application',
-      'Shipped production-ready React components with custom glassmorphic UI patterns by directly translating Figma system into code, achieving zero rework on hand-off',
-    ],
-  },
-  {
-    company: 'NeuroFlow Learning Platform',
-    role: 'Full-Stack Developer & UX Designer (Personal Project)',
-    dates: '2026',
-    bullets: [
-      'Built full learning platform covering 7 programming courses and 82 coding exercises by implementing drag-and-drop kanban, XP progression, and Monaco editor in React',
-      'Visualised AI-recommended learning paths across the full curriculum by implementing 3D isometric skills graph with depth-based progress tracking using ReactFlow',
-      'Achieved WCAG accessibility compliance by designing glassmorphism UI with dark/light themes, command palette (⌘K), and screen-reader support',
+      'Delivered 30-page tokenized Figma design system in a single contract engagement by architecting Shadcn/ui component library, reducing design-to-dev handoff friction for a complex SaaS desktop application',
+      'Shipped production-ready React components with custom glassmorphic UI patterns by directly translating the Figma system into code, achieving zero rework on hand-off',
     ],
   },
   {
@@ -127,7 +154,7 @@ const EXPERIENCE = [
       'Increased shipping team productivity by 25% as measured by order-fulfilment throughput by designing and implementing a gamified dashboard UI',
       'Supported data-driven campaign decisions across 4 revenue streams by building Tableau visualisation dashboards tracking performance metrics in real time',
       'Enabled GDPR-compliant marketing automation by implementing customer data segmentation systems across the full email database',
-      'Improved campaign targeting accuracy across 4 revenue streams by developing customer journey maps and persona frameworks used by the marketing team',
+      'Improved campaign targeting accuracy by developing customer journey maps and persona frameworks adopted across 4 revenue streams',
     ],
   },
   {
@@ -153,7 +180,7 @@ const EXPERIENCE = [
     dates: 'Sep 2017 – May 2018',
     bullets: [
       'Reduced design-to-development rework by leading Agile design sprints and implementing structured handoff workflows for Android and iOS',
-      'Eliminated UI inconsistency across platforms by building a complete design system with reusable React Native components for both iOS and Android',
+      'Eliminated UI inconsistency across platforms by building a complete design system with reusable components for both iOS and Android',
     ],
   },
   {
@@ -172,7 +199,7 @@ const EXPERIENCE = [
     bullets: [
       'Secured 3 major B2B contracts as measured by signed agreements by redesigning and rebuilding the medical services website with conversion-optimised UX',
       'Generated $250,000 in direct sales as measured by signed deal value by designing and developing the RFID technology product website',
-      'Improved retail conversion by rebuilding the jewelry site with enhanced UX/UI, integrated SEO, and email campaign automation',
+      'Improved retail conversion by rebuilding the jewellery site with enhanced UX/UI, integrated SEO, and email campaign automation',
     ],
   },
   {
@@ -205,17 +232,25 @@ const CV_VERSIONS = [
     accent_color: '#06b6d4',
     content: {
       contact: CONTACT,
+      title: 'UX Engineer & AI Systems Builder',
       summary:
-        'UX/UI Developer and React Application Architect with 10+ years bridging design and engineering. ' +
-        'Specialises in translating design systems into production-ready React applications using AI-assisted ' +
-        'development workflows. Based in Berlin — comfortable working in English and German (B2).',
+        'UX Engineer and AI systems builder with 10+ years bridging design and engineering. ' +
+        'Builds production React applications with embedded agentic pipelines — ' +
+        'from a 9-agent job search automation platform (3 real users, public repo) to ' +
+        'an agentic venue scraping tool deployed for a live startup client. ' +
+        'Designs human-in-the-loop interfaces where AI actions require user oversight. ' +
+        'Based in Berlin, working in English and German (B2).',
       experience: EXPERIENCE,
       skills: [
+        // Design
         'Figma', 'Design Systems', 'User Research', 'Prototyping', 'Wireframing',
-        'Accessibility (WCAG)', 'Information Architecture', 'UI/UX Best Practices',
-        'React', 'Tailwind CSS', 'Shadcn/ui', 'Component Architecture',
-        'HTML5 / CSS3 / JavaScript', 'Responsive Web Design', 'Git',
-        'Gamification Design', 'Customer Journey Mapping',
+        'Accessibility (WCAG)', 'Information Architecture', 'Human-in-the-Loop UX',
+        'Gamification Design', 'Customer Journey Mapping', 'Agentic Interface Design',
+        // Engineering
+        'React', 'TypeScript', 'JavaScript ES6+', 'Vite', 'Tailwind CSS', 'Shadcn/ui',
+        'Component Architecture', 'Supabase', 'HTML5 / CSS3', 'Responsive Web Design', 'Git',
+        // AI tooling
+        'Anthropic Claude API', 'Groq', 'OpenRouter', 'AI-Assisted Development',
       ],
       projects: PROJECTS,
       education: EDUCATION,
@@ -229,17 +264,26 @@ const CV_VERSIONS = [
     accent_color: '#8b5cf6',
     content: {
       contact: CONTACT,
+      title: 'AI Product Manager & UX Consultant',
       summary:
-        'Product leader and UX practitioner with 10+ years driving digital products from concept to deployment. ' +
-        'Lean Six Sigma Green Belt with a strong track record in cross-functional team leadership, ' +
-        'data-driven campaign optimisation, and gamification strategy. Based in Berlin.',
+        'AI product manager and UX practitioner with 10+ years taking products from concept to deployment. ' +
+        'Lean Six Sigma Green Belt. Shipped agentic AI products as both PM and hands-on engineer — ' +
+        'a 9-agent job search pipeline with human-in-the-loop oversight (3 real users) and ' +
+        'a venue intelligence automation platform deployed for a live startup client. ' +
+        'Brings rare technical depth to product decisions. Based in Berlin.',
       experience: EXPERIENCE,
       skills: [
+        // Product & strategy
+        'AI Product Strategy', 'Human-in-the-Loop Systems', 'LLM Evaluation & Quality',
         'Lean Six Sigma Green Belt', 'Agile / Scrum', 'Cross-functional Team Leadership',
-        'Tableau', 'Data Visualization', 'Analytics', 'A/B Testing',
+        'Roadmap Planning', 'Stakeholder Management', 'OKRs',
+        // Data & analytics
+        'Tableau', 'Data Visualisation', 'Analytics', 'A/B Testing',
+        // UX & research
         'Customer Journey Mapping', 'Persona Development', 'Gamification',
-        'GDPR Compliance', 'Campaign Strategy', 'Roadmap Planning',
-        'Jira', 'Trello', 'Asana', 'Stakeholder Management',
+        'User Research', 'Accessibility (WCAG)',
+        // Tools
+        'GDPR Compliance', 'Campaign Strategy', 'Jira', 'Trello', 'Asana',
       ],
       projects: PROJECTS,
       education: EDUCATION,
@@ -253,17 +297,27 @@ const CV_VERSIONS = [
     accent_color: '#f97316',
     content: {
       contact: CONTACT,
+      title: 'Developer Relations Engineer & Agentic AI Builder',
       summary:
-        'Technical UX Engineer and AI product builder with 10+ years across design, front-end engineering, ' +
-        'and developer tooling. Builds production React apps integrated with LLM APIs (Claude, Groq, OpenRouter, n8n). ' +
-        'Organiser of Global AI Berlin meetup. Portfolio: atharux.com',
+        'Developer advocate and agentic AI builder. ' +
+        'Ships production multi-agent systems: 9-agent job search pipeline (Forge, public repo, 3 real users) ' +
+        'and agentic venue intelligence platform (deployed for Hydrat3 startup, public repo). ' +
+        'Organiser and co-host of AgentCon Berlin 2026 (speakers: Neo4j, Microsoft; sponsors: Neo4j, Microsoft, Qdrant, MemVerge). ' +
+        'Volunteer at Global AI Berlin (120+ members). ' +
+        'Stack: React · TypeScript · Supabase · Groq · Anthropic · Langfuse · Cloudflare Pages. ' +
+        'atharux.com',
       experience: EXPERIENCE,
       skills: [
-        'React', 'TypeScript', 'JavaScript ES6+', 'Vite', 'Tailwind CSS',
-        'Supabase', 'Anthropic / Claude API', 'Groq', 'OpenRouter', 'n8n',
-        'AI-Assisted Development', 'Prompt Engineering', 'API Integration',
-        'Git', 'Technical Writing', 'Developer Community Building',
-        'HTML5 / CSS3', 'Accessibility (WCAG)', 'ReactFlow',
+        // Engineering
+        'React', 'TypeScript', 'JavaScript ES6+', 'Vite', 'Tailwind CSS', 'Cloudflare Pages',
+        'Supabase', 'HTML5 / CSS3', 'Git', 'Accessibility (WCAG)',
+        // AI / agentic stack
+        'Anthropic Claude API', 'Groq', 'OpenRouter', 'Langfuse', 'ScrapeGraphAI',
+        'Agentic AI Pipelines', 'Multi-agent Orchestration', 'LLM Prompt Engineering',
+        'Human-in-the-Loop Systems', 'MCP Servers', 'AI-Assisted Development',
+        // DevRel
+        'Technical Writing', 'Public Speaking', 'Developer Community Building',
+        'API Documentation', 'Live Demos & Workshops',
       ],
       projects: PROJECTS,
       education: EDUCATION,
