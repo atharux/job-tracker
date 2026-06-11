@@ -38,17 +38,25 @@ const ROLE_KEYWORDS = [
   'product designer', 'interaction designer', 'experience designer',
   'design engineer', 'frontend designer', 'design systems',
   'visual designer', 'ux researcher', 'user researcher',
-  'head of design', 'design lead', 'lead designer', 'vp of design',
-  'director of design', 'figma',
+  'head of design', 'design lead', 'lead designer', 'ux lead',
+  'vp of design', 'director of design', 'design manager', 'figma',
+  // Broader UX — catches "User Experience Designer", "Head of User Experience"
+  'user experience',
+  // UX Writing / Content Design
+  'ux writer', 'ux writing', 'content designer', 'content strategist',
+  // Service / CX Design
+  'service designer', 'customer experience designer',
   // Product
   'product manager', 'product owner', 'senior pm', 'lead pm',
-  'head of product', 'director of product',
+  'head of product', 'director of product', 'product lead',
+  'vp of product', 'chief product', 'group product manager',
   // DevRel / Community
   'developer relations', 'devrel', 'developer advocate', 'developer experience',
   'dx engineer', 'community manager', 'technical evangelist',
-  'platform evangelist', 'solutions engineer',
+  'platform evangelist', 'solutions engineer', 'api evangelist',
   // AI / Tooling
   'ai product manager', 'ai ux', 'conversational designer',
+  'prompt engineer', 'ai designer',
 ]
 
 function matchesRole(text: string): boolean {
@@ -107,27 +115,38 @@ interface ArbeitnowJob {
 }
 
 async function fetchArbeitnow(): Promise<ScoutResult[]> {
-  const results: ScoutResult[] = []
+  // Fetch 20 pages in parallel — covers ~500 jobs vs the old sequential 6 pages (~150).
+  // Pages beyond the last real page return empty data arrays, which we skip gracefully.
+  const PAGE_COUNT = 20
 
-  for (let page = 1; page <= 6; page++) {
-    const res = await fetch(`https://www.arbeitnow.com/api/job-board-api?page=${page}`)
-    if (!res.ok) break
-    const data = await res.json() as { data: ArbeitnowJob[] }
-    if (!data.data?.length) break  // genuinely empty page — stop
-    const matching = data.data.filter(
-      j => matchesRole(j.title) || matchesRole((j.tags ?? []).join(' '))
+  const pages = await Promise.allSettled(
+    Array.from({ length: PAGE_COUNT }, (_, i) =>
+      fetch(`https://www.arbeitnow.com/api/job-board-api?page=${i + 1}`)
+        .then(r => r.ok ? (r.json() as Promise<{ data: ArbeitnowJob[] }>) : Promise.resolve({ data: [] as ArbeitnowJob[] }))
+        .catch(() => ({ data: [] as ArbeitnowJob[] }))
     )
-    results.push(
-      ...matching.map(j => ({
-        title: j.title,
-        company: j.company_name,
-        location: j.remote ? 'Remote' : (j.location || 'Germany'),
-        url: j.url,
-        source: 'arbeitnow' as const,
-        raw_jd: j.description,
-        scraped_at: safeDate(j.created_at ?? ''),
-      }))
-    )
+  )
+
+  const results: ScoutResult[] = []
+  const seen = new Set<string>()
+
+  for (const page of pages) {
+    if (page.status !== 'fulfilled') continue
+    for (const j of page.value.data ?? []) {
+      if (!j.url || seen.has(j.url)) continue
+      seen.add(j.url)
+      if (matchesRole(j.title) || matchesRole((j.tags ?? []).join(' '))) {
+        results.push({
+          title: j.title,
+          company: j.company_name,
+          location: j.remote ? 'Remote' : (j.location || 'Germany'),
+          url: j.url,
+          source: 'arbeitnow' as const,
+          raw_jd: j.description,
+          scraped_at: safeDate(j.created_at ?? ''),
+        })
+      }
+    }
   }
 
   return results

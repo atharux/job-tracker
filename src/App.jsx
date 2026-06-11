@@ -348,6 +348,7 @@ export default function App() {
     job_posting_url: ''     // NEW
   });
 
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [gamificationState, setGamificationState] = useState(null);
 
   const [activeMilestone, setActiveMilestone] = useState(null);
@@ -1525,20 +1526,67 @@ export default function App() {
                 Resumes
               </button>
             
-<button
-  onClick={() => setCurrentView('resumeAI')}
-  className={`btn-header-action ${currentView === 'resumeAI' ? 'active' : ''}`}
-  title="AI-powered resume assistant"
->
-  Resume AI
-</button>
-<button
-  onClick={() => setCurrentView('alvaPrep')}
-  className={`btn-header-action ${currentView === 'alvaPrep' ? 'active' : ''}`}
-  title="Logic test practice"
->
-  Logic Prep
-</button>
+<div style={{ position: 'relative' }}>
+  <button
+    onClick={() => setShowToolsMenu(m => !m)}
+    className={`btn-header-action ${currentView === 'resumeAI' || currentView === 'alvaPrep' ? 'active' : ''}`}
+    title="Tools"
+    aria-haspopup="true"
+    aria-expanded={showToolsMenu}
+  >
+    Tools ▾
+  </button>
+  {showToolsMenu && (
+    <>
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 99 }}
+        onClick={() => setShowToolsMenu(false)}
+      />
+      <div style={{
+        position: 'absolute',
+        top: 'calc(100% + 6px)',
+        right: 0,
+        zIndex: 100,
+        background: '#0d1117',
+        border: '1px solid #1e2a1e',
+        borderTop: '2px solid #06b6d4',
+        borderRadius: '4px',
+        minWidth: '160px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        overflow: 'hidden',
+      }}>
+        {[
+          { view: 'resumeAI', label: 'Resume AI', desc: 'AI-powered resume assistant' },
+          { view: 'alvaPrep', label: 'Logic Prep', desc: 'Logic test practice' },
+        ].map(({ view, label, desc }) => (
+          <button
+            key={view}
+            onClick={() => { setCurrentView(view); setShowToolsMenu(false); }}
+            title={desc}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '9px 14px',
+              background: currentView === view ? 'rgba(6,182,212,0.08)' : 'transparent',
+              border: 'none',
+              borderLeft: currentView === view ? '2px solid #06b6d4' : '2px solid transparent',
+              color: currentView === view ? '#06b6d4' : '#94a3b8',
+              fontFamily: "'Space Mono', monospace",
+              fontSize: '11px',
+              textAlign: 'left',
+              cursor: 'pointer',
+              transition: 'background 0.1s, color 0.1s',
+            }}
+            onMouseEnter={e => { if (currentView !== view) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#e2e8f0'; } }}
+            onMouseLeave={e => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; } }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </>
+  )}
+</div>
 
               <button
                 onClick={() => setCurrentView('leaderboard')}
