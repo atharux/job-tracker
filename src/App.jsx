@@ -36,6 +36,7 @@ import ApiKeySettings from './components/ApiKeySettings.jsx';
 
 import MilestoneToast from './MilestoneToast.jsx';
 import CelebrationAnimation from './components/CelebrationAnimation.jsx';
+import AppCompanion from './components/AppCompanion.jsx';
 import Leaderboard from './components/Leaderboard.jsx';
 import * as gamification from './gamification.js';
 import './App.css';
@@ -2072,6 +2073,12 @@ export default function App() {
           onComplete={() => setStatusCelebration(null)}
         />
       )}
+
+      <AppCompanion
+        activeMilestone={activeMilestone}
+        statusCelebration={statusCelebration}
+        isSyncing={isSyncing}
+      />
     </div>
   );
 }
