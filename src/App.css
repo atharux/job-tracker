@@ -1110,9 +1110,25 @@ td:has(.status-badge) {
 }
 
 [data-theme="garden"] .grid-bg {
-  background-image: 
+  background-image:
     linear-gradient(rgba(100, 116, 139, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(100, 116, 139, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Pastel — warm GRAPHITE light page background (was falling through to the
+   dark #0a0a0f .bg-gradient, leaving white cards on black). */
+[data-theme="pastel"] {
+  background: #faf8f6;
+  color: #24262b;
+}
+[data-theme="pastel"] .bg-gradient {
+  background: linear-gradient(135deg, #faf8f6 0%, #f1ede8 100%);
+}
+[data-theme="pastel"] .grid-bg {
+  background-image:
+    linear-gradient(rgba(110, 100, 90, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(110, 100, 90, 0.04) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 

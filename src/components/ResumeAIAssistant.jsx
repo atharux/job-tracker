@@ -16,17 +16,18 @@ import { buildSTARAnswersPrompt }         from "../ai/prompts/starAnswers";
 import { buildRecruiterReviewPrompt }     from "../ai/prompts/recruiterReview";
 import { buildFullApplicationPackPrompt } from "../ai/prompts/fullApplicationPack";
 
-// Palette tokens
-const BG       = '#0a0a0f';
-const SURFACE  = '#0d0d15';
-const BORDER   = '#1e1e2e';
-const BORDER2  = '#2d2d3f';
-const TEAL     = '#06b6d4';
-const PURPLE   = '#8b5cf6';
-const TEXT_HI  = '#e2e8f0';
-const TEXT_MID = '#94a3b8';
-const TEXT_LO  = '#475569';
-const TEXT_DIM = '#64748b';
+// Palette tokens — mapped to theme CSS vars so this panel follows the active
+// theme (dark / pastel-light) instead of being hard-coded dark.
+const BG       = 'var(--bg)';
+const SURFACE  = 'var(--surface-1)';
+const BORDER   = 'var(--border-subtle)';
+const BORDER2  = 'var(--border)';
+const TEAL     = 'var(--accent)';
+const PURPLE   = 'var(--pm)';
+const TEXT_HI  = 'var(--text-1)';
+const TEXT_MID = 'var(--text-2)';
+const TEXT_LO  = 'var(--text-3)';
+const TEXT_DIM = 'var(--text-3)';
 const MONO     = "'Space Mono', 'Courier New', monospace";
 
 // -----------------------------------------------------------------------------

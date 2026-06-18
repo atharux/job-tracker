@@ -164,10 +164,21 @@ async function runScoutStep(userId: string): Promise<Array<ScoutResult & { id: s
   try {
     const results = await runScout()
 
+    // Collapse duplicate URLs within this single scout batch first. upsertJob
+    // runs concurrently below, so two identical URLs would both pass the 7-day
+    // dedup check (neither is persisted yet) and get queued twice. Cross-run
+    // dedup (getRecentJobId) still handles URLs seen in earlier runs.
+    const seenUrls = new Set<string>()
+    const uniqueResults = results.filter((r) => {
+      if (seenUrls.has(r.url)) return false
+      seenUrls.add(r.url)
+      return true
+    })
+
     // upsertJob returns null for jobs seen within the last 7 days — filter those out
     const withIds = (
       await Promise.all(
-        results.map(async (r) => {
+        uniqueResults.map(async (r) => {
           const id = await upsertJob(r, userId)
           if (!id) return null
           return { ...r, id }

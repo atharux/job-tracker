@@ -38,6 +38,11 @@ function hasApiKey(): boolean {
 }
 
 export default function ReviewQueue({ onOpenSettings }: Props) {
+  // This is a separate route — apply the persisted theme so it isn't dark-only.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('forge.theme') || 'dark')
+  }, [])
+
   const [records, setRecords] = useState<ReviewQueueRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [scouting, setScouting] = useState(false)

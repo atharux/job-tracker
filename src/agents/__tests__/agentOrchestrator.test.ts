@@ -17,7 +17,16 @@ vi.mock('../reviewGatekeeper', () => ({
   getAll: vi.fn(),
 }))
 vi.mock('../statusTracker', () => ({ syncStatus: vi.fn(), watchJob: vi.fn() }))
-vi.mock('../../supabaseClient', () => ({ supabase: { from: vi.fn() } }))
+vi.mock('../submitter', () => ({
+  submitApplication: vi.fn(async () => ({ success: true, method: 'api', message: 'ok', applicationUrl: 'x', requiresManual: false })),
+}))
+vi.mock('../../supabaseClient', () => ({
+  supabase: {
+    // Every orchestrator entrypoint calls getCurrentUserId() → auth.getUser().
+    auth: { getUser: vi.fn(async () => ({ data: { user: { id: 'test-user' } } })) },
+    from: vi.fn(),
+  },
+}))
 
 import { runScoutOnly, runDocumentsForJob, approveAndSubmit, runStatusSync } from '../../services/agentOrchestrator'
 import { runScout } from '../scout'
@@ -70,36 +79,37 @@ function makeJobRecord() {
   return { data: { id: 'job-1', raw_jd: 'Looking for UX Engineer...', title: 'Senior UX Engineer', company: 'Acme GmbH', url: 'https://acme.de/jobs/1' }, error: null }
 }
 
+// Fully chainable query double — every builder method returns the builder;
+// terminal reads resolve to canned data; awaited writes resolve too. Covers
+// the full chain the orchestrator uses (gte/maybeSingle/in/order).
+function chain(opts: { single?: unknown; maybeSingle?: unknown; resolve?: unknown }) {
+  const b: Record<string, unknown> = {}
+  for (const m of ['insert', 'update', 'upsert', 'select', 'eq', 'gte', 'in', 'order']) {
+    b[m] = () => b
+  }
+  b.single = () => Promise.resolve(opts.single ?? { data: null, error: null })
+  b.maybeSingle = () => Promise.resolve(opts.maybeSingle ?? { data: null, error: null })
+  b.then = (res: (v: unknown) => void) => res(opts.resolve ?? { data: null, error: null })
+  return b as unknown as ReturnType<typeof supabase.from>
+}
+
+// loadLatestArtifacts() reads these back so approveAndSubmit has docs to submit.
+const artifactRows = {
+  data: [
+    { artifact_type: 'resume_tailored', content: mockTailored, created_at: new Date().toISOString() },
+    { artifact_type: 'cover_letter', content: mockLetter, created_at: new Date().toISOString() },
+  ],
+  error: null,
+}
+
 function setupSupabaseMocks() {
   mockFrom.mockImplementation((table: string) => {
-    if (table === 'agent_runs') {
-      return {
-        insert: vi.fn().mockReturnThis(),
-        update: vi.fn().mockReturnThis(),
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue(makeAgentRunRecord()),
-      } as unknown as ReturnType<typeof supabase.from>
-    }
-    if (table === 'jobs') {
-      return {
-        upsert: vi.fn().mockReturnThis(),
-        update: vi.fn().mockReturnThis(),
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue(makeJobRecord()),
-      } as unknown as ReturnType<typeof supabase.from>
-    }
-    if (table === 'application_artifacts') {
-      return {
-        insert: vi.fn().mockResolvedValue({ data: null, error: null }),
-      } as unknown as ReturnType<typeof supabase.from>
-    }
-    return {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: null, error: null }),
-    } as unknown as ReturnType<typeof supabase.from>
+    if (table === 'agent_runs') return chain({ single: makeAgentRunRecord() })
+    // jobs: single() serves upsert + getJobRawJd; maybeSingle() is the dedup
+    // check — null means "not seen recently", so the job proceeds.
+    if (table === 'jobs') return chain({ single: makeJobRecord(), maybeSingle: { data: null, error: null } })
+    if (table === 'application_artifacts') return chain({ resolve: artifactRows })
+    return chain({})
   })
 }
 
@@ -140,7 +150,7 @@ describe('agentOrchestrator', () => {
 
       await runDocumentsForJob('job-1')
 
-      expect(mockSelectCV).toHaveBeenCalledWith('ux')
+      expect(mockSelectCV).toHaveBeenCalledWith('ux', 'test-user')
       expect(mockTailorResume).toHaveBeenCalledTimes(1)
       expect(mockWriteCoverLetter).toHaveBeenCalledTimes(1)
     })

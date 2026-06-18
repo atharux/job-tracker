@@ -327,7 +327,7 @@ export default function App() {
   const [resetMode, setResetMode] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('forge.theme') || 'dark');
 
   const [applications, setApplications] = useState([]);
   const [resumeVersions, setResumeVersions] = useState([]);
@@ -377,6 +377,13 @@ export default function App() {
     document.documentElement.classList.toggle('hc-mode', highContrast);
     localStorage.setItem('forge.hc', highContrast ? '1' : '0');
   }, [highContrast]);
+
+  // Theme lives on <html> so every route (incl. the separate /review-queue
+  // page) inherits it, and persists so navigation never resets it to dark.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('forge.theme', theme);
+  }, [theme]);
 
   useEffect(() => { localStorage.setItem('forge.view', tableView); }, [tableView]);
 
@@ -744,7 +751,7 @@ export default function App() {
   };
 
   const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'garden' : 'dark');
+    setTheme(prev => prev === 'dark' ? 'pastel' : 'dark');
   };
 
   const loadApplications = async () => {

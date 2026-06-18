@@ -305,6 +305,44 @@ html.hc-mode a { color: var(--hc-link) !important; text-decoration: underline !i
 html.hc-mode a:visited { color: var(--hc-link) !important; }
 html.hc-mode :focus-visible { outline: 4px solid var(--hc-focus) !important; outline-offset: 3px !important; }
 
+/* Light-theme high contrast — invert to white-bg / black-text so HC respects the
+   active light theme instead of forcing dark. Higher specificity wins over the
+   black/white rules above regardless of order. (.min-h-screen is the data-theme
+   wrapper.) */
+html.hc-mode .min-h-screen[data-theme="pastel"],
+html.hc-mode .min-h-screen[data-theme="garden"] {
+  --hc-bg: #fff; --hc-text: #000; --hc-link: #0000cc; --hc-focus: #b35a00; --hc-border: #000;
+  background: #fff !important; color: #000 !important;
+}
+html.hc-mode [data-theme="pastel"] *,
+html.hc-mode [data-theme="garden"] * { border-color: #000 !important; }
+html.hc-mode [data-theme="pastel"] a,
+html.hc-mode [data-theme="garden"] a { color: #0000cc !important; }
+html.hc-mode [data-theme="pastel"] .stat-card,
+html.hc-mode [data-theme="pastel"] .analytics-card,
+html.hc-mode [data-theme="pastel"] .kanban-card,
+html.hc-mode [data-theme="pastel"] .kanban-col,
+html.hc-mode [data-theme="pastel"] .app-card,
+html.hc-mode [data-theme="pastel"] .upcoming-banner,
+html.hc-mode [data-theme="pastel"] .smart-search,
+html.hc-mode [data-theme="pastel"] .modal,
+html.hc-mode [data-theme="garden"] .stat-card,
+html.hc-mode [data-theme="garden"] .analytics-card,
+html.hc-mode [data-theme="garden"] .kanban-card,
+html.hc-mode [data-theme="garden"] .kanban-col,
+html.hc-mode [data-theme="garden"] .app-card,
+html.hc-mode [data-theme="garden"] .upcoming-banner,
+html.hc-mode [data-theme="garden"] .smart-search,
+html.hc-mode [data-theme="garden"] .modal {
+  background: #fff !important; border: 2px solid #000 !important; color: #000 !important;
+}
+html.hc-mode [data-theme="pastel"] .btn-primary,
+html.hc-mode [data-theme="pastel"] .btn-save,
+html.hc-mode [data-theme="garden"] .btn-primary,
+html.hc-mode [data-theme="garden"] .btn-save {
+  background: #b35a00 !important; color: #fff !important; border: 2px solid #000 !important;
+}
+
 html.hc-mode .badge { border-width: 3px !important; color: #fff !important; }
 html.hc-mode .badge-applied   { background: #0033cc !important; }
 html.hc-mode .badge-interview { background: #006633 !important; }

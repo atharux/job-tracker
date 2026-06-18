@@ -758,6 +758,88 @@ select:focus {
   box-shadow: 0 12px 40px rgba(0,0,0,0.12) !important;
 }
 
+/* ── Pastel / Light theme (GRAPHITE-evolved) ────────────────────────────────────
+   Warm neutral base + subtle, low-saturation pastel accents. Patches the same
+   hard-coded dark literals garden does, plus a few it misses (scrollbars,
+   progress track) so nothing washes out or stays dark. */
+[data-theme="pastel"] {
+  /* EventOps GRAPHITE light theme — neutral-first, graphite accent. */
+  --bg:            #fafafa;
+  --surface-1:     #ffffff;
+  --surface-2:     #f5f5f5;
+  --surface-3:     #e5e7eb;
+
+  --accent:        #111827;  /* graphite core — neutral identity */
+  --accent-dim:    rgba(17, 24, 39, 0.06);
+  --accent-glow:   rgba(17, 24, 39, 0.10);
+  --accent-border: rgba(17, 24, 39, 0.18);
+
+  --pm:            #6d28d9;
+  --pm-dim:        rgba(109, 40, 217, 0.08);
+  --pm-border:     rgba(109, 40, 217, 0.22);
+
+  --devrel:        #c2410c;
+  --devrel-dim:    rgba(194, 65, 12, 0.08);
+
+  --danger:        #dc2626;
+  --danger-dim:    rgba(220, 38, 38, 0.08);
+  --danger-border: rgba(220, 38, 38, 0.20);
+
+  --success:       #16a34a;
+  --success-dim:   rgba(22, 163, 74, 0.10);
+
+  --glow-sm:   0 0 14px rgba(17, 24, 39, 0.05);
+  --glow-md:   0 0 0 1px rgba(17, 24, 39, 0.10), 0 4px 16px rgba(0, 0, 0, 0.10);
+  --glow-ring: inset 0 0 0 1px rgba(17, 24, 39, 0.06);
+
+  --border:        #e5e7eb;
+  --border-subtle: rgba(17, 24, 39, 0.05);
+
+  --text-1: #111827;
+  --text-2: #6b7280;
+  --text-3: #9ca3af;
+  --text-4: #d1d5db;
+
+  --r:    6px;
+  --r-lg: 10px;
+}
+/* Graphite accent is dark — keep text on accent-filled buttons white/legible. */
+[data-theme="pastel"] .btn-primary { color: #ffffff !important; }
+[data-theme="pastel"] .btn-primary:hover:not(:disabled) { background: #374151 !important; }
+[data-theme="pastel"] .header-row {
+  background: rgba(250, 248, 246, 0.94) !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: 0 1px 0 rgba(110,134,201,0.05), 0 2px 10px rgba(40,35,30,0.05) !important;
+}
+[data-theme="pastel"] .auth-card,
+[data-theme="pastel"] .modal {
+  box-shadow: 0 12px 40px rgba(40,35,30,0.12) !important;
+}
+[data-theme="pastel"] ::-webkit-scrollbar-thumb { background: rgba(40,35,30,0.18) !important; }
+[data-theme="pastel"] ::-webkit-scrollbar-thumb:hover { background: rgba(40,35,30,0.30) !important; }
+[data-theme="pastel"] .rank-progress-bar { background: rgba(40,35,30,0.06) !important; }
+[data-theme="pastel"] ::selection { background: rgba(110,134,201,0.22); color: var(--text-1); }
+
+/* EventOps-style utility remap — flip the dark Tailwind utilities in one place
+   instead of patching components individually (see athar-eventplanner). */
+[data-theme="pastel"] .text-slate-50,
+[data-theme="pastel"] .text-slate-100,
+[data-theme="pastel"] .text-slate-200 { color: var(--text-1) !important; }
+[data-theme="pastel"] .text-slate-300,
+[data-theme="pastel"] .text-slate-400,
+[data-theme="pastel"] .text-slate-500 { color: var(--text-2) !important; }
+[data-theme="pastel"] .text-white { color: var(--text-1) !important; }
+[data-theme="pastel"] .bg-slate-950,
+[data-theme="pastel"] .bg-slate-900,
+[data-theme="pastel"] .bg-slate-800,
+[data-theme="pastel"] .bg-gray-900 { background-color: var(--surface-2) !important; }
+[data-theme="pastel"] .bg-white\/5  { background-color: rgba(40,35,30,0.04) !important; }
+[data-theme="pastel"] .bg-white\/10 { background-color: rgba(40,35,30,0.07) !important; }
+[data-theme="pastel"] .hover\:bg-white\/5:hover  { background-color: rgba(40,35,30,0.04) !important; }
+[data-theme="pastel"] .hover\:bg-white\/10:hover { background-color: rgba(40,35,30,0.07) !important; }
+[data-theme="pastel"] .border-white\/10,
+[data-theme="pastel"] .border-white\/5 { border-color: var(--border) !important; }
+
 /* ── Reduced motion ──────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *,
