@@ -273,7 +273,7 @@ function buildUser(i: number): { userId: string; jobs: ScoutResult[]; rerun: boo
     company: `Co ${i}`,
     location: 'Berlin',
     url: baseUrl,
-    source: 'synthetic',
+    source: 'arbeitnow',
     raw_jd,
     scraped_at: now,
   }
