@@ -13,6 +13,13 @@ import type { SubmissionResult } from '../agents/submitter'
 import type { ScoutResult, ClassifierResult, TailoredResume, CoverLetter } from '../agents/types'
 
 // ---------------------------------------------------------------------------
+// Step observability callback
+// ---------------------------------------------------------------------------
+
+export type AgentStatus = 'running' | 'success' | 'failed'
+export type StepCallback = (agent: string, status: AgentStatus) => void
+
+// ---------------------------------------------------------------------------
 // Auth helper
 // ---------------------------------------------------------------------------
 
@@ -157,9 +164,10 @@ async function loadLatestArtifacts(jobId: string): Promise<{ resume: TailoredRes
 // Pipeline steps
 // ---------------------------------------------------------------------------
 
-async function runScoutStep(userId: string): Promise<Array<ScoutResult & { id: string }>> {
+async function runScoutStep(userId: string, onStep?: StepCallback): Promise<Array<ScoutResult & { id: string }>> {
   const runId = await startRun('scout', null, {}, userId)
   const t0 = Date.now()
+  onStep?.('scout', 'running')
 
   try {
     const results = await runScout()
@@ -187,19 +195,23 @@ async function runScoutStep(userId: string): Promise<Array<ScoutResult & { id: s
     ).filter((r): r is ScoutResult & { id: string } => r !== null)
 
     await completeRun(runId, { total: results.length, fresh: withIds.length }, undefined, Date.now() - t0)
+    onStep?.('scout', 'success')
     return withIds
   } catch (err) {
     await failRun(runId, err)
+    onStep?.('scout', 'failed')
     throw err
   }
 }
 
 async function runClassifyStep(
   jobs: Array<ScoutResult & { id: string }>,
-  userId: string
+  userId: string,
+  onStep?: StepCallback
 ): Promise<ClassifierResult[]> {
   const runId = await startRun('classifier', null, { count: jobs.length }, userId)
   const t0 = Date.now()
+  onStep?.('classifier', 'running')
 
   try {
     const results = await classifyBatch(jobs)
@@ -215,9 +227,11 @@ async function runClassifyStep(
     }
 
     await completeRun(runId, results, undefined, Date.now() - t0)
+    onStep?.('classifier', 'success')
     return results
   } catch (err) {
     await failRun(runId, err)
+    onStep?.('classifier', 'failed')
     throw err
   }
 }
@@ -225,74 +239,90 @@ async function runClassifyStep(
 async function runDocumentStep(
   jobId: string,
   classification: ClassifierResult,
-  userId: string
+  userId: string,
+  onStep?: StepCallback
 ): Promise<void> {
   const job = await getJobRawJd(jobId)
 
   // CV Base
   const cvRunId = await startRun('cvSelector', jobId, { track: classification.cv_track }, userId)
   const t0cv = Date.now()
+  onStep?.('cvSelector', 'running')
   let cvVersion
   try {
     cvVersion = await selectCV(classification.cv_track, userId)
     await saveArtifact(jobId, 'cv_base', cvVersion.content)
     await completeRun(cvRunId, cvVersion, undefined, Date.now() - t0cv)
+    onStep?.('cvSelector', 'success')
   } catch (err) {
     await failRun(cvRunId, err)
+    onStep?.('cvSelector', 'failed')
     throw err
   }
 
   // Resume Tailor
   const tailorRunId = await startRun('resumeTailor', jobId, { track: classification.cv_track }, userId)
   const t0tailor = Date.now()
+  onStep?.('resumeTailor', 'running')
   let tailored
   try {
     tailored = await tailorResume(cvVersion.content, job.raw_jd ?? '', classification.cv_track)
     await saveArtifact(jobId, 'resume_tailored', tailored, tailored.diff)
     await completeRun(tailorRunId, tailored, undefined, Date.now() - t0tailor)
+    onStep?.('resumeTailor', 'success')
   } catch (err) {
     await failRun(tailorRunId, err)
+    onStep?.('resumeTailor', 'failed')
     throw err
   }
 
   // Cover Letter
   const clRunId = await startRun('coverLetterWriter', jobId, { title: job.title }, userId)
   const t0cl = Date.now()
+  onStep?.('coverLetterWriter', 'running')
   try {
     const letter = await writeCoverLetter(job.title, job.company, job.raw_jd ?? '', classification.cv_track)
     await saveArtifact(jobId, 'cover_letter', letter)
     await completeRun(clRunId, letter, undefined, Date.now() - t0cl)
+    onStep?.('coverLetterWriter', 'success')
   } catch (err) {
     await failRun(clRunId, err)
+    onStep?.('coverLetterWriter', 'failed')
     throw err
   }
 }
 
-async function runFormStep(jobId: string, userId: string): Promise<void> {
+async function runFormStep(jobId: string, userId: string, onStep?: StepCallback): Promise<void> {
   const job = await getJobRawJd(jobId)
   if (!job.url) return
 
   const fmRunId = await startRun('formMapper', jobId, { url: job.url }, userId)
   const t0 = Date.now()
+  onStep?.('formMapper', 'running')
   let formMapping
   try {
     formMapping = await mapForm(job.url)
     await saveArtifact(jobId, 'form_mapping', formMapping)
     await completeRun(fmRunId, formMapping, undefined, Date.now() - t0)
+    onStep?.('formMapper', 'success')
   } catch (err) {
     await failRun(fmRunId, err)
+    onStep?.('formMapper', 'failed')
     return
   }
 
   const ssRunId = await startRun('screenshotCapturer', jobId, { url: job.url }, userId)
   const t0ss = Date.now()
+  onStep?.('screenshotCapturer', 'running')
   try {
     const screenshots = await captureScreenshots(jobId, job.url, formMapping)
     await saveArtifact(jobId, 'screenshot_before', null, null, screenshots.before_url)
     await saveArtifact(jobId, 'screenshot_filled', null, null, screenshots.filled_url)
     await completeRun(ssRunId, screenshots, undefined, Date.now() - t0ss)
+    onStep?.('screenshotCapturer', 'success')
   } catch (err) {
     await failRun(ssRunId, err)
+    onStep?.('screenshotCapturer', 'failed')
   }
 }
 
@@ -300,11 +330,12 @@ async function runFormStep(jobId: string, userId: string): Promise<void> {
 // Exported orchestration functions
 // ---------------------------------------------------------------------------
 
-export async function runScoutOnly(): Promise<ScoutResult[]> {
+export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]> {
   const userId = await getCurrentUserId()
-  const jobs = await runScoutStep(userId)
-  const classifications = await runClassifyStep(jobs, userId)
+  const jobs = await runScoutStep(userId, onStep)
+  const classifications = await runClassifyStep(jobs, userId, onStep)
 
+  onStep?.('reviewGatekeeper', 'running')
   for (const classification of classifications) {
     await gatekeeper.enqueue(
       classification.job_id,
@@ -316,26 +347,29 @@ export async function runScoutOnly(): Promise<ScoutResult[]> {
       .update({ status: 'queued', updated_at: new Date().toISOString() })
       .eq('id', classification.job_id)
   }
+  onStep?.('reviewGatekeeper', 'success')
 
   return jobs
 }
 
-export async function runFullPipeline(): Promise<void> {
+export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
   const userId = await getCurrentUserId()
-  const jobs = await runScoutStep(userId)
-  const classifications = await runClassifyStep(jobs, userId)
+  const jobs = await runScoutStep(userId, onStep)
+  const classifications = await runClassifyStep(jobs, userId, onStep)
 
   for (const classification of classifications) {
     const jobId = classification.job_id
 
-    await runDocumentStep(jobId, classification, userId)
-    await runFormStep(jobId, userId)
+    await runDocumentStep(jobId, classification, userId, onStep)
+    await runFormStep(jobId, userId, onStep)
 
+    onStep?.('reviewGatekeeper', 'running')
     await gatekeeper.enqueue(jobId, classification.score, classification.cv_track)
     await supabase
       .from('jobs')
       .update({ status: 'queued', updated_at: new Date().toISOString() })
       .eq('id', jobId)
+    onStep?.('reviewGatekeeper', 'success')
   }
 }
 

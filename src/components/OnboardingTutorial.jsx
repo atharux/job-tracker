@@ -6,7 +6,7 @@ const STEPS = [
     icon: Zap,
     label: 'OVERVIEW',
     title: 'Your job search, automated.',
-    body: 'Forge runs a 9-agent pipeline that discovers roles, tailors your resume and cover letter for each, then queues everything for your approval. Nothing is submitted without you.',
+    body: 'Forge runs a 9-step pipeline — 4 LLM reasoning agents plus automation steps — that discovers roles, tailors your resume and cover letter, then queues everything for your approval. Nothing is submitted without you.',
     accent: '#06b6d4',
     visual: (
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>

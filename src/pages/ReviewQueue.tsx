@@ -4,6 +4,7 @@ import { ArrowLeft, RefreshCw, Search, Key, Send, X } from 'lucide-react'
 import { supabase } from '../supabaseClient'
 import type { ReviewQueueRecord } from '../agents/types'
 import { runScoutOnly, approveAndSubmit } from '../services/agentOrchestrator'
+import type { AgentStatus } from '../services/agentOrchestrator'
 import type { SubmissionResult } from '../agents/submitter'
 import JobQueueList from './review-queue/JobQueueList'
 import JobDetailPanel from './review-queue/JobDetailPanel'
@@ -11,6 +12,18 @@ import ApiKeySettings from '../components/ApiKeySettings'
 
 type StatusFilter = 'all' | 'pending_review' | 'approved' | 'submitted' | 'rejected'
 type TrackFilter = 'all' | 'ux' | 'pm' | 'devrel'
+
+const PIPELINE_STEPS = [
+  { key: 'scout',              label: 'Scout'        },
+  { key: 'classifier',         label: 'Classify'     },
+  { key: 'cvSelector',         label: 'CV Select'    },
+  { key: 'resumeTailor',       label: 'Tailor'       },
+  { key: 'coverLetterWriter',  label: 'Cover Letter' },
+  { key: 'formMapper',         label: 'Form Map'     },
+  { key: 'screenshotCapturer', label: 'Screenshot'   },
+  { key: 'reviewGatekeeper',   label: 'Gatekeeper'   },
+  { key: 'statusTracker',      label: 'Status'       },
+]
 
 const STATUS_LABELS: Record<StatusFilter, string> = {
   all: 'All',
@@ -62,6 +75,10 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   const [showApiSettings, setShowApiSettings] = useState(false)
   const [keyPresent, setKeyPresent] = useState(hasApiKey)
 
+  // Pipeline observability
+  const [agentStates, setAgentStates] = useState<Record<string, AgentStatus | 'idle'>>({})
+  const [scoutResult, setScoutResult] = useState<{ found: number; queued: number } | null>(null)
+
   // Batch state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchPhase, setBatchPhase] = useState<'idle' | 'confirming' | 'running' | 'done'>('idle')
@@ -105,8 +122,17 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
     }
     setScouting(true)
     setScoutError(null)
+    setAgentStates({})
+    setScoutResult(null)
+
+    const onStep = (agent: string, status: AgentStatus) => {
+      setAgentStates(prev => ({ ...prev, [agent]: status }))
+    }
+
     try {
-      await runScoutOnly()
+      const jobs = await runScoutOnly(onStep)
+      const queuedCount = records.filter(r => r.status === 'pending_review').length
+      setScoutResult({ found: jobs.length, queued: queuedCount })
       await loadQueue()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Scout failed'
@@ -256,6 +282,62 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
           >
             ×
           </button>
+        </div>
+      )}
+
+      {/* Pipeline execution tracker */}
+      {Object.keys(agentStates).length > 0 && (
+        <div style={{ padding: '0.6rem 1.5rem', borderBottom: '1px solid #1e1e2e', background: 'rgba(6,182,212,0.03)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '3px', maxWidth: '560px' }}>
+            {PIPELINE_STEPS.map((step, idx) => {
+              const state = agentStates[step.key] ?? 'idle'
+              const isRunning = state === 'running'
+              const isDone    = state === 'success'
+              const isFailed  = state === 'failed'
+              return (
+                <div
+                  key={step.key}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '4px 8px',
+                    borderRadius: '3px',
+                    border: `1px solid ${isRunning ? 'rgba(6,182,212,0.28)' : 'transparent'}`,
+                    background: isRunning ? 'rgba(6,182,212,0.06)' : 'transparent',
+                    opacity: state === 'idle' ? 0.22 : 1,
+                    transition: 'opacity 0.2s, border-color 0.2s, background 0.2s',
+                  }}
+                >
+                  <span style={{
+                    fontFamily: 'Space Mono, monospace', fontSize: '0.58rem', fontWeight: 700,
+                    color: isRunning ? '#06b6d4' : isDone ? '#34d399' : isFailed ? '#ef4444' : '#475569',
+                    minWidth: '14px', flexShrink: 0,
+                  }}>
+                    {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  <span style={{
+                    fontFamily: 'Space Mono, monospace', fontSize: '0.6rem',
+                    color: isRunning ? '#e2e8f0' : isDone ? '#64748b' : isFailed ? '#ef4444' : '#475569',
+                    flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {step.label}
+                  </span>
+                  {isRunning && (
+                    <span style={{ position: 'relative', width: '6px', height: '6px', flexShrink: 0 }}>
+                      <span className="step-ping" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#06b6d4', display: 'block' }} />
+                      <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#06b6d4', display: 'block' }} />
+                    </span>
+                  )}
+                  {isDone && <span style={{ color: '#34d399', fontSize: '0.65rem', flexShrink: 0 }}>✓</span>}
+                  {isFailed && <span style={{ color: '#ef4444', fontSize: '0.65rem', flexShrink: 0 }}>✗</span>}
+                </div>
+              )
+            })}
+          </div>
+          {scoutResult && (
+            <p style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#475569', marginTop: '0.5rem' }}>
+              {scoutResult.found} new jobs scouted · {scoutResult.queued} queued for review
+            </p>
+          )}
         </div>
       )}
 
