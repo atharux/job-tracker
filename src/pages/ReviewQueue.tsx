@@ -4,7 +4,7 @@ import { ArrowLeft, RefreshCw, Search, Key, Send, X, Mail } from 'lucide-react'
 import { isGmailConnected } from '../services/gmailAuth'
 import { supabase } from '../supabaseClient'
 import type { ReviewQueueRecord } from '../agents/types'
-import { runScoutOnly, approveAndSubmit, runStatusSync } from '../services/agentOrchestrator'
+import { runScoutOnly, approveAndSubmit, runStatusSync, forceEnqueueJob } from '../services/agentOrchestrator'
 import type { AgentStatus } from '../services/agentOrchestrator'
 import type { SubmissionResult } from '../agents/submitter'
 import JobQueueList from './review-queue/JobQueueList'
@@ -84,6 +84,11 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ updated: number } | null>(null)
 
+  // Scouted-but-below-threshold jobs
+  const [scoutedJobs, setScoutedJobs] = useState<Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score: number; cv_track: string }>>([])
+  const [scoutedExpanded, setScoutedExpanded] = useState(false)
+  const [forcingId, setForcingId] = useState<string | null>(null)
+
   // Batch state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchPhase, setBatchPhase] = useState<'idle' | 'confirming' | 'running' | 'done'>('idle')
@@ -105,12 +110,28 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
 
   const loadQueue = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('application_review_queue')
-      .select(`*, job:jobs(*)`)
-      .order('classifier_score', { ascending: false })
+    const [queueRes, scoutedRes] = await Promise.all([
+      supabase
+        .from('application_review_queue')
+        .select(`*, job:jobs(*)`)
+        .order('classifier_score', { ascending: false }),
+      supabase
+        .from('jobs')
+        .select('id, title, company, location, url, classifier_score, cv_track')
+        .not('classifier_score', 'is', null)
+        .order('classifier_score', { ascending: false }),
+    ])
 
-    if (!error && data) setRecords(data as ReviewQueueRecord[])
+    if (!queueRes.error && queueRes.data) setRecords(queueRes.data as ReviewQueueRecord[])
+
+    if (!scoutedRes.error && scoutedRes.data) {
+      const queuedIds = new Set((queueRes.data ?? []).map((r: ReviewQueueRecord) => r.job_id))
+      setScoutedJobs(
+        (scoutedRes.data as Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score: number; cv_track: string }>)
+          .filter(j => !queuedIds.has(j.id))
+      )
+    }
+
     setLoading(false)
   }, [])
 
@@ -615,6 +636,59 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Scouted — below threshold */}
+      {scoutedJobs.length > 0 && (
+        <div style={{ borderTop: '1px solid #1e1e2e', margin: '0 1.5rem 1.5rem' }}>
+          <button
+            onClick={() => setScoutedExpanded(x => !x)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', padding: '0.75rem 0', color: '#475569', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', letterSpacing: '0.05em', width: '100%', textAlign: 'left' }}
+          >
+            <span style={{ color: '#1e1e2e' }}>{scoutedExpanded ? '▼' : '▶'}</span>
+            {scoutedJobs.length} SCOUTED — BELOW THRESHOLD
+            <span style={{ marginLeft: 'auto', color: '#1e1e2e' }}>click to review · force any into queue</span>
+          </button>
+
+          {scoutedExpanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingBottom: '1rem' }}>
+              {scoutedJobs.map(job => (
+                <div
+                  key={job.id}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#0d0d1a', border: '1px solid #1a1a2e', borderRadius: '4px' }}
+                >
+                  <span style={{
+                    fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', fontWeight: 700, minWidth: '2rem', textAlign: 'center',
+                    color: job.classifier_score >= 5 ? '#f97316' : '#475569',
+                  }}>
+                    {job.classifier_score.toFixed(1)}
+                  </span>
+                  <span style={{ flex: 1, fontSize: '0.8rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {job.title} — {job.company}
+                  </span>
+                  <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#2d3748', minWidth: '3rem' }}>
+                    {job.cv_track}
+                  </span>
+                  {job.url && (
+                    <a href={job.url} target="_blank" rel="noopener noreferrer" style={{ color: '#2d3748', fontSize: '0.65rem', textDecoration: 'none' }}>↗</a>
+                  )}
+                  <button
+                    disabled={forcingId === job.id}
+                    onClick={async () => {
+                      setForcingId(job.id)
+                      await forceEnqueueJob(job.id)
+                      await loadQueue()
+                      setForcingId(null)
+                    }}
+                    style={{ padding: '0.25rem 0.6rem', background: 'transparent', border: '1px solid #1e2a1e', borderRadius: '3px', color: forcingId === job.id ? '#475569' : '#06b6d4', cursor: forcingId === job.id ? 'not-allowed' : 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', whiteSpace: 'nowrap' }}
+                  >
+                    {forcingId === job.id ? '…' : '+ REVIEW'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

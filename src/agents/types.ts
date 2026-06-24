@@ -20,6 +20,7 @@ export interface ClassifierResult {
   score_rationale: string
   key_matches: string[]
   red_flags: string[]
+  passedThreshold: boolean
 }
 
 export interface ContactInfo {

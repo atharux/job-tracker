@@ -345,13 +345,17 @@ export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]
   const jobs = await runScoutStep(userId, onStep)
   const classifications = await runClassifyStep(jobs, userId, onStep)
 
+  // Write scores to ALL classified jobs (including below-threshold)
+  for (const c of classifications) {
+    await supabase
+      .from('jobs')
+      .update({ classifier_score: c.score, cv_track: c.cv_track, updated_at: new Date().toISOString() })
+      .eq('id', c.job_id)
+  }
+
   onStep?.('reviewGatekeeper', 'running')
-  for (const classification of classifications) {
-    await gatekeeper.enqueue(
-      classification.job_id,
-      classification.score,
-      classification.cv_track
-    )
+  for (const classification of classifications.filter(c => c.passedThreshold)) {
+    await gatekeeper.enqueue(classification.job_id, classification.score, classification.cv_track)
     await supabase
       .from('jobs')
       .update({ status: 'queued', updated_at: new Date().toISOString() })
@@ -367,7 +371,15 @@ export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
   const jobs = await runScoutStep(userId, onStep)
   const classifications = await runClassifyStep(jobs, userId, onStep)
 
-  for (const classification of classifications) {
+  // Write scores to ALL classified jobs (including below-threshold)
+  for (const c of classifications) {
+    await supabase
+      .from('jobs')
+      .update({ classifier_score: c.score, cv_track: c.cv_track, updated_at: new Date().toISOString() })
+      .eq('id', c.job_id)
+  }
+
+  for (const classification of classifications.filter(c => c.passedThreshold)) {
     const jobId = classification.job_id
 
     await runDocumentStep(jobId, classification, userId, onStep)
@@ -485,6 +497,23 @@ export async function approveAndSubmit(jobId: string, notes?: string): Promise<S
   }
 
   return submission
+}
+
+export async function forceEnqueueJob(jobId: string): Promise<void> {
+  const { data: job } = await supabase
+    .from('jobs')
+    .select('classifier_score, cv_track')
+    .eq('id', jobId)
+    .single()
+
+  const score = (job?.classifier_score as number | null) ?? 5.0
+  const track = (job?.cv_track as 'ux' | 'pm' | 'devrel' | null) ?? 'ux'
+
+  await gatekeeper.enqueue(jobId, score, track)
+  await supabase
+    .from('jobs')
+    .update({ status: 'queued', updated_at: new Date().toISOString() })
+    .eq('id', jobId)
 }
 
 export async function runStatusSync(): Promise<void> {

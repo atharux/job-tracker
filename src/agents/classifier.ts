@@ -109,8 +109,8 @@ export async function classifyBatch(
 
   for (const job of jobs) {
     const result = await classifyJob(job, job.id)
-    if (result && result.score >= SCORE_THRESHOLD) {
-      results.push(result)
+    if (result) {
+      results.push({ ...result, passedThreshold: result.score >= SCORE_THRESHOLD })
     }
   }
 
