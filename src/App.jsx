@@ -1548,8 +1548,16 @@ export default function App() {
         <div className="mb-8">
           <div className="header-row mb-4">
             <div className="header-title-group">
-              <div className="header-accent"></div>
-              <h1 className="text-3xl font-bold text-slate-50" style={{ fontFamily: 'Syne, sans-serif', fontSize: '1.1rem', fontWeight: 800, letterSpacing: '0.02em' }}>Forge</h1>
+              {/* Forge logo mark — lightning bolt in brand teal */}
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-label="Forge" role="img">
+                <polygon points="13,2 5,13 12,13 11,22 19,11 12,11" fill="#06b6d4" />
+              </svg>
+              <AppCompanion
+                activeMilestone={activeMilestone}
+                statusCelebration={statusCelebration}
+                isSyncing={isSyncing}
+                inNav
+              />
             </div>
             <nav className="header-actions" aria-label="Main navigation">
               <span className="text-slate-400 text-sm" aria-hidden="true">{user.email}</span>
@@ -2214,11 +2222,6 @@ export default function App() {
         />
       )}
 
-      <AppCompanion
-        activeMilestone={activeMilestone}
-        statusCelebration={statusCelebration}
-        isSyncing={isSyncing}
-      />
     </div>
   );
 }

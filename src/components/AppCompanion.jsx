@@ -161,7 +161,33 @@ function MedusaAvatar({ size = 84 }) {
   );
 }
 
-export default function AppCompanion({ activeMilestone, statusCelebration, isSyncing }) {
+function renderAvatarContent(avatar, size, animData, lottieRef) {
+  if (AVATARS[avatar].img) {
+    return (
+      <img
+        src={AVATARS[avatar].img}
+        alt={`${AVATARS[avatar].label} companion`}
+        className="img-avatar"
+        style={{ width: size, height: size, objectFit: 'contain' }}
+        draggable={false}
+      />
+    );
+  }
+  if (AVATARS[avatar].custom === 'robot') return <RobotAvatar size={size} />;
+  if (AVATARS[avatar].custom === 'medusa') return <MedusaAvatar size={size} />;
+  if (animData) return (
+    <Lottie
+      lottieRef={lottieRef}
+      animationData={animData}
+      loop
+      autoplay
+      style={{ width: size, height: size }}
+    />
+  );
+  return <span className="companion-fallback">{AVATARS[avatar].emoji}</span>;
+}
+
+export default function AppCompanion({ activeMilestone, statusCelebration, isSyncing, inNav = false }) {
   const [animData, setAnimData] = useState(null);
   const [companionState, setCompanionState] = useState('idle');
   const [message, setMessage] = useState("Hey! I'm your job hunt companion. Let's find your next role.");
@@ -270,6 +296,100 @@ export default function AppCompanion({ activeMilestone, statusCelebration, isSyn
     e.stopPropagation();
     setVisible(false);
     localStorage.setItem(STORAGE_KEY, '1');
+  }
+
+  if (inNav) {
+    const navSize = 32;
+    const nextAvatar = AVATAR_ORDER[(AVATAR_ORDER.indexOf(avatar) + 1) % AVATAR_ORDER.length];
+    return (
+      <>
+        <style>{`
+          .companion-nav-wrap { position: relative; display: inline-flex; align-items: center; }
+          .companion-character-nav {
+            width: ${navSize}px; height: ${navSize}px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            border-radius: 50%; background: #0d1117;
+            border: 1px solid rgba(6,182,212,0.25);
+            box-shadow: 0 0 0 2px rgba(6,182,212,0.05);
+            transition: border-color 0.15s, box-shadow 0.15s;
+            padding: 2px;
+          }
+          .companion-character-nav:hover {
+            border-color: rgba(6,182,212,0.55);
+            box-shadow: 0 0 10px rgba(6,182,212,0.18);
+          }
+          .state-celebrate .companion-character-nav {
+            border-color: rgba(6,182,212,0.6);
+            animation: companion-bounce 0.5s ease-in-out infinite;
+          }
+          .state-thinking .companion-character-nav { animation: companion-think 1.8s ease-in-out infinite; }
+          .companion-switch-nav {
+            position: absolute; top: -5px; left: -5px;
+            background: #0d1117; border: 1px solid rgba(6,182,212,0.35);
+            border-radius: 50%; width: 15px; height: 15px;
+            font-size: 8px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 2; padding: 0; line-height: 1;
+            transition: transform 0.12s;
+          }
+          .companion-switch-nav:hover { transform: scale(1.15) rotate(-10deg); }
+          .companion-bubble-nav {
+            position: absolute; top: calc(100% + 10px); left: 50%;
+            transform: translateX(-50%);
+            background: #0d1117; border: 1px solid rgba(6,182,212,0.22);
+            color: #94a3b8; font-size: 0.72rem; line-height: 1.45;
+            padding: 7px 12px; border-radius: 8px;
+            white-space: nowrap; z-index: 9999;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.55);
+            pointer-events: none;
+            animation: bubble-nav-in 0.18s ease-out;
+          }
+          .companion-bubble-nav::before {
+            content: ''; position: absolute; bottom: 100%; left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-bottom-color: rgba(6,182,212,0.22);
+          }
+          @keyframes bubble-nav-in {
+            from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+          }
+          @keyframes companion-bounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50%       { transform: translateY(-4px) scale(1.06); }
+          }
+          @keyframes companion-think {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50%       { transform: scale(0.93); opacity: 0.75; }
+          }
+        `}</style>
+        <div className={`companion-nav-wrap state-${companionState}`}>
+          {message && (
+            <div className="companion-bubble-nav" role="status" aria-live="polite">
+              {message}
+            </div>
+          )}
+          <button
+            className="companion-switch-nav"
+            onClick={cycleAvatar}
+            title={`Switch to ${AVATARS[nextAvatar].label}`}
+            aria-label={`Switch companion to ${AVATARS[nextAvatar].label}`}
+          >
+            {AVATARS[nextAvatar].emoji}
+          </button>
+          <div
+            className="companion-character-nav"
+            onClick={cycleAvatar}
+            title={`${AVATARS[avatar].label} — click to switch`}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => e.key === 'Enter' && cycleAvatar(e)}
+          >
+            {renderAvatarContent(avatar, navSize, animData, lottieRef)}
+          </div>
+        </div>
+      </>
+    );
   }
 
   if (!visible) {
