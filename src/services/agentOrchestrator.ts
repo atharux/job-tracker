@@ -345,12 +345,18 @@ export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]
   const jobs = await runScoutStep(userId, onStep)
   const classifications = await runClassifyStep(jobs, userId, onStep)
 
-  // Write scores + industry to ALL classified jobs (including below-threshold)
+  // Write scores to ALL classified jobs — critical path, must succeed
   for (const c of classifications) {
     await supabase
       .from('jobs')
-      .update({ classifier_score: c.score, cv_track: c.cv_track, industry: c.industry, updated_at: new Date().toISOString() })
+      .update({ classifier_score: c.score, cv_track: c.cv_track, updated_at: new Date().toISOString() })
       .eq('id', c.job_id)
+  }
+  // Write industry separately — non-critical, silently ignored if column missing
+  for (const c of classifications) {
+    if (c.industry) {
+      await supabase.from('jobs').update({ industry: c.industry }).eq('id', c.job_id)
+    }
   }
 
   onStep?.('reviewGatekeeper', 'running')
@@ -371,12 +377,18 @@ export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
   const jobs = await runScoutStep(userId, onStep)
   const classifications = await runClassifyStep(jobs, userId, onStep)
 
-  // Write scores + industry to ALL classified jobs (including below-threshold)
+  // Write scores to ALL classified jobs — critical path
   for (const c of classifications) {
     await supabase
       .from('jobs')
-      .update({ classifier_score: c.score, cv_track: c.cv_track, industry: c.industry, updated_at: new Date().toISOString() })
+      .update({ classifier_score: c.score, cv_track: c.cv_track, updated_at: new Date().toISOString() })
       .eq('id', c.job_id)
+  }
+  // Write industry separately — non-critical
+  for (const c of classifications) {
+    if (c.industry) {
+      await supabase.from('jobs').update({ industry: c.industry }).eq('id', c.job_id)
+    }
   }
 
   for (const classification of classifications.filter(c => c.passedThreshold)) {

@@ -89,7 +89,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
 
   // Scouted-but-below-threshold jobs
   const [scoutedJobs, setScoutedJobs] = useState<Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score: number; cv_track: string }>>([])
-  const [scoutedExpanded, setScoutedExpanded] = useState(false)
+  const [scoutedExpanded, setScoutedExpanded] = useState(true)
   const [forcingId, setForcingId] = useState<string | null>(null)
 
   // Batch state
@@ -726,7 +726,14 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
 
           {scoutedExpanded && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingBottom: '1rem' }}>
-              {scoutedJobs.map(job => (
+              {scoutedJobs.filter(job => {
+                const locOk = locationFilter === 'all'
+                  || (locationFilter === 'remote' && isRemoteLocation(job.location))
+                  || (locationFilter === 'berlin' && isBerlinLocation(job.location))
+                const indOk = industryFilter === 'all' || (job as typeof job & { industry?: string }).industry === industryFilter
+                const trackOk = trackFilter === 'all' || job.cv_track === trackFilter
+                return locOk && indOk && trackOk
+              }).map(job => (
                 <div
                   key={job.id}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#0d0d1a', border: '1px solid #1a1a2e', borderRadius: '4px' }}
