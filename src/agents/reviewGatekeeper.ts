@@ -1,11 +1,22 @@
 import { supabase } from '../supabaseClient'
 import type { ReviewQueueRecord } from './types'
 
+const TERMINAL_STATUSES = ['rejected', 'submitted', 'archived']
+
 export async function enqueue(
   jobId: string,
   classifierScore?: number,
   cvTrack?: 'ux' | 'pm' | 'devrel'
-): Promise<ReviewQueueRecord> {
+): Promise<ReviewQueueRecord | null> {
+  // Don't resurrect jobs the user has already acted on
+  const { data: existing } = await supabase
+    .from('application_review_queue')
+    .select('status')
+    .eq('job_id', jobId)
+    .maybeSingle()
+
+  if (existing && TERMINAL_STATUSES.includes(existing.status)) return null
+
   const { data, error } = await supabase
     .from('application_review_queue')
     .upsert(

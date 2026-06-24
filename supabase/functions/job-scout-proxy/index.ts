@@ -25,14 +25,26 @@ function safeDate(raw: string): string {
 }
 
 const ROLE_KEYWORDS = [
-  'ux engineer', 'ux designer', 'product designer', 'ui/ux', 'ui designer',
-  'interaction designer', 'experience designer', 'design engineer',
-  'frontend designer', 'design systems',
+  // UX / Design
+  'ux engineer', 'ux designer', 'ux/ui', 'ui/ux', 'ui designer',
+  'product designer', 'interaction designer', 'experience designer',
+  'design engineer', 'frontend designer', 'design systems',
+  'visual designer', 'ux researcher', 'user researcher',
+  'head of design', 'design lead', 'lead designer', 'ux lead',
+  'vp of design', 'director of design', 'design manager',
+  'user experience', 'ux writer', 'content designer', 'content strategist',
+  'service designer',
+  // Product
   'product manager', 'product owner', 'senior pm', 'lead pm',
-  'head of product', 'director of product',
+  'head of product', 'director of product', 'product lead',
+  'vp of product', 'group product manager',
+  // DevRel / Community
   'developer relations', 'devrel', 'developer advocate', 'developer experience',
   'dx engineer', 'community manager', 'technical evangelist',
-  'solutions engineer', 'ai product manager', 'ai ux', 'conversational designer',
+  'platform evangelist', 'solutions engineer', 'api evangelist',
+  // AI / Tooling
+  'ai product manager', 'ai ux', 'conversational designer',
+  'prompt engineer', 'ai designer',
 ]
 
 function matchesRole(text: string): boolean {
@@ -166,11 +178,9 @@ interface PersonioJob {
   created_at: string
 }
 
+// Almedia → Ashby, Malt → Lever, Yepoda → Ashby (handled directly in scout.ts)
 const PERSONIO_COMPANIES = [
-  { slug: 'almedia',   name: 'Almedia' },
   { slug: 'truffls',   name: 'Truffls' },
-  { slug: 'malt',      name: 'Malt' },
-  { slug: 'yepoda',    name: 'Yepoda' },
   { slug: 'forto',     name: 'Forto' },
   { slug: 'scalable',  name: 'Scalable Capital' },
   { slug: 'unu',       name: 'unu Motors' },
@@ -206,6 +216,115 @@ async function fetchPersonio(): Promise<ScoutResult[]> {
   return results
 }
 
+// ── Himalayas ──────────────────────────────────────────────────────────────────
+// Free public JSON API — no key required. Max 20 per request; paginate 3 pages
+// per query to get up to 60 results per role type.
+
+interface HimalayasJob {
+  title: string
+  company: { name: string }
+  location: string
+  applicationUrl: string
+  description: string
+  publishedAt: string
+}
+
+interface HimalayasResponse {
+  jobs: HimalayasJob[]
+}
+
+async function fetchHimalayas(): Promise<ScoutResult[]> {
+  const queries = ['ux designer', 'product manager', 'developer relations', 'product designer']
+  const results: ScoutResult[] = []
+  const seen = new Set<string>()
+
+  await Promise.allSettled(queries.flatMap(q =>
+    [1, 2, 3].map(async page => {
+      const url = `https://himalayas.app/jobs/api/search?q=${encodeURIComponent(q)}&page=${page}&limit=20`
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
+      if (!res.ok) return
+      const data = await res.json() as HimalayasResponse
+      for (const j of data.jobs ?? []) {
+        if (!j.applicationUrl || seen.has(j.applicationUrl)) continue
+        seen.add(j.applicationUrl)
+        if (!matchesRole(j.title)) continue
+        results.push({
+          title: j.title,
+          company: j.company?.name ?? '',
+          location: j.location ?? 'Remote',
+          url: j.applicationUrl,
+          source: 'himalayas',
+          raw_jd: j.description ?? '',
+          scraped_at: safeDate(j.publishedAt ?? ''),
+        })
+      }
+    })
+  ))
+
+  console.log('[himalayas] total results:', results.length)
+  return results
+}
+
+// ── WeWorkRemotely RSS ─────────────────────────────────────────────────────────
+// Design + Product RSS feeds. CORS-blocked in browsers; handled here.
+
+function parseRss(xml: string): Array<{ title: string; link: string; description: string; pubDate: string }> {
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g
+  const items: Array<{ title: string; link: string; description: string; pubDate: string }> = []
+  let match
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const block = match[1]
+    const get = (tag: string) => {
+      const m = block.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`))
+      return m ? (m[1] ?? m[2] ?? '').trim() : ''
+    }
+    const linkMatch = block.match(/<link>\s*(https?:\/\/[^\s<]+)\s*<\/link>|<link\s*\/>[\s\S]*?<([^>]+)>|<link>(.*?)<\/link>/)
+    items.push({
+      title: get('title'),
+      link: get('link') || '',
+      description: get('description'),
+      pubDate: get('pubDate'),
+    })
+  }
+  return items
+}
+
+async function fetchWeWorkRemotelyProxy(): Promise<ScoutResult[]> {
+  const feeds = [
+    'https://weworkremotely.com/categories/remote-design-jobs.rss',
+    'https://weworkremotely.com/categories/remote-product-jobs.rss',
+  ]
+  const results: ScoutResult[] = []
+  const seen = new Set<string>()
+
+  await Promise.allSettled(feeds.map(async feedUrl => {
+    const res = await fetch(feedUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobScout/1.0)' } })
+    if (!res.ok) return
+    const xml = await res.text()
+    for (const item of parseRss(xml)) {
+      const link = item.link || item.title
+      if (!link || seen.has(link)) continue
+      seen.add(link)
+      const colonIdx = item.title.indexOf(': ')
+      const company = colonIdx > -1 ? item.title.slice(0, colonIdx).trim() : ''
+      const title = colonIdx > -1 ? item.title.slice(colonIdx + 2).trim() : item.title
+      if (!matchesRole(title)) continue
+      results.push({
+        title,
+        company,
+        location: 'Remote',
+        url: link,
+        source: 'weworkremotely',
+        raw_jd: item.description,
+        scraped_at: safeDate(item.pubDate),
+      })
+    }
+  }))
+
+  console.log('[weworkremotely] total results:', results.length)
+  return results
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -219,16 +338,20 @@ serve(async (req) => {
   console.log('[job-scout-proxy] starting')
 
   try {
-    const [workableR, wttjR, personioR] = await Promise.allSettled([
+    const [workableR, wttjR, personioR, himalayasR, wwrR] = await Promise.allSettled([
       fetchWorkable(),
       fetchWTTJ(),
       fetchPersonio(),
+      fetchHimalayas(),
+      fetchWeWorkRemotelyProxy(),
     ])
 
     const sources = [
-      { name: 'workable', result: workableR },
-      { name: 'wttj',     result: wttjR },
-      { name: 'personio', result: personioR },
+      { name: 'workable',        result: workableR },
+      { name: 'wttj',            result: wttjR },
+      { name: 'personio',        result: personioR },
+      { name: 'himalayas',       result: himalayasR },
+      { name: 'weworkremotely',  result: wwrR },
     ]
 
     sources.forEach(({ name, result }) => {

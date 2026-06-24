@@ -8,6 +8,7 @@ export interface ScoutResult {
   source: 'linkedin' | 'greenhouse' | 'lever' | 'remotive' | 'relocate' | 'arbeitnow'
     | 'germantechjobs' | 'euremotejobs' | 'smartrecruiters' | 'recruitee' | 'ashby'
     | 'himalayas' | 'wttj' | 'thehub' | 'workable' | 'personio'
+    | 'weworkremotely' | 'jobicy'
   raw_jd: string
   scraped_at: string
 }

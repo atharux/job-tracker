@@ -240,8 +240,9 @@ interface AshbyJob {
 }
 
 const ASHBY_COMPANIES: Array<{ slug: string; name: string }> = [
-  // Add verified slugs here — check https://jobs.ashbyhq.com/<company>
-  // to find the correct slug before adding
+  { slug: 'taktile',  name: 'Taktile' },
+  { slug: 'yepoda',   name: 'Yepoda' },
+  { slug: 'almedia',  name: 'Almedia' },
 ]
 
 async function fetchAshby(): Promise<ScoutResult[]> {
@@ -404,9 +405,12 @@ interface LeverPosting {
   createdAt: number
 }
 
-// Verify slug at: https://api.lever.co/v0/postings/<slug>
-const LEVER_COMPANIES: Array<{ slug: string; name: string }> = [
-  // Add verified slugs here
+// Verify slugs at: https://api.lever.co/v0/postings/<slug>
+// EU-hosted companies use apiBase: 'https://api.eu.lever.co'
+const LEVER_COMPANIES: Array<{ slug: string; name: string; apiBase?: string }> = [
+  { slug: 'malt',           name: 'Malt' },
+  { slug: 'lovehoneygroup', name: 'Lovehoney Group', apiBase: 'https://api.eu.lever.co' },
+  { slug: 'weloglobal',     name: 'Welo Data' },
 ]
 
 async function fetchLever(): Promise<ScoutResult[]> {
@@ -414,8 +418,9 @@ async function fetchLever(): Promise<ScoutResult[]> {
   const results: ScoutResult[] = []
 
   await Promise.allSettled(
-    LEVER_COMPANIES.map(async ({ slug, name }) => {
-      const res = await fetch(`https://api.lever.co/v0/postings/${slug}?mode=json`)
+    LEVER_COMPANIES.map(async ({ slug, name, apiBase }) => {
+      const base = apiBase ?? 'https://api.lever.co'
+      const res = await fetch(`${base}/v0/postings/${slug}?mode=json`)
       if (!res.ok) return
       const jobs = await res.json() as LeverPosting[]
       const matching = jobs.filter(j => matchesRole(j.text))
@@ -432,6 +437,83 @@ async function fetchLever(): Promise<ScoutResult[]> {
       )
     })
   )
+
+  return results
+}
+
+// ── WeWorkRemotely RSS ─────────────────────────────────────────────────────────
+// Design and Product category feeds. May be CORS-blocked in some browsers —
+// falls back gracefully if so (proxy covers it via edge function).
+
+async function fetchWeWorkRemotely(): Promise<ScoutResult[]> {
+  const feeds = [
+    'https://weworkremotely.com/categories/remote-design-jobs.rss',
+    'https://weworkremotely.com/categories/remote-product-jobs.rss',
+  ]
+  const results: ScoutResult[] = []
+  const seen = new Set<string>()
+
+  await Promise.allSettled(feeds.map(async feedUrl => {
+    try {
+      const res = await fetch(feedUrl)
+      if (!res.ok) return
+      const xml = await res.text()
+      for (const item of parseRss(xml)) {
+        if (!item.link || seen.has(item.link)) continue
+        seen.add(item.link)
+        // WWR title format: "Company: Job Title"
+        const colonIdx = item.title.indexOf(': ')
+        const company = colonIdx > -1 ? item.title.slice(0, colonIdx).trim() : ''
+        const title = colonIdx > -1 ? item.title.slice(colonIdx + 2).trim() : item.title
+        if (!matchesRole(title)) continue
+        results.push({
+          title,
+          company,
+          location: 'Remote',
+          url: item.link,
+          source: 'weworkremotely' as const,
+          raw_jd: item.description,
+          scraped_at: safeDate(item.pubDate),
+        })
+      }
+    } catch { /* CORS-blocked — proxy handles it */ }
+  }))
+
+  return results
+}
+
+// ── Jobicy RSS ─────────────────────────────────────────────────────────────────
+// Free remote jobs RSS — no key required.
+
+async function fetchJobicy(): Promise<ScoutResult[]> {
+  const feeds = [
+    'https://jobicy.com/feed/job_feed?job_categories=design-multimedia',
+    'https://jobicy.com/feed/job_feed?job_categories=management',
+  ]
+  const results: ScoutResult[] = []
+  const seen = new Set<string>()
+
+  await Promise.allSettled(feeds.map(async feedUrl => {
+    try {
+      const res = await fetch(feedUrl)
+      if (!res.ok) return
+      const xml = await res.text()
+      for (const item of parseRss(xml)) {
+        if (!item.link || seen.has(item.link)) continue
+        seen.add(item.link)
+        if (!matchesRole(item.title)) continue
+        results.push({
+          title: item.title,
+          company: '',
+          location: 'Remote',
+          url: item.link,
+          source: 'jobicy' as const,
+          raw_jd: item.description,
+          scraped_at: safeDate(item.pubDate),
+        })
+      }
+    } catch { /* swallow network errors */ }
+  }))
 
   return results
 }
@@ -492,6 +574,8 @@ export async function runScout(): Promise<ScoutResult[]> {
     fetchSmartRecruiters(),
     fetchLever(),
     fetchRecruitee(),
+    fetchWeWorkRemotely(),
+    fetchJobicy(),
     // Proxied via Supabase Edge Function (CORS-blocked sources)
     fetchViaProxy(),
   ])

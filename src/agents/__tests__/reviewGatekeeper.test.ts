@@ -11,6 +11,7 @@ function makeChain(resolveWith: object) {
     upsert: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue(resolveWith),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
   }
   return chain
 }
@@ -48,15 +49,34 @@ const submittedRecord = { ...approvedRecord, status: 'submitted', submitted_at: 
 
 describe('reviewGatekeeper', () => {
   describe('enqueue()', () => {
-    it('sets status to pending_review', async () => {
-      mockFrom.mockReturnValue({
+    it('sets status to pending_review for a new job', async () => {
+      // First call: maybeSingle() check — no existing record
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      })
+      // Second call: upsert
+      mockFrom.mockReturnValueOnce({
         upsert: vi.fn().mockReturnThis(),
         select: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({ data: pendingRecord, error: null }),
       })
 
       const result = await enqueue('job-1', 7.5, 'ux')
-      expect(result.status).toBe('pending_review')
+      expect(result).not.toBeNull()
+      expect(result!.status).toBe('pending_review')
+    })
+
+    it('returns null for a job already in a terminal state', async () => {
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'rejected' }, error: null }),
+      })
+
+      const result = await enqueue('job-1', 7.5, 'ux')
+      expect(result).toBeNull()
     })
   })
 

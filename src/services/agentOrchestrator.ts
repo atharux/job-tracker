@@ -94,22 +94,32 @@ async function saveArtifact(
 // Job persistence helpers
 // ---------------------------------------------------------------------------
 
-// Returns the existing job ID if it was seen within the last 7 days, null otherwise.
-async function getRecentJobId(url: string, userId: string): Promise<string | null> {
-  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const { data } = await supabase
+// Returns the existing job ID to skip, null if the job should be processed.
+// Skips any job that already has a queue record — it has been seen and is
+// either pending user action, acted on, or terminal. Only truly new URLs
+// (no queue entry yet) enter the pipeline.
+async function getSeenJobId(url: string, userId: string): Promise<string | null> {
+  const { data: job } = await supabase
     .from('jobs')
-    .select('id, updated_at')
+    .select('id')
     .eq('user_id', userId)
     .eq('url', url)
-    .gte('updated_at', cutoff)
     .maybeSingle()
-  return data?.id ?? null
+
+  if (!job) return null
+
+  const { data: queueRecord } = await supabase
+    .from('application_review_queue')
+    .select('status')
+    .eq('job_id', job.id)
+    .maybeSingle()
+
+  // Skip if the job already has any queue entry
+  return queueRecord ? job.id : null
 }
 
 async function upsertJob(result: ScoutResult, userId: string): Promise<string | null> {
-  // Skip if this URL was already processed within the last 7 days
-  const existingId = await getRecentJobId(result.url, userId)
+  const existingId = await getSeenJobId(result.url, userId)
   if (existingId) return null
 
   const { data, error } = await supabase
