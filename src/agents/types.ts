@@ -18,6 +18,7 @@ export interface ClassifierResult {
   job_id: string
   score: number
   cv_track: 'ux' | 'pm' | 'devrel'
+  industry: string
   score_rationale: string
   key_matches: string[]
   red_flags: string[]

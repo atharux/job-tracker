@@ -345,11 +345,11 @@ export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]
   const jobs = await runScoutStep(userId, onStep)
   const classifications = await runClassifyStep(jobs, userId, onStep)
 
-  // Write scores to ALL classified jobs (including below-threshold)
+  // Write scores + industry to ALL classified jobs (including below-threshold)
   for (const c of classifications) {
     await supabase
       .from('jobs')
-      .update({ classifier_score: c.score, cv_track: c.cv_track, updated_at: new Date().toISOString() })
+      .update({ classifier_score: c.score, cv_track: c.cv_track, industry: c.industry, updated_at: new Date().toISOString() })
       .eq('id', c.job_id)
   }
 
@@ -371,11 +371,11 @@ export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
   const jobs = await runScoutStep(userId, onStep)
   const classifications = await runClassifyStep(jobs, userId, onStep)
 
-  // Write scores to ALL classified jobs (including below-threshold)
+  // Write scores + industry to ALL classified jobs (including below-threshold)
   for (const c of classifications) {
     await supabase
       .from('jobs')
-      .update({ classifier_score: c.score, cv_track: c.cv_track, updated_at: new Date().toISOString() })
+      .update({ classifier_score: c.score, cv_track: c.cv_track, industry: c.industry, updated_at: new Date().toISOString() })
       .eq('id', c.job_id)
   }
 

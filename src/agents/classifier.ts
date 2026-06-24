@@ -44,6 +44,7 @@ Return ONLY valid JSON with this exact shape — no markdown, no preamble:
   "job_id": "${jobId}",
   "score": <number 1.0–10.0, one decimal place>,
   "cv_track": <"ux" | "pm" | "devrel">,
+  "industry": <one of: "Fintech" | "E-commerce" | "Health/MedTech" | "EdTech" | "B2B SaaS" | "Developer Tools" | "Consumer Apps" | "AI/ML" | "Gaming" | "Media/Entertainment" | "Travel/Mobility" | "Food/Delivery" | "Climate/CleanTech" | "HR Tech" | "Ad Tech" | "Other">,
   "score_rationale": "<2–3 sentence explanation>",
   "key_matches": ["<match 1>", "<match 2>", ...],
   "red_flags": ["<flag 1>", ...]
@@ -98,6 +99,7 @@ export async function classifyJob(
   }
 
   if (typeof parsed.score !== 'number') return null
+  if (!parsed.industry) parsed.industry = 'Other'
 
   return parsed
 }

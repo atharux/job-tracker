@@ -13,6 +13,7 @@ import ApiKeySettings from '../components/ApiKeySettings'
 
 type StatusFilter = 'all' | 'pending_review' | 'approved' | 'submitted' | 'rejected'
 type TrackFilter = 'all' | 'ux' | 'pm' | 'devrel'
+type LocationFilter = 'all' | 'berlin' | 'remote'
 
 const PIPELINE_STEPS = [
   { key: 'scout',              label: 'Scout'        },
@@ -72,6 +73,8 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filter, setFilter] = useState<StatusFilter>('pending_review')
   const [trackFilter, setTrackFilter] = useState<TrackFilter>('all')
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>('all')
+  const [industryFilter, setIndustryFilter] = useState<string>('all')
   const [scoutError, setScoutError] = useState<string | null>(null)
   const [showApiSettings, setShowApiSettings] = useState(false)
   const [keyPresent, setKeyPresent] = useState(hasApiKey)
@@ -137,8 +140,8 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
 
   useEffect(() => { loadQueue() }, [loadQueue])
 
-  // Clear selection when filter/track changes
-  useEffect(() => { setSelectedIds(new Set()) }, [filter, trackFilter])
+  // Clear selection when any filter changes
+  useEffect(() => { setSelectedIds(new Set()) }, [filter, trackFilter, locationFilter, industryFilter])
 
   const handleRunScout = async () => {
     if (!hasApiKey()) {
@@ -192,12 +195,34 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
 
   const pendingSelected = filteredRecords().filter(r => selectedIds.has(r.id))
 
+  function isRemoteLocation(loc: string | null | undefined): boolean {
+    return !!(loc && /remote/i.test(loc))
+  }
+  function isBerlinLocation(loc: string | null | undefined): boolean {
+    return !!(loc && /berlin/i.test(loc))
+  }
+
   function filteredRecords() {
     return records.filter((r) => {
       const statusOk = filter === 'all' || r.status === filter
       const trackOk = trackFilter === 'all' || r.cv_track === trackFilter
-      return statusOk && trackOk
+      const loc = r.job?.location
+      const locationOk = locationFilter === 'all'
+        || (locationFilter === 'remote' && isRemoteLocation(loc))
+        || (locationFilter === 'berlin' && isBerlinLocation(loc))
+      const jobIndustry = (r.job as (typeof r.job & { industry?: string }) | undefined)?.industry
+      const industryOk = industryFilter === 'all' || jobIndustry === industryFilter
+      return statusOk && trackOk && locationOk && industryOk
     })
+  }
+
+  function availableIndustries(): string[] {
+    const set = new Set<string>()
+    for (const r of records) {
+      const ind = (r.job as (typeof r.job & { industry?: string }) | undefined)?.industry
+      if (ind) set.add(ind)
+    }
+    return Array.from(set).sort()
   }
 
   async function runBatchSubmit() {
@@ -470,6 +495,54 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
             </button>
           )
         })}
+      </div>
+
+      {/* Location + Industry filters */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.4rem 1.5rem', borderBottom: '1px solid #0f0f1a', background: 'rgba(255,255,255,0.005)', flexWrap: 'wrap' }}>
+        {/* Location */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#374151', letterSpacing: '0.08em' }}>WHERE</span>
+          {(['all', 'berlin', 'remote'] as LocationFilter[]).map(loc => (
+            <button
+              key={loc}
+              onClick={() => setLocationFilter(loc)}
+              style={{
+                padding: '0.2rem 0.55rem',
+                background: locationFilter === loc ? 'rgba(6,182,212,0.12)' : 'transparent',
+                border: `1px solid ${locationFilter === loc ? '#06b6d4' : '#1e1e2e'}`,
+                borderRadius: '3px',
+                color: locationFilter === loc ? '#06b6d4' : '#475569',
+                cursor: 'pointer',
+                fontFamily: 'Space Mono, monospace',
+                fontSize: '0.6rem',
+              }}
+            >
+              {loc === 'all' ? 'All' : loc === 'berlin' ? 'Berlin' : 'Remote'}
+            </button>
+          ))}
+        </div>
+
+        {/* Industry */}
+        {availableIndustries().length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#374151', letterSpacing: '0.08em' }}>INDUSTRY</span>
+            <button
+              onClick={() => setIndustryFilter('all')}
+              style={{ padding: '0.2rem 0.55rem', background: industryFilter === 'all' ? 'rgba(139,92,246,0.12)' : 'transparent', border: `1px solid ${industryFilter === 'all' ? '#8b5cf6' : '#1e1e2e'}`, borderRadius: '3px', color: industryFilter === 'all' ? '#8b5cf6' : '#475569', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem' }}
+            >
+              All
+            </button>
+            {availableIndustries().map(ind => (
+              <button
+                key={ind}
+                onClick={() => setIndustryFilter(ind)}
+                style={{ padding: '0.2rem 0.55rem', background: industryFilter === ind ? 'rgba(139,92,246,0.12)' : 'transparent', border: `1px solid ${industryFilter === ind ? '#8b5cf6' : '#1e1e2e'}`, borderRadius: '3px', color: industryFilter === ind ? '#8b5cf6' : '#475569', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', whiteSpace: 'nowrap' }}
+              >
+                {ind}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Main split layout */}
