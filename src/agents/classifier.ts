@@ -2,7 +2,7 @@ import type { ScoutResult, ClassifierResult } from './types'
 import { callAI } from './openRouterClient'
 import { USER_PROFILE } from '../config/userProfile'
 
-const SCORE_THRESHOLD = 6.0
+const SCORE_THRESHOLD = 3.0
 
 const { name, background, languages, locationPreferences, community, tracks } = USER_PROFILE
 
