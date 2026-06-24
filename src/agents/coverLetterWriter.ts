@@ -1,21 +1,15 @@
 import { callAI } from './openRouterClient'
 import type { CoverLetter } from './types'
+import { USER_PROFILE } from '../config/userProfile'
 
 const MAX_WORDS = 350
 
-const TRACK_VOICE: Record<string, string> = {
-  ux: `Track: UX Engineer
-Voice: Athar designs AND ships — Figma to React. He cares about systems that scale and interfaces that don't need instructions. Reference real technical work (React, TypeScript, Supabase, Figma, design systems, Anthropic API). He is based in Berlin, active in the AI community.
-Opening hook: Open with a specific observation about the company's product or design challenge — not a generic statement about Athar.`,
-
-  pm: `Track: Product Manager
-Voice: Data-informed, not data-paralysed. Athar moves products from ambiguous signal to shipped feature. Lean Six Sigma background, strong on prioritisation and stakeholder alignment. Reference specific methodologies and quantified outcomes.
-Opening hook: Open with the specific problem space this role addresses — show the JD has been read carefully.`,
-
-  devrel: `Track: Developer Relations
-Voice: Technically credible communicator who builds the demos that get developers unstuck. Athar explains agent architecture clearly, writes sharp API docs, grows communities with substance. Active in Global AI Berlin. Reference LLMs, MCP, developer tooling, agentic systems.
-Opening hook: Open with a concrete observation about the developer experience gap this company is solving.`,
-}
+const TRACK_VOICE: Record<string, string> = Object.fromEntries(
+  Object.entries(USER_PROFILE.tracks).map(([key, t]) => [
+    key,
+    `Track: ${t.label}\nVoice: ${t.voice}\nOpening hook: Open with a specific observation about the company relevant to this role — not a generic statement about the applicant.`,
+  ])
+)
 
 const BASE_RULES = `Writing rules (non-negotiable):
 - Direct and specific — no filler phrases
@@ -42,7 +36,7 @@ function buildPrompt(jobTitle: string, company: string, rawJd: string, cvTrack: 
   const trackVoice = TRACK_VOICE[cvTrack] ?? TRACK_VOICE.ux
   const cleanJd = stripHtml(rawJd).slice(0, 2500)
 
-  return `Write a cover letter for Athar Hafiz applying to this role.
+  return `Write a cover letter for ${USER_PROFILE.name} applying to this role.
 
 ${trackVoice}
 
@@ -56,7 +50,7 @@ ${cleanJd}
 
 Return ONLY valid JSON in this exact shape:
 {
-  "subject_line": "<concise email subject: 'Application: [role] — Athar Hafiz'>",
+  "subject_line": "<concise email subject: 'Application: [role] — ${USER_PROFILE.name}'>",
   "key_requirements": ["<specific requirement 1 from JD>", "<specific requirement 2>", "<specific requirement 3>"],
   "body": "<full cover letter, max ${MAX_WORDS} words, each key_requirement addressed explicitly>",
   "word_count": <number>

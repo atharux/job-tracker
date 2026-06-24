@@ -39,7 +39,7 @@ const IDLE_MESSAGES = [
   "Every application is a rep. Keep going.",
   "The right role is already looking for you.",
   "Consistency > perfection. One more today.",
-  "Berlin's job market is rough. You're sharper.",
+  "Job hunting is a numbers game. Stay in it.",
 ];
 
 const STORAGE_KEY = 'companion-dismissed';

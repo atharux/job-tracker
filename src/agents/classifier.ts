@@ -1,22 +1,30 @@
 import type { ScoutResult, ClassifierResult } from './types'
 import { callAI } from './openRouterClient'
+import { USER_PROFILE } from '../config/userProfile'
 
 const SCORE_THRESHOLD = 6.0
 
+const { name, background, languages, locationPreferences, community, tracks } = USER_PROFILE
+
+const langLine = languages.length
+  ? `- Languages: ${languages.map(l => `${l.language} (${l.level})`).join(', ')}`
+  : ''
+
+const communityLine = community ? `- ${community}` : ''
+
+const trackLines = Object.entries(tracks)
+  .map(([key, t]) => `    ${key.padEnd(6)} → ${t.label} (${t.color})`)
+  .join('\n')
+
 const OWNER_PROFILE = `
-Athar Hafiz — UX Engineer / Product Designer / Developer Relations
-- 10+ years experience in UX/product design, front-end development, developer relations
-- Two stints at Apple (iOS App Review team, teaching)
-- Technical stack: React, Vite, TypeScript, Tailwind CSS, Supabase, Anthropic API, Groq, n8n
-- German: B2 level; based in Berlin
-- Three CV tracks:
-    ux     → UX Engineer (teal accent #06b6d4)
-    pm     → Product Manager (purple accent #8b5cf6)
-    devrel → Developer Relations (orange accent #f97316)
-- Lean Six Sigma certified, Gamification practitioner, AI product consultant
-- Organizer: Global AI Berlin meetup
-- Open to: Berlin (on-site/hybrid), Remote Europe, Dubai
-`
+${name} — ${Object.values(tracks).map(t => t.label).join(' / ')}
+- ${background}
+${langLine}
+- Location preference: ${locationPreferences}
+- CV tracks:
+${trackLines}
+${communityLine}
+`.trim()
 
 function buildPrompt(job: ScoutResult, jobId: string): string {
   return `You are a job-fit classifier. Score this job for the candidate described below.

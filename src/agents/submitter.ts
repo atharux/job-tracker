@@ -106,15 +106,9 @@ export async function loadContact(userId: string): Promise<ContactInfo> {
   const contact = (data?.content as Record<string, unknown>)?.contact as ContactInfo | undefined
   if (contact?.name && contact?.email) return contact
 
-  // Fallback to hardcoded values if cv_versions not yet seeded
-  return {
-    name: 'Athar Hafiz',
-    email: 'athar.hafiz@gmail.com',
-    phone: '+49 177 2763088',
-    location: 'Berlin, Germany',
-    linkedin: 'https://www.linkedin.com/in/atharhafiz',
-    portfolio: 'https://atharux.com',
-  }
+  // Fallback to userProfile config if cv_versions not yet seeded
+  const { name, email, phone, location, linkedin, portfolio } = (await import('../config/userProfile')).USER_PROFILE
+  return { name, email, phone, location, linkedin, portfolio }
 }
 
 // ── URL parsers ────────────────────────────────────────────────────────────
