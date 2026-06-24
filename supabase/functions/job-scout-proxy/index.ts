@@ -70,11 +70,15 @@ interface WorkableResponse {
 }
 
 const WORKABLE_COMPANIES = [
-  { slug: 'taktile',    name: 'Taktile' },
-  { slug: 'sumup',      name: 'SumUp' },
-  { slug: 'hellofresh', name: 'HelloFresh' },
-  { slug: 'contentful', name: 'Contentful' },
-  { slug: 'ecosia',     name: 'Ecosia' },
+  { slug: 'taktile',      name: 'Taktile' },
+  { slug: 'sumup',        name: 'SumUp' },
+  { slug: 'hellofresh',   name: 'HelloFresh' },
+  { slug: 'contentful',   name: 'Contentful' },
+  { slug: 'ecosia',       name: 'Ecosia' },
+  { slug: 'blinkist',     name: 'Blinkist' },
+  { slug: 'flixbus',      name: 'FlixBus' },
+  { slug: 'gorillas',     name: 'Gorillas' },
+  { slug: 'penta',        name: 'Penta' },
 ]
 
 async function fetchWorkable(): Promise<ScoutResult[]> {
@@ -180,10 +184,14 @@ interface PersonioJob {
 
 // Almedia → Ashby, Malt → Lever, Yepoda → Ashby (handled directly in scout.ts)
 const PERSONIO_COMPANIES = [
-  { slug: 'truffls',   name: 'Truffls' },
-  { slug: 'forto',     name: 'Forto' },
-  { slug: 'scalable',  name: 'Scalable Capital' },
-  { slug: 'unu',       name: 'unu Motors' },
+  { slug: 'truffls',       name: 'Truffls' },
+  { slug: 'forto',         name: 'Forto' },
+  { slug: 'scalable',      name: 'Scalable Capital' },
+  { slug: 'unu',           name: 'unu Motors' },
+  { slug: 'zenjob',        name: 'Zenjob' },
+  { slug: 'aboutyou',      name: 'About You' },
+  { slug: 'traderepu',     name: 'Trade Republic' },
+  { slug: 'flink',         name: 'Flink' },
 ]
 
 async function fetchPersonio(): Promise<ScoutResult[]> {

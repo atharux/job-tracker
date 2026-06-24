@@ -9,6 +9,7 @@ export interface ScoutResult {
     | 'germantechjobs' | 'euremotejobs' | 'smartrecruiters' | 'recruitee' | 'ashby'
     | 'himalayas' | 'wttj' | 'thehub' | 'workable' | 'personio'
     | 'weworkremotely' | 'jobicy'
+    | 'remoteok' | 'berlinstartupjobs' | 'europeremotely'
   raw_jd: string
   scraped_at: string
 }

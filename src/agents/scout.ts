@@ -288,6 +288,10 @@ const GREENHOUSE_COMPANIES = [
   { slug: 'talonone',       name: 'Talon.one' },
   { slug: 'awin',           name: 'Awin Global' },
   { slug: 'getyourguide',   name: 'GetYourGuide' },
+  { slug: 'n26',            name: 'N26' },
+  { slug: 'soundcloud',     name: 'SoundCloud' },
+  { slug: 'pitchdotcom',    name: 'Pitch' },
+  { slug: 'moss',           name: 'Moss' },
 ]
 
 async function fetchGreenhouse(): Promise<ScoutResult[]> {
@@ -561,6 +565,103 @@ async function fetchRecruitee(): Promise<ScoutResult[]> {
   return results
 }
 
+// ── RemoteOK API ───────────────────────────────────────────────────────────────
+// Public JSON API — no key, CORS-enabled. First array element is a metadata object (skip it).
+
+interface RemoteOKJob {
+  slug?: string
+  date?: string
+  company?: string
+  position?: string
+  tags?: string[]
+  description?: string
+  location?: string
+  url?: string
+  apply_url?: string
+  legal?: string
+}
+
+async function fetchRemoteOK(): Promise<ScoutResult[]> {
+  const tags = ['design', 'product', 'ux', 'devrel']
+  const results: ScoutResult[] = []
+  const seen = new Set<string>()
+
+  await Promise.allSettled(tags.map(async tag => {
+    try {
+      const res = await fetch(`https://remoteok.com/api?tags=${tag}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobScout/1.0)' },
+      })
+      if (!res.ok) return
+      const data = await res.json() as RemoteOKJob[]
+      for (const item of data) {
+        if (item.legal) continue // metadata object
+        const url = item.apply_url || item.url
+        if (!url || seen.has(url)) continue
+        if (!matchesRole(item.position ?? '') && !matchesRole((item.tags ?? []).join(' '))) continue
+        seen.add(url)
+        results.push({
+          title: item.position ?? '',
+          company: item.company ?? '',
+          location: item.location || 'Remote',
+          url,
+          source: 'remoteok' as const,
+          raw_jd: item.description ?? '',
+          scraped_at: item.date ? safeDate(item.date) : now(),
+        })
+      }
+    } catch { /* swallow — CORS may block in some envs */ }
+  }))
+
+  return results
+}
+
+// ── Berlin Startup Jobs RSS ────────────────────────────────────────────────────
+// Curated Berlin-specific board — great for local on-site/hybrid roles.
+
+async function fetchBerlinStartupJobs(): Promise<ScoutResult[]> {
+  try {
+    const res = await fetch('https://berlinstartupjobs.com/feed/')
+    if (!res.ok) return []
+    const xml = await res.text()
+    return parseRss(xml)
+      .filter(item => matchesRole(item.title))
+      .map(item => ({
+        title: item.title,
+        company: '',
+        location: 'Berlin',
+        url: item.link,
+        source: 'berlinstartupjobs' as const,
+        raw_jd: item.description,
+        scraped_at: safeDate(item.pubDate),
+      }))
+  } catch {
+    return []
+  }
+}
+
+// ── EuropeRemotely RSS ─────────────────────────────────────────────────────────
+
+async function fetchEuropeRemotely(): Promise<ScoutResult[]> {
+  try {
+    const res = await fetch('https://europeremotely.com/feed/')
+    if (!res.ok) return []
+    const xml = await res.text()
+    return parseRss(xml)
+      .filter(item => matchesRole(item.title))
+      .map(item => ({
+        title: item.title,
+        company: '',
+        location: 'Remote Europe',
+        url: item.link,
+        source: 'europeremotely' as const,
+        raw_jd: item.description,
+        scraped_at: safeDate(item.pubDate),
+      }))
+  } catch {
+    return []
+  }
+}
+
 // ── Main export ────────────────────────────────────────────────────────────────
 
 export async function runScout(): Promise<ScoutResult[]> {
@@ -576,6 +677,9 @@ export async function runScout(): Promise<ScoutResult[]> {
     fetchRecruitee(),
     fetchWeWorkRemotely(),
     fetchJobicy(),
+    fetchRemoteOK(),
+    fetchBerlinStartupJobs(),
+    fetchEuropeRemotely(),
     // Proxied via Supabase Edge Function (CORS-blocked sources)
     fetchViaProxy(),
   ])
