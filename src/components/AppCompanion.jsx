@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Lottie from 'lottie-react';
-import medusaImg from '../../avatars/medusa.png';
+const medusaImg = '/avatars/medusa.png';
 
 // Companion characters. Each uses a Google Noto animated-emoji Lottie, with an
 // emoji fallback if the Lottie fails to load (network / missing animation).
