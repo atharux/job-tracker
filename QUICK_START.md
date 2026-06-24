@@ -1,95 +1,198 @@
-# QUICK START - Resume Features
+# Forge — Quick Start
 
-## 🚀 Installation (3 steps)
-
-### Step 1: Extract ZIP
-Extract `application-monitor-resume-features-FINAL.zip` to your project folder.
-
-### Step 2: Run SQL
-1. Open Supabase dashboard
-2. Go to SQL Editor
-3. Copy contents of `schema.sql`
-4. Execute
-
-### Step 3: Integrate Code
-Open `INTEGRATION_GUIDE.md` and follow steps 2-9 (10-15 minutes of copy/paste).
+A 9-agent pipeline that finds, tailors, and queues job applications for your review.
+Setup takes about 20 minutes.
 
 ---
 
-## ✅ What You Get
+## Prerequisites
 
-### AI Resume Upload
-- Drag & drop PDF/DOCX/TXT
-- AI extracts sections automatically
-- Editable modules
-
-### ATS Export
-- One-click plain text export
-- Keyword optimized
-- ATS-friendly format
-
-### Module Editor
-- Edit experience
-- Update skills
-- Customize per job
+- Node.js 18+
+- [Supabase](https://supabase.com) account (free tier works)
+- [Groq](https://console.groq.com) API key (free)
+- [Cloudflare](https://cloudflare.com) account for deployment (free)
 
 ---
 
-## 📁 Files Overview
+## Step 1 — Install
 
-**New Components:**
-- `ResumeUploader.jsx`
-- `ResumeModuleEditor.jsx`
-- `atsExport.js`
-
-**Database:**
-- `schema.sql`
-
-**Documentation:**
-- `INTEGRATION_GUIDE.md` (detailed steps)
-- `README.md` (full documentation)
+```bash
+unzip forge-v2.zip && cd forge-v2
+npm install
+```
 
 ---
 
-## 🔧 Integration Summary
+## Step 2 — Supabase
 
-Add to your `App.jsx`:
-1. 3 imports
-2. 4 state variables
-3. 1 useEffect line
-4. 3 functions
-5. 2 buttons
-6. 1 modal
+1. Create a new project at [supabase.com](https://supabase.com)
+2. Go to **Settings → API** — copy your project URL and anon key
+3. Create `.env.local` in the project root:
 
-Add to your `App.css`:
-- Resume styles (copy/paste section)
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
 
-**Time:** 10-15 minutes
+4. Go to **SQL Editor** and run these migration files in order (copy contents, paste, run):
 
----
-
-## 🎯 Testing
-
-1. Run SQL in Supabase
-2. Integrate code
-3. Start app
-4. Click "Upload Resume"
-5. Drop a resume file
-6. Wait for AI processing
-7. Click "ATS Resume" to export
+```
+supabase/migrations/20240101000000_resume_builder_schema.sql
+supabase/migrations/20260527000000_agent_system.sql
+supabase/migrations/20260527000001_update_job_sources.sql
+supabase/migrations/20260527000002_seed_cv_versions.sql
+supabase/migrations/20260624000000_expand_job_sources.sql
+```
 
 ---
 
-## ⚠️ Important Notes
+## Step 3 — Your profile
 
-- Gamification features remain dormant (can be fixed separately)
-- Resume upload requires file <5MB
-- Supported formats: PDF, DOCX, TXT
-- AI processing takes 5-10 seconds
+Open `src/config/userProfile.ts` and fill in your details. This is the only file
+you need to edit — all agents pull from it.
+
+```ts
+export const USER_PROFILE = {
+  name: 'Jane Smith',
+  email: 'jane@example.com',
+  phone: '+44 7700 900000',
+  location: 'London, UK',
+  linkedin: 'https://linkedin.com/in/janesmith',
+  portfolio: 'https://janesmith.com',
+
+  background: '8 years in product design. Figma, React, design systems.',
+
+  locationPreferences: 'London (on-site/hybrid), Remote Europe',
+
+  tracks: {
+    ux: {
+      label: 'UX Engineer',
+      color: '#06b6d4',
+      voice: 'Designs and ships. Figma to React. Cares about systems that scale.',
+    },
+    pm: {
+      label: 'Product Manager',
+      color: '#8b5cf6',
+      voice: 'Data-informed. Moves from ambiguous signal to shipped feature.',
+    },
+    devrel: {
+      label: 'Developer Relations',
+      color: '#f97316',
+      voice: 'Technically credible. Builds demos, writes docs, grows communities.',
+    },
+  },
+}
+```
 
 ---
 
-## 🆘 Need Help?
+## Step 4 — Add your CV
 
-Check `INTEGRATION_GUIDE.md` for detailed step-by-step instructions.
+The pipeline tailors your CV against each job description. Your base CV lives in
+the `cv_versions` Supabase table (one row per track: `ux`, `pm`, `devrel`).
 
+Run the import script (expects a markdown file):
+
+```bash
+npx tsx scripts/importResume.ts
+```
+
+Or paste your CV content directly into the `cv_versions` table in the Supabase
+Table Editor.
+
+---
+
+## Step 5 — Deploy the Edge Function
+
+Some job sources (Himalayas, WeWorkRemotely, Workable, Personio, Welcome to the Jungle)
+are CORS-blocked in the browser. The scout proxies them through a Supabase Edge Function.
+
+```bash
+npx supabase link --project-ref your-project-ref
+npx supabase functions deploy job-scout-proxy
+```
+
+Your project ref is in **Supabase → Settings → General**.
+
+---
+
+## Step 6 — Run locally
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173), sign up, then go to **Settings**
+and add your API keys:
+
+| Key | Where | Cost |
+|-----|-------|------|
+| Groq | [console.groq.com](https://console.groq.com) | Free |
+| OpenRouter | [openrouter.ai](https://openrouter.ai) | Free tier |
+| Anthropic | [console.anthropic.com](https://console.anthropic.com) | Optional |
+
+---
+
+## Step 7 — Run the Scout
+
+Click **Run Scout**. The pipeline runs automatically:
+
+1. **Scout** — fetches jobs from 15+ sources
+2. **Classifier** — scores each job 0–10, assigns CV track
+3. **Jobs appear in Review Queue** for your approval
+
+From the queue: generate tailored resume + cover letter per job, then approve to submit.
+Nothing submits without your explicit approval.
+
+---
+
+## Step 8 — Deploy to Cloudflare Pages
+
+1. Push your fork to GitHub
+2. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Pages → Create application → Connect to Git**
+3. Build settings:
+   - Build command: `npm run build`
+   - Output directory: `dist`
+4. Add environment variables: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+5. Deploy
+
+See `DEPLOYMENT.md` and `CLOUDFLARE_WORKER_SETUP.md` for full deployment details.
+
+---
+
+## Troubleshooting
+
+**Scout returns no jobs**
+Check your Groq API key in Settings. Open browser console for network errors.
+
+**`jobs_source_check` constraint error**
+Run all five migrations in order — especially `20260624000000_expand_job_sources.sql`.
+
+**Edge Function errors**
+```bash
+npx supabase functions logs job-scout-proxy
+```
+
+**Cover letters have wrong name or voice**
+Edit `src/config/userProfile.ts` — it's the single source of truth for all agent prompts.
+
+**Same jobs keep reappearing**
+Rejected/submitted jobs are permanently excluded. If jobs cycle back, check that all
+five migrations ran — the queue-based dedup requires the agent_system schema.
+
+---
+
+## Pipeline overview
+
+```
+Scout          → fetches jobs from 15+ free sources
+Classifier     → scores fit 0–10, assigns ux / pm / devrel track
+CV Selector    → pulls your base CV for the assigned track
+Resume Tailor  → rewrites bullet points against the JD
+Cover Letter   → writes a track-specific letter (max 350 words)
+Form Mapper    → maps application form fields
+Screenshot     → before/after screenshots
+Review Gate    → holds everything for your approval ← nothing submits without this
+```
+
+**Roadmap:** Gmail status tracking (rejection / screening / interview detection via Gmail MCP) — code exists in `src/agents/statusTracker.ts`, pending OAuth implementation.

@@ -7,7 +7,7 @@ import { writeCoverLetter } from '../agents/coverLetterWriter'
 import { mapForm } from '../agents/formMapper'
 import { captureScreenshots } from '../agents/screenshotCapturer'
 import * as gatekeeper from '../agents/reviewGatekeeper'
-import { syncStatus, watchJob } from '../agents/statusTracker'
+// statusTracker import removed — Gmail MCP auth not yet implemented (roadmap)
 import { submitApplication } from '../agents/submitter'
 import type { SubmissionResult } from '../agents/submitter'
 import type { ScoutResult, ClassifierResult, TailoredResume, CoverLetter } from '../agents/types'
@@ -471,14 +471,6 @@ export async function approveAndSubmit(jobId: string, notes?: string): Promise<S
       notes: notes ?? null,
       attachments: [],
     })
-  }
-
-  const watchRunId = await startRun('statusTracker', jobId, { action: 'watch' }, userId)
-  try {
-    const status = await watchJob(jobId)
-    await completeRun(watchRunId, { status })
-  } catch (err) {
-    await failRun(watchRunId, err)
   }
 
   return submission

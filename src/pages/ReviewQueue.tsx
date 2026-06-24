@@ -22,7 +22,6 @@ const PIPELINE_STEPS = [
   { key: 'formMapper',         label: 'Form Map'     },
   { key: 'screenshotCapturer', label: 'Screenshot'   },
   { key: 'reviewGatekeeper',   label: 'Gatekeeper'   },
-  { key: 'statusTracker',      label: 'Status'       },
 ]
 
 const STATUS_LABELS: Record<StatusFilter, string> = {
