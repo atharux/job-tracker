@@ -274,11 +274,11 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Link
             to="/"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#475569', textDecoration: 'none', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#94a3b8', textDecoration: 'none', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem' }}
           >
             <ArrowLeft size={14} /> FORGE
           </Link>
-          <span style={{ color: '#1e1e2e' }}>·</span>
+          <span style={{ color: '#475569' }}>·</span>
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
             REVIEW QUEUE
           </h1>
@@ -378,20 +378,20 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
                     borderRadius: '3px',
                     border: `1px solid ${isRunning ? 'rgba(6,182,212,0.28)' : 'transparent'}`,
                     background: isRunning ? 'rgba(6,182,212,0.06)' : 'transparent',
-                    opacity: state === 'idle' ? 0.22 : 1,
+                    opacity: state === 'idle' ? 0.4 : 1,
                     transition: 'opacity 0.2s, border-color 0.2s, background 0.2s',
                   }}
                 >
                   <span style={{
                     fontFamily: 'Space Mono, monospace', fontSize: '0.58rem', fontWeight: 700,
-                    color: isRunning ? '#06b6d4' : isDone ? '#34d399' : isFailed ? '#ef4444' : '#475569',
+                    color: isRunning ? '#06b6d4' : isDone ? '#34d399' : isFailed ? '#ef4444' : '#64748b',
                     minWidth: '14px', flexShrink: 0,
                   }}>
                     {String(idx + 1).padStart(2, '0')}
                   </span>
                   <span style={{
                     fontFamily: 'Space Mono, monospace', fontSize: '0.6rem',
-                    color: isRunning ? '#e2e8f0' : isDone ? '#64748b' : isFailed ? '#ef4444' : '#475569',
+                    color: isRunning ? '#e2e8f0' : isDone ? '#94a3b8' : isFailed ? '#ef4444' : '#94a3b8',
                     flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {step.label}
@@ -409,7 +409,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
             })}
           </div>
           {scoutResult && (
-            <p style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#475569', marginTop: '0.5rem' }}>
+            <p style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#94a3b8', marginTop: '0.5rem' }}>
               {scoutResult.found} new jobs scouted · {scoutResult.queued} queued for review
             </p>
           )}
@@ -458,7 +458,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
             }}
           >
             {STATUS_LABELS[s]}
-            <span style={{ marginLeft: '0.4rem', color: filter === s ? '#8b5cf6' : '#374151' }}>
+            <span style={{ marginLeft: '0.4rem', color: filter === s ? '#8b5cf6' : '#64748b' }}>
               {counts[s]}
             </span>
           </button>
@@ -467,7 +467,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
 
       {/* Track filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.5rem', borderBottom: '1px solid #0f0f1a', background: 'rgba(255,255,255,0.01)' }}>
-        <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#374151', marginRight: '0.25rem', letterSpacing: '0.08em' }}>TRACK</span>
+        <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#64748b', marginRight: '0.25rem', letterSpacing: '0.08em' }}>TRACK</span>
         {(Object.keys(TRACK_META) as TrackFilter[]).map((t) => {
           const { label, color } = TRACK_META[t]
           const active = trackFilter === t
@@ -489,7 +489,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
               }}
             >
               {t !== 'all' && (
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: active ? color : '#374151', flexShrink: 0 }} />
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: active ? color : '#475569', flexShrink: 0 }} />
               )}
               {label}
             </button>
@@ -501,7 +501,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.4rem 1.5rem', borderBottom: '1px solid #0f0f1a', background: 'rgba(255,255,255,0.005)', flexWrap: 'wrap' }}>
         {/* Location */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#374151', letterSpacing: '0.08em' }}>WHERE</span>
+          <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#64748b', letterSpacing: '0.08em' }}>WHERE</span>
           {(['all', 'berlin', 'remote'] as LocationFilter[]).map(loc => (
             <button
               key={loc}
@@ -525,7 +525,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
         {/* Industry */}
         {availableIndustries().length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#374151', letterSpacing: '0.08em' }}>INDUSTRY</span>
+            <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#64748b', letterSpacing: '0.08em' }}>INDUSTRY</span>
             <button
               onClick={() => setIndustryFilter('all')}
               style={{ padding: '0.2rem 0.55rem', background: industryFilter === 'all' ? 'rgba(139,92,246,0.12)' : 'transparent', border: `1px solid ${industryFilter === 'all' ? '#8b5cf6' : '#1e1e2e'}`, borderRadius: '3px', color: industryFilter === 'all' ? '#8b5cf6' : '#475569', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem' }}
@@ -712,21 +712,24 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
         </div>
       )}
 
-      {/* Scouted — below threshold */}
-      {scoutedJobs.length > 0 && (
-        <div style={{ borderTop: '1px solid #1e1e2e', margin: '0 1.5rem 1.5rem' }}>
-          <button
-            onClick={() => setScoutedExpanded(x => !x)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', padding: '0.75rem 0', color: '#475569', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', letterSpacing: '0.05em', width: '100%', textAlign: 'left' }}
-          >
-            <span style={{ color: '#1e1e2e' }}>{scoutedExpanded ? '▼' : '▶'}</span>
-            {scoutedJobs.length} SCOUTED — BELOW THRESHOLD
-            <span style={{ marginLeft: 'auto', color: '#1e1e2e' }}>click to review · force any into queue</span>
-          </button>
+      {/* Scouted — all scored jobs not yet in queue */}
+      <div style={{ borderTop: '1px solid #1e1e2e', margin: '0 1.5rem 1.5rem' }}>
+        <button
+          onClick={() => setScoutedExpanded(x => !x)}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', padding: '0.75rem 0', color: '#94a3b8', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', letterSpacing: '0.05em', width: '100%', textAlign: 'left' }}
+        >
+          <span style={{ color: '#64748b' }}>{scoutedExpanded ? '▼' : '▶'}</span>
+          {scoutedJobs.length > 0 ? `${scoutedJobs.length} SCOUTED — BELOW THRESHOLD` : 'SCOUTED JOBS — run Scout to populate'}
+          <span style={{ marginLeft: 'auto', color: '#475569', fontSize: '0.6rem' }}>force any into queue with + REVIEW</span>
+        </button>
 
-          {scoutedExpanded && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingBottom: '1rem' }}>
-              {scoutedJobs.filter(job => {
+        {scoutedExpanded && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingBottom: '1rem' }}>
+            {scoutedJobs.length === 0 ? (
+              <div style={{ padding: '1.5rem 0.75rem', color: '#64748b', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', textAlign: 'center' }}>
+                No scored jobs yet — run Scout to classify all scouted postings.
+              </div>
+            ) : scoutedJobs.filter(job => {
                 const locOk = locationFilter === 'all'
                   || (locationFilter === 'remote' && isRemoteLocation(job.location))
                   || (locationFilter === 'berlin' && isBerlinLocation(job.location))
@@ -734,43 +737,42 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
                 const trackOk = trackFilter === 'all' || job.cv_track === trackFilter
                 return locOk && indOk && trackOk
               }).map(job => (
-                <div
-                  key={job.id}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#0d0d1a', border: '1px solid #1a1a2e', borderRadius: '4px' }}
+              <div
+                key={job.id}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#0d0d1a', border: '1px solid #1a1a2e', borderRadius: '4px' }}
+              >
+                <span style={{
+                  fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', fontWeight: 700, minWidth: '2rem', textAlign: 'center',
+                  color: job.classifier_score >= 5 ? '#f97316' : '#64748b',
+                }}>
+                  {job.classifier_score.toFixed(1)}
+                </span>
+                <span style={{ flex: 1, fontSize: '0.8rem', color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {job.title} — {job.company}
+                </span>
+                <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#64748b', minWidth: '3rem' }}>
+                  {job.cv_track}
+                </span>
+                {job.url && (
+                  <a href={job.url} target="_blank" rel="noopener noreferrer" style={{ color: '#64748b', fontSize: '0.65rem', textDecoration: 'none' }}>↗</a>
+                )}
+                <button
+                  disabled={forcingId === job.id}
+                  onClick={async () => {
+                    setForcingId(job.id)
+                    await forceEnqueueJob(job.id)
+                    await loadQueue()
+                    setForcingId(null)
+                  }}
+                  style={{ padding: '0.25rem 0.6rem', background: 'transparent', border: '1px solid #1e3a2e', borderRadius: '3px', color: forcingId === job.id ? '#475569' : '#06b6d4', cursor: forcingId === job.id ? 'not-allowed' : 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', whiteSpace: 'nowrap' }}
                 >
-                  <span style={{
-                    fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', fontWeight: 700, minWidth: '2rem', textAlign: 'center',
-                    color: job.classifier_score >= 5 ? '#f97316' : '#475569',
-                  }}>
-                    {job.classifier_score.toFixed(1)}
-                  </span>
-                  <span style={{ flex: 1, fontSize: '0.8rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {job.title} — {job.company}
-                  </span>
-                  <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#2d3748', minWidth: '3rem' }}>
-                    {job.cv_track}
-                  </span>
-                  {job.url && (
-                    <a href={job.url} target="_blank" rel="noopener noreferrer" style={{ color: '#2d3748', fontSize: '0.65rem', textDecoration: 'none' }}>↗</a>
-                  )}
-                  <button
-                    disabled={forcingId === job.id}
-                    onClick={async () => {
-                      setForcingId(job.id)
-                      await forceEnqueueJob(job.id)
-                      await loadQueue()
-                      setForcingId(null)
-                    }}
-                    style={{ padding: '0.25rem 0.6rem', background: 'transparent', border: '1px solid #1e2a1e', borderRadius: '3px', color: forcingId === job.id ? '#475569' : '#06b6d4', cursor: forcingId === job.id ? 'not-allowed' : 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', whiteSpace: 'nowrap' }}
-                  >
-                    {forcingId === job.id ? '…' : '+ REVIEW'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                  {forcingId === job.id ? '…' : '+ REVIEW'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
