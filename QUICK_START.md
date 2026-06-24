@@ -116,7 +116,28 @@ Your project ref is in **Supabase → Settings → General**.
 
 ---
 
-## Step 6 — Run locally
+## Step 6 — Gmail Status Tracker (optional)
+
+The 9th agent monitors your inbox and classifies replies as `screening | interview | rejection`.
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) → create a project
+2. Enable the **Gmail API**
+3. Create **OAuth 2.0 credentials** (Web application type)
+4. Add your app URL as an authorised redirect URI (e.g. `https://yourapp.pages.dev`)
+5. Copy the Client ID and add it to `.env.local`:
+
+```env
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+6. Also add it as an environment variable in Cloudflare Pages
+
+Once deployed: go to **Settings → Connect Gmail** to authorise. The **Sync Status** button appears in the Review Queue header when Gmail is connected.
+
+---
+
+## Step 7 — Run locally
+
 
 ```bash
 npm run dev
@@ -133,7 +154,7 @@ and add your API keys:
 
 ---
 
-## Step 7 — Run the Scout
+## Step 8 — Run the Scout
 
 Click **Run Scout**. The pipeline runs automatically:
 
@@ -146,7 +167,7 @@ Nothing submits without your explicit approval.
 
 ---
 
-## Step 8 — Deploy to Cloudflare Pages
+## Step 9 — Deploy to Cloudflare Pages
 
 1. Push your fork to GitHub
 2. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Pages → Create application → Connect to Git**
@@ -195,4 +216,4 @@ Screenshot     → before/after screenshots
 Review Gate    → holds everything for your approval ← nothing submits without this
 ```
 
-**Roadmap:** Gmail status tracking (rejection / screening / interview detection via Gmail MCP) — code exists in `src/agents/statusTracker.ts`, pending OAuth implementation.
+**Roadmap:** Auto-trigger status sync on a cron schedule; Slack/email notification on status change.

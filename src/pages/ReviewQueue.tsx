@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, RefreshCw, Search, Key, Send, X } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Search, Key, Send, X, Mail } from 'lucide-react'
+import { isGmailConnected } from '../services/gmailAuth'
 import { supabase } from '../supabaseClient'
 import type { ReviewQueueRecord } from '../agents/types'
-import { runScoutOnly, approveAndSubmit } from '../services/agentOrchestrator'
+import { runScoutOnly, approveAndSubmit, runStatusSync } from '../services/agentOrchestrator'
 import type { AgentStatus } from '../services/agentOrchestrator'
 import type { SubmissionResult } from '../agents/submitter'
 import JobQueueList from './review-queue/JobQueueList'
@@ -22,6 +23,7 @@ const PIPELINE_STEPS = [
   { key: 'formMapper',         label: 'Form Map'     },
   { key: 'screenshotCapturer', label: 'Screenshot'   },
   { key: 'reviewGatekeeper',   label: 'Gatekeeper'   },
+  { key: 'statusTracker',      label: 'Status'       },
 ]
 
 const STATUS_LABELS: Record<StatusFilter, string> = {
@@ -77,6 +79,10 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   // Pipeline observability
   const [agentStates, setAgentStates] = useState<Record<string, AgentStatus | 'idle'>>({})
   const [scoutResult, setScoutResult] = useState<{ found: number; queued: number } | null>(null)
+
+  // Status sync
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ updated: number } | null>(null)
 
   // Batch state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -139,6 +145,18 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
       if (/api key|no key|not found/i.test(msg)) handleOpenSettings()
     } finally {
       setScouting(false)
+    }
+  }
+
+  const handleSyncStatus = async () => {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const updates = await runStatusSync()
+      setSyncResult({ updated: updates.length })
+      await loadQueue()
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -230,6 +248,18 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
             <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             REFRESH
           </button>
+
+          {isGmailConnected() && (
+            <button
+              onClick={handleSyncStatus}
+              disabled={syncing}
+              title="Check Gmail for replies to submitted applications"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.75rem', background: syncResult ? 'rgba(34,197,94,0.08)' : 'transparent', border: `1px solid ${syncResult ? 'rgba(34,197,94,0.3)' : '#1e1e2e'}`, borderRadius: '4px', color: syncing ? '#475569' : syncResult ? '#22c55e' : '#06b6d4', cursor: syncing ? 'not-allowed' : 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem' }}
+            >
+              <Mail size={12} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+              {syncing ? 'SYNCING…' : syncResult ? `${syncResult.updated} UPDATED` : 'SYNC STATUS'}
+            </button>
+          )}
 
           {!keyPresent ? (
             <button

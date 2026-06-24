@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, ExternalLink, Save, Eye, EyeOff } from 'lucide-react';
+import { X, Key, ExternalLink, Save, Eye, EyeOff, Mail, CheckCircle } from 'lucide-react';
+import { initiateGmailAuth, isGmailConnected, getGmailUserEmail, disconnectGmail } from '../services/gmailAuth';
 
 export default function ApiKeySettings({ isOpen, onClose }) {
   const [openRouterKey, setOpenRouterKey] = useState('');
@@ -9,6 +10,13 @@ export default function ApiKeySettings({ isOpen, onClose }) {
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [showClaudeKey, setShowClaudeKey] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailEmail, setGmailEmail] = useState('');
+
+  useEffect(() => {
+    setGmailConnected(isGmailConnected());
+    setGmailEmail(getGmailUserEmail() ?? '');
+  }, [isOpen]);
 
   useEffect(() => {
     setOpenRouterKey(localStorage.getItem('openrouter_api_key') || '');
@@ -365,6 +373,44 @@ export default function ApiKeySettings({ isOpen, onClose }) {
           </div>
           <div className="api-settings-hint">
             Free tier: 50 credits/month • Fast responses • Llama 3.3 70B model
+          </div>
+        </div>
+
+        {/* Gmail OAuth */}
+        <div className="api-settings-section">
+          <div className="api-settings-label">
+            <span>Gmail — Status Tracker</span>
+            {gmailConnected && (
+              <span style={{ fontFamily: "'Space Mono', monospace", fontSize: '9px', letterSpacing: '0.08em', background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '2px', padding: '1px 5px' }}>
+                CONNECTED
+              </span>
+            )}
+          </div>
+          {gmailConnected ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle size={14} style={{ color: '#22c55e' }} />
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: '12px', color: '#94a3b8' }}>{gmailEmail}</span>
+              </div>
+              <button
+                onClick={() => { disconnectGmail(); setGmailConnected(false); setGmailEmail(''); }}
+                style={{ background: 'none', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '4px', color: '#ef4444', fontSize: '11px', fontFamily: "'Space Mono', monospace", padding: '3px 8px', cursor: 'pointer' }}
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={initiateGmailAuth}
+              className="api-settings-btn"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', color: '#e2e8f0', fontSize: '13px', fontFamily: 'inherit', padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}
+            >
+              <Mail size={14} style={{ color: '#06b6d4' }} />
+              Connect Gmail
+            </button>
+          )}
+          <div className="api-settings-hint">
+            Monitors inbox for replies to submitted applications — rejection, screening, interview. Needs <code>VITE_GOOGLE_CLIENT_ID</code> in your env.
           </div>
         </div>
 

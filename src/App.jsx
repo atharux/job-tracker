@@ -33,6 +33,7 @@ import ResumeAIAssistant from './components/ResumeAIAssistant.jsx'; // new impor
 
 import OnboardingTutorial from './components/OnboardingTutorial.jsx';
 import ApiKeySettings from './components/ApiKeySettings.jsx';
+import { handleGmailCallback } from './services/gmailAuth';
 
 import MilestoneToast from './MilestoneToast.jsx';
 import CelebrationAnimation from './components/CelebrationAnimation.jsx';
@@ -372,6 +373,18 @@ export default function App() {
   const toolsTriggerRef = useRef(null);
   const toolsMenuRef = useRef(null);
   useFocusTrap(modalRef, isModalOpen, () => handleCancel());
+
+  // Handle Gmail OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    if (code && state === 'gmail_oauth') {
+      handleGmailCallback(code)
+        .catch(console.error)
+        .finally(() => window.history.replaceState({}, '', window.location.pathname));
+    }
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('hc-mode', highContrast);
