@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { hasCogneeConfig, cogneeSearch } from '../agents/cogneeClient'
 
 const TEAL = '#06b6d4'
 const PURPLE = '#8b5cf6'
@@ -135,6 +136,19 @@ const COGNEE_NODES = [
 export default function PipelineVisualization() {
   const [selected, setSelected] = useState<string | null>(null)
   const [showAllSources, setShowAllSources] = useState(false)
+  const [cogneeQuery, setCogneeQuery] = useState('')
+  const [cogneeAnswer, setCogneeAnswer] = useState('')
+  const [cogneeLoading, setCogneeLoading] = useState(false)
+  const cogneeActive = hasCogneeConfig()
+
+  async function handleCogneeQuery() {
+    if (!cogneeQuery.trim() || cogneeLoading) return
+    setCogneeLoading(true)
+    setCogneeAnswer('')
+    const result = await cogneeSearch(cogneeQuery)
+    setCogneeAnswer(result || 'No results — run Scout first to build the graph.')
+    setCogneeLoading(false)
+  }
 
   const selectedAgent = AGENTS.find(a => a.id === selected)
   const visibleSources = showAllSources ? DATA_SOURCES : DATA_SOURCES.slice(0, 6)
@@ -310,23 +324,26 @@ export default function PipelineVisualization() {
         </div>
 
         {/* COGNEE Layer */}
-        <div style={{ marginTop: '40px', border: `1px solid ${PURPLE}33`, borderRadius: '6px', padding: '24px', background: `${PURPLE}05`, position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: 12, right: 16, fontSize: '9px', color: PURPLE, background: `${PURPLE}22`, border: `1px solid ${PURPLE}44`, padding: '3px 10px', borderRadius: '2px', letterSpacing: '2px' }}>
-            NEW — HACKATHON ADDITION
+        <div style={{ marginTop: '40px', border: `1px solid ${cogneeActive ? PURPLE : '#1e293b'}`, borderRadius: '6px', padding: '24px', background: cogneeActive ? `${PURPLE}05` : '#0a0f1a', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 12, right: 16, display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: cogneeActive ? PURPLE : '#334155', display: 'inline-block', animation: cogneeActive ? 'pulse 2s infinite' : 'none' }} />
+            <span style={{ fontSize: '9px', color: cogneeActive ? PURPLE : '#334155', letterSpacing: '2px' }}>
+              {cogneeActive ? 'COGNEE ACTIVE' : 'COGNEE — add key in Settings to activate'}
+            </span>
           </div>
 
           <div style={{ fontSize: '10px', color: PURPLE, letterSpacing: '3px', marginBottom: '16px' }}>COGNEE KNOWLEDGE GRAPH LAYER</div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
             <div>
               <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 16px', lineHeight: 1.7 }}>
-                Cognee adds persistent memory across every run. Instead of each application being stateless, the pipeline builds a knowledge graph of companies, roles, and required skills — so future runs get smarter.
+                After each Scout run, every classified job is fed into Cognee as structured memory — company, role, required skills, fit score. The graph builds up over time so the pipeline gets smarter with every run.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {[
-                  { agent: 'Classifier', gain: 'scores anchored to outcome history, not just profile match' },
-                  { agent: 'CV Selector', gain: 'track choice informed by which track got responses at this company' },
-                  { agent: 'Resume Tailor', gain: 'bullets emphasise skills that appear across similar successful JDs' },
+                  { agent: 'Classifier', gain: 'scores anchored to outcome history across companies' },
+                  { agent: 'CV Selector', gain: 'track choice informed by what worked at similar companies' },
+                  { agent: 'Resume Tailor', gain: 'bullets match skills that recur across high-scoring JDs' },
                 ].map(row => (
                   <div key={row.agent} style={{ display: 'flex', gap: '10px', fontSize: '11px' }}>
                     <span style={{ color: PURPLE, minWidth: '110px', fontWeight: 700 }}>{row.agent}</span>
@@ -334,20 +351,65 @@ export default function PipelineVisualization() {
                   </div>
                 ))}
               </div>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-              {COGNEE_NODES.map((node, i) => {
-                const angle = (i / COGNEE_NODES.length) * 2 * Math.PI
-                return (
-                  <div key={node} style={{ border: `1px solid ${PURPLE}44`, borderRadius: '3px', padding: '8px 12px', fontSize: '11px', color: `${PURPLE}cc`, background: `${PURPLE}08`, whiteSpace: 'nowrap' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '16px' }}>
+                {COGNEE_NODES.map(node => (
+                  <div key={node} style={{ border: `1px solid ${PURPLE}33`, borderRadius: '3px', padding: '4px 10px', fontSize: '10px', color: `${PURPLE}99`, background: `${PURPLE}06` }}>
                     {node}
                   </div>
-                )
-              })}
-              <div style={{ width: '100%', textAlign: 'center', fontSize: '10px', color: '#334155', marginTop: '4px' }}>
-                graph persists across all pipeline runs
+                ))}
               </div>
+            </div>
+
+            {/* Live query panel */}
+            <div>
+              <div style={{ fontSize: '10px', color: '#475569', letterSpacing: '1px', marginBottom: '8px' }}>QUERY THE GRAPH</div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                <input
+                  type="text"
+                  value={cogneeQuery}
+                  onChange={e => setCogneeQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleCogneeQuery()}
+                  placeholder={cogneeActive ? 'e.g. What skills appear most in UX Engineer roles?' : 'Add Cognee key in Settings to query'}
+                  disabled={!cogneeActive}
+                  style={{
+                    flex: 1, background: '#0a0f1a', border: `1px solid ${PURPLE}33`, borderRadius: '3px',
+                    padding: '8px 12px', color: '#e2e8f0', fontSize: '11px',
+                    fontFamily: 'Space Mono, monospace', outline: 'none',
+                    opacity: cogneeActive ? 1 : 0.4,
+                  }}
+                />
+                <button
+                  onClick={handleCogneeQuery}
+                  disabled={!cogneeActive || cogneeLoading}
+                  style={{
+                    background: cogneeActive ? `${PURPLE}22` : 'transparent',
+                    border: `1px solid ${PURPLE}44`, borderRadius: '3px',
+                    padding: '8px 14px', color: PURPLE, fontSize: '11px',
+                    fontFamily: 'Space Mono, monospace', cursor: cogneeActive ? 'pointer' : 'not-allowed',
+                    opacity: cogneeActive ? 1 : 0.4,
+                  }}
+                >
+                  {cogneeLoading ? '…' : 'ASK'}
+                </button>
+              </div>
+              {!cogneeAnswer && cogneeActive && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {[
+                    'What companies are hiring UX Engineers in Berlin?',
+                    'Which roles have the most Figma requirements?',
+                    'What industries score highest for my profile?',
+                  ].map(q => (
+                    <button key={q} onClick={() => { setCogneeQuery(q); }} style={{ background: 'transparent', border: 'none', padding: '3px 0', color: '#475569', fontSize: '10px', fontFamily: 'Space Mono, monospace', cursor: 'pointer', textAlign: 'left' }}>
+                      → {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {cogneeAnswer && (
+                <div style={{ background: `${PURPLE}08`, border: `1px solid ${PURPLE}22`, borderRadius: '4px', padding: '12px', fontSize: '12px', color: '#94a3b8', lineHeight: 1.7, maxHeight: '200px', overflowY: 'auto' }}>
+                  {cogneeAnswer}
+                </div>
+              )}
             </div>
           </div>
         </div>

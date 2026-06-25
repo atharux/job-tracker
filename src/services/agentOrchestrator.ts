@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { runScout } from '../agents/scout'
 import { classifyBatch } from '../agents/classifier'
+import { hasCogneeConfig, cogneeRemember, buildJobMemory } from '../agents/cogneeClient'
 import { selectCV } from '../agents/cvSelector'
 import { tailorResume } from '../agents/resumeTailor'
 import { writeCoverLetter } from '../agents/coverLetterWriter'
@@ -357,6 +358,20 @@ export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]
     if (c.industry) {
       await supabase.from('jobs').update({ industry: c.industry }).eq('id', c.job_id)
     }
+  }
+
+  // Feed classified jobs into Cognee knowledge graph (fire-and-forget, non-blocking)
+  if (hasCogneeConfig()) {
+    onStep?.('cognee', 'running')
+    Promise.all(
+      classifications.map(c => {
+        const job = jobs.find(j => j.id === c.job_id)
+        if (!job) return Promise.resolve()
+        return cogneeRemember(buildJobMemory(job, c))
+      })
+    )
+      .then(() => onStep?.('cognee', 'success'))
+      .catch(() => onStep?.('cognee', 'failed'))
   }
 
   onStep?.('reviewGatekeeper', 'running')

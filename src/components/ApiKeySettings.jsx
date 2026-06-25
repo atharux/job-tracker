@@ -6,9 +6,12 @@ export default function ApiKeySettings({ isOpen, onClose }) {
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [groqKey, setGroqKey] = useState('');
   const [claudeKey, setClaudeKey] = useState('');
+  const [cogneeKey, setCogneeKey] = useState('');
+  const [cogneeBaseUrl, setCogneeBaseUrl] = useState('');
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [showClaudeKey, setShowClaudeKey] = useState(false);
+  const [showCogneeKey, setShowCogneeKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailEmail, setGmailEmail] = useState('');
@@ -22,6 +25,8 @@ export default function ApiKeySettings({ isOpen, onClose }) {
     setOpenRouterKey(localStorage.getItem('openrouter_api_key') || '');
     setGroqKey(localStorage.getItem('groq_api_key') || '');
     setClaudeKey(localStorage.getItem('anthropic_api_key') || '');
+    setCogneeKey(localStorage.getItem('cognee_api_key') || '');
+    setCogneeBaseUrl(localStorage.getItem('cognee_base_url') || '');
   }, [isOpen]);
 
   const handleSave = () => {
@@ -41,6 +46,17 @@ export default function ApiKeySettings({ isOpen, onClose }) {
       localStorage.setItem('anthropic_api_key', claudeKey.trim());
     } else {
       localStorage.removeItem('anthropic_api_key');
+    }
+
+    if (cogneeKey.trim()) {
+      localStorage.setItem('cognee_api_key', cogneeKey.trim());
+    } else {
+      localStorage.removeItem('cognee_api_key');
+    }
+    if (cogneeBaseUrl.trim()) {
+      localStorage.setItem('cognee_base_url', cogneeBaseUrl.trim());
+    } else {
+      localStorage.removeItem('cognee_base_url');
     }
 
     // Notify same-tab listeners (e.g. ResumeAIAssistant) — native 'storage' only fires cross-tab.
@@ -445,6 +461,54 @@ export default function ApiKeySettings({ isOpen, onClose }) {
           </div>
           <div className="api-settings-hint">
             Paid: $3-4 per million tokens • Best accuracy • Claude Sonnet 4
+          </div>
+        </div>
+
+        {/* Cognee — Knowledge Graph Memory */}
+        <div className="api-settings-section" style={{ borderTop: '1px solid #1e1e2e', paddingTop: '1rem' }}>
+          <div className="api-settings-label">
+            <span style={{ color: '#8b5cf6' }}>Cognee API Key</span>
+            <a
+              href="https://platform.cognee.ai/sign-in"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="api-settings-link"
+            >
+              Get Key <ExternalLink size={12} />
+            </a>
+          </div>
+          <div className="api-settings-input-wrapper">
+            <input
+              type={showCogneeKey ? 'text' : 'password'}
+              className="api-settings-input"
+              placeholder="ck_..."
+              value={cogneeKey}
+              onChange={(e) => setCogneeKey(e.target.value)}
+            />
+            <button
+              className="api-settings-toggle"
+              onClick={() => setShowCogneeKey(!showCogneeKey)}
+              type="button"
+            >
+              {showCogneeKey ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <div className="api-settings-hint">
+            Knowledge graph memory layer — jobs feed in automatically after each Scout run
+          </div>
+          <div className="api-settings-label" style={{ marginTop: '0.75rem' }}>
+            <span>Cognee Base URL</span>
+          </div>
+          <input
+            type="text"
+            className="api-settings-input"
+            placeholder="http://localhost:8000"
+            value={cogneeBaseUrl}
+            onChange={(e) => setCogneeBaseUrl(e.target.value)}
+            style={{ marginTop: '0.25rem' }}
+          />
+          <div className="api-settings-hint">
+            Cloud: from platform.cognee.ai dashboard · Self-hosted: http://localhost:8000
           </div>
         </div>
 
