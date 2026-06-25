@@ -88,7 +88,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   const [syncResult, setSyncResult] = useState<{ updated: number } | null>(null)
 
   // Scouted-but-below-threshold jobs
-  const [scoutedJobs, setScoutedJobs] = useState<Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score: number; cv_track: string }>>([])
+  const [scoutedJobs, setScoutedJobs] = useState<Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score: number | null; cv_track: string | null }>>([])
   const [scoutedExpanded, setScoutedExpanded] = useState(true)
   const [forcingId, setForcingId] = useState<string | null>(null)
 
@@ -118,22 +118,34 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
         .from('application_review_queue')
         .select(`*, job:jobs(*)`)
         .order('classifier_score', { ascending: false }),
+      // Select only columns that definitely exist on the jobs table.
+      // classifier_score / cv_track are added by migration 20260625000000 —
+      // if that hasn't run yet the column select still works; scores will just be null.
       supabase
         .from('jobs')
-        .select('id, title, company, location, url, classifier_score, cv_track')
-        .not('classifier_score', 'is', null)
-        .order('classifier_score', { ascending: false }),
+        .select('id, title, company, location, url, created_at')
+        .order('created_at', { ascending: false })
+        .limit(500),
     ])
 
     if (!queueRes.error && queueRes.data) setRecords(queueRes.data as ReviewQueueRecord[])
 
-    if (!scoutedRes.error && scoutedRes.data) {
-      const queuedIds = new Set((queueRes.data ?? []).map((r: ReviewQueueRecord) => r.job_id))
-      setScoutedJobs(
-        (scoutedRes.data as Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score: number; cv_track: string }>)
-          .filter(j => !queuedIds.has(j.id))
-      )
-    }
+    // Show ALL scouted jobs not already in the queue — scores optional
+    const allJobs = scoutedRes.data as Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score?: number | null; cv_track?: string | null }> ?? []
+    const queuedIds = new Set((queueRes.data ?? []).map((r: ReviewQueueRecord) => r.job_id))
+    setScoutedJobs(
+      allJobs
+        .filter(j => !queuedIds.has(j.id))
+        .map(j => ({
+          id: j.id,
+          title: j.title,
+          company: j.company,
+          location: j.location,
+          url: j.url,
+          classifier_score: j.classifier_score ?? null,
+          cv_track: j.cv_track ?? null,
+        }))
+    )
 
     setLoading(false)
   }, [])
@@ -733,7 +745,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
                 const locOk = locationFilter === 'all'
                   || (locationFilter === 'remote' && isRemoteLocation(job.location))
                   || (locationFilter === 'berlin' && isBerlinLocation(job.location))
-                const indOk = industryFilter === 'all' || (job as typeof job & { industry?: string }).industry === industryFilter
+                const indOk = industryFilter === 'all'
                 const trackOk = trackFilter === 'all' || job.cv_track === trackFilter
                 return locOk && indOk && trackOk
               }).map(job => (
@@ -742,16 +754,16 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
                 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#0d0d1a', border: '1px solid #1a1a2e', borderRadius: '4px' }}
               >
                 <span style={{
-                  fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', fontWeight: 700, minWidth: '2rem', textAlign: 'center',
-                  color: job.classifier_score >= 5 ? '#f97316' : '#64748b',
+                  fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', fontWeight: 700, minWidth: '2.5rem', textAlign: 'center',
+                  color: job.classifier_score == null ? '#374151' : job.classifier_score >= 5 ? '#f97316' : '#64748b',
                 }}>
-                  {job.classifier_score.toFixed(1)}
+                  {job.classifier_score != null ? job.classifier_score.toFixed(1) : '—'}
                 </span>
                 <span style={{ flex: 1, fontSize: '0.8rem', color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {job.title} — {job.company}
                 </span>
                 <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', color: '#64748b', minWidth: '3rem' }}>
-                  {job.cv_track}
+                  {job.cv_track ?? ''}
                 </span>
                 {job.url && (
                   <a href={job.url} target="_blank" rel="noopener noreferrer" style={{ color: '#64748b', fontSize: '0.65rem', textDecoration: 'none' }}>↗</a>
