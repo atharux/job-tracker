@@ -223,8 +223,11 @@ function FullResumeView({
       setBuilderSuccess(`Saved as "${versionName.trim()}" in Resume Builder`)
       setBuilderPrompt(false)
       setVersionName('')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save to builder')
+    } catch (e: unknown) {
+      const msg = e instanceof Error
+        ? e.message
+        : (e as { message?: string })?.message ?? JSON.stringify(e)
+      setError(`Save to builder failed: ${msg}`)
     } finally {
       setSavingToBuilder(false)
     }
