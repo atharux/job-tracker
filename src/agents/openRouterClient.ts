@@ -2,8 +2,8 @@
 // Priority: OpenRouter key (sessionStorage) → Anthropic BYOK (localStorage)
 //
 // Free OpenRouter models (June 2026):
-//   deepseek/deepseek-chat-v3-0324:free   — best quality for writing + JSON
-//   meta-llama/llama-4-maverick:free       — strong instruction following
+//   meta-llama/llama-4-maverick:free       — strong instruction following (primary)
+//   deepseek/deepseek-chat-v3-0324        — paid only now (was :free)
 //   meta-llama/llama-4-scout:free          — 10M context, fast
 //   google/gemma-4-26b-it:free             — MoE, only 3.8B active, very fast
 //   google/gemma-3-12b-it:free             — lightweight, fast
