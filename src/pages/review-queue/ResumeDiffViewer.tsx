@@ -207,8 +207,8 @@ function FullResumeView({
 
       if (current.languages && current.languages.length > 0) {
         modules.push({
-          type: 'languages',
-          content: { languages: current.languages },
+          type: 'custom',
+          content: { label: 'Languages', languages: current.languages },
         })
       }
 
