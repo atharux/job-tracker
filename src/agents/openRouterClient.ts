@@ -193,7 +193,26 @@ async function callViaAnthropic(key: string, opts: AIOptions): Promise<string> {
 
 export async function callAI(opts: AIOptions): Promise<string> {
   const { provider, key } = getKey()
-  if (provider === 'openrouter') return callViaOpenRouter(key, opts)
+
+  if (provider === 'openrouter') {
+    try {
+      return await callViaOpenRouter(key, opts)
+    } catch (err) {
+      // OR failed entirely — fall through to Groq or Anthropic if keys exist
+      const groqKey = typeof localStorage !== 'undefined' ? localStorage.getItem('groq_api_key') : null
+      if (groqKey) {
+        console.warn('[callAI] OpenRouter failed, falling back to Groq:', err)
+        return callViaGroq(groqKey, opts)
+      }
+      const anthropicKey = typeof localStorage !== 'undefined' ? localStorage.getItem('anthropic_api_key') : null
+      if (anthropicKey) {
+        console.warn('[callAI] OpenRouter failed, falling back to Anthropic:', err)
+        return callViaAnthropic(anthropicKey, opts)
+      }
+      throw err
+    }
+  }
+
   if (provider === 'groq') return callViaGroq(key, opts)
   return callViaAnthropic(key, opts)
 }
