@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Check, X, Edit2, ExternalLink } from 'lucide-react'
+import { Check, X, Edit2, ExternalLink, RotateCcw, Send } from 'lucide-react'
 import type { SubmissionResult } from '../../agents/submitter'
 
 interface Props {
@@ -9,7 +9,17 @@ interface Props {
   submissionResult?: SubmissionResult | null
   onApprove: (jobId: string, notes?: string) => Promise<void>
   onReject: (jobId: string, notes?: string) => Promise<void>
+  onMarkSubmitted: (jobId: string) => Promise<void>
+  onReopen: (jobId: string) => Promise<void>
   onRunDocuments: (jobId: string) => Promise<void>
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  pending_review: '#f59e0b',
+  approved:       '#22c55e',
+  submitted:      '#06b6d4',
+  rejected:       '#ef4444',
+  archived:       '#475569',
 }
 
 export default function ApprovalControls({
@@ -19,108 +29,119 @@ export default function ApprovalControls({
   submissionResult,
   onApprove,
   onReject,
+  onMarkSubmitted,
+  onReopen,
   onRunDocuments,
 }: Props) {
   const [busy, setBusy] = useState(false)
   const [showNotesModal, setShowNotesModal] = useState<'approve' | 'reject' | null>(null)
   const [notes, setNotes] = useState('')
 
-  const handleApprove = async () => {
+  const run = async (fn: () => Promise<void>) => {
     setBusy(true)
-    try {
-      await onApprove(jobId, notes || undefined)
-      setShowNotesModal(null)
-      setNotes('')
-    } finally {
-      setBusy(false)
-    }
+    try { await fn() } finally { setBusy(false) }
   }
 
-  const handleReject = async () => {
-    setBusy(true)
-    try {
-      await onReject(jobId, notes || undefined)
-      setShowNotesModal(null)
-      setNotes('')
-    } finally {
-      setBusy(false)
-    }
-  }
+  const handleApprove = async () => run(async () => {
+    await onApprove(jobId, notes || undefined)
+    setShowNotesModal(null)
+    setNotes('')
+  })
 
-  const handleRunDocuments = async () => {
-    setBusy(true)
-    try {
-      await onRunDocuments(jobId)
-    } finally {
-      setBusy(false)
-    }
-  }
+  const handleReject = async () => run(async () => {
+    await onReject(jobId, notes || undefined)
+    setShowNotesModal(null)
+    setNotes('')
+  })
 
-  const disabled = busy || generatingDocs || status === 'submitted'
+  const disabled = busy || generatingDocs
+
+  const btn = (
+    label: React.ReactNode,
+    onClick: () => void,
+    color: string,
+    variant: 'solid' | 'outline' = 'outline',
+    title?: string
+  ) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '0.4rem',
+        padding: '0.55rem 1rem',
+        background: disabled ? '#1e1e2e' : variant === 'solid' ? color : 'transparent',
+        color: disabled ? '#475569' : variant === 'solid' ? '#000' : color,
+        border: `1px solid ${disabled ? '#1e1e2e' : variant === 'solid' ? color : `${color}55`}`,
+        borderRadius: '4px',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontFamily: 'Space Mono, monospace',
+        fontSize: '0.7rem',
+        fontWeight: variant === 'solid' ? 700 : 400,
+        letterSpacing: '0.04em',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
+  )
 
   return (
     <>
-      <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem', borderTop: '1px solid #1e1e2e', flexWrap: 'wrap' }}>
-        {status === 'pending_review' && (
-          <>
-            <button
-              onClick={() => setShowNotesModal('approve')}
-              disabled={disabled}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.6rem 1.25rem',
-                background: disabled ? '#1e1e2e' : '#06b6d4',
-                color: disabled ? '#475569' : '#000',
-                border: 'none', borderRadius: '4px', cursor: disabled ? 'not-allowed' : 'pointer',
-                fontFamily: 'Space Mono, monospace', fontSize: '0.75rem', fontWeight: 700,
-                letterSpacing: '0.05em',
-              }}
-            >
-              <Check size={14} /> APPROVE &amp; SUBMIT
-            </button>
+      <div style={{
+        display: 'flex', gap: '0.6rem', padding: '0.875rem 1rem',
+        borderTop: '1px solid #1e1e2e', flexWrap: 'wrap', alignItems: 'center',
+      }}>
+        {/* Status badge — always visible */}
+        <span style={{
+          padding: '0.35rem 0.75rem',
+          background: `${STATUS_COLOR[status] ?? '#475569'}18`,
+          border: `1px solid ${STATUS_COLOR[status] ?? '#475569'}44`,
+          borderRadius: '3px',
+          fontFamily: 'Space Mono, monospace', fontSize: '0.65rem',
+          color: STATUS_COLOR[status] ?? '#475569',
+          letterSpacing: '0.08em',
+        }}>
+          ● {status.replace('_', ' ').toUpperCase()}
+        </span>
 
-            <button
-              onClick={() => setShowNotesModal('reject')}
-              disabled={disabled}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.6rem 1.25rem',
-                background: 'transparent',
-                color: disabled ? '#475569' : '#ef4444',
-                border: `1px solid ${disabled ? '#1e1e2e' : 'rgba(239,68,68,0.4)'}`,
-                borderRadius: '4px', cursor: disabled ? 'not-allowed' : 'pointer',
-                fontFamily: 'Space Mono, monospace', fontSize: '0.75rem',
-              }}
-            >
-              <X size={14} /> REJECT
-            </button>
-          </>
-        )}
+        <div style={{ width: '1px', height: '20px', background: '#1e293b', flexShrink: 0 }} />
 
-        <button
-          onClick={handleRunDocuments}
-          disabled={disabled}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-            padding: '0.6rem 1.25rem',
-            background: 'transparent',
-            color: disabled ? '#475569' : '#8b5cf6',
-            border: `1px solid ${disabled ? '#1e1e2e' : 'rgba(139,92,246,0.4)'}`,
-            borderRadius: '4px', cursor: disabled ? 'not-allowed' : 'pointer',
-            fontFamily: 'Space Mono, monospace', fontSize: '0.75rem',
-          }}
-        >
-          <Edit2 size={14} /> {generatingDocs ? 'GENERATING...' : busy ? 'RUNNING...' : 'REGENERATE DOCS'}
-        </button>
+        {/* pending_review: approve or reject */}
+        {status === 'pending_review' && <>
+          {btn(<><Check size={13} /> APPROVE &amp; SUBMIT</>, () => setShowNotesModal('approve'), '#06b6d4', 'solid')}
+          {btn(<><X size={13} /> REJECT</>, () => setShowNotesModal('reject'), '#ef4444')}
+        </>}
 
-        {status !== 'pending_review' && (
-          <span style={{
-            padding: '0.6rem 1rem',
-            fontFamily: 'Space Mono, monospace', fontSize: '0.7rem',
-            color: status === 'submitted' ? '#06b6d4' : status === 'approved' ? '#22c55e' : '#ef4444',
-          }}>
-            ● {status.toUpperCase()}
-          </span>
+        {/* approved: mark as manually submitted, or reject */}
+        {status === 'approved' && <>
+          {btn(
+            <><Send size={13} /> MARK AS SUBMITTED</>,
+            () => run(() => onMarkSubmitted(jobId)),
+            '#06b6d4', 'solid',
+            'I applied manually — mark this as submitted without auto-submitting'
+          )}
+          {btn(<><X size={13} /> REJECT</>, () => setShowNotesModal('reject'), '#ef4444')}
+          {btn(<><RotateCcw size={13} /> RE-OPEN</>, () => run(() => onReopen(jobId)), '#475569')}
+        </>}
+
+        {/* rejected: re-open to pending */}
+        {status === 'rejected' && <>
+          {btn(<><RotateCcw size={13} /> RE-OPEN</>, () => run(() => onReopen(jobId)), '#f59e0b')}
+        </>}
+
+        {/* submitted: read-only status, can only re-open */}
+        {status === 'submitted' && <>
+          {btn(<><RotateCcw size={13} /> RE-OPEN</>, () => run(() => onReopen(jobId)), '#475569')}
+        </>}
+
+        {/* Regenerate docs — always available unless submitted */}
+        {status !== 'submitted' && (
+          btn(
+            <><Edit2 size={13} /> {generatingDocs ? 'GENERATING…' : busy ? 'RUNNING…' : 'REGENERATE DOCS'}</>,
+            () => run(() => onRunDocuments(jobId)),
+            '#8b5cf6'
+          )
         )}
       </div>
 
@@ -136,11 +157,8 @@ export default function ApprovalControls({
               ? 'rgba(249,115,22,0.08)'
               : 'rgba(239,68,68,0.08)',
           border: `1px solid ${submissionResult.success ? 'rgba(6,182,212,0.25)' : submissionResult.requiresManual ? 'rgba(249,115,22,0.25)' : 'rgba(239,68,68,0.25)'}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
-          flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '0.75rem', flexWrap: 'wrap',
         }}>
           <div>
             <p style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', color: submissionResult.success ? '#67e8f9' : submissionResult.requiresManual ? '#fdba74' : '#fca5a5', margin: '0 0 2px' }}>
@@ -163,8 +181,7 @@ export default function ApprovalControls({
                 border: '1px solid rgba(249,115,22,0.35)',
                 borderRadius: '3px',
                 fontFamily: 'Space Mono, monospace', fontSize: '0.65rem',
-                color: '#fdba74', textDecoration: 'none',
-                whiteSpace: 'nowrap',
+                color: '#fdba74', textDecoration: 'none', whiteSpace: 'nowrap',
               }}
             >
               APPLY MANUALLY <ExternalLink size={11} />
@@ -173,6 +190,7 @@ export default function ApprovalControls({
         </div>
       )}
 
+      {/* Notes modal for approve / reject */}
       {showNotesModal && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
@@ -211,7 +229,7 @@ export default function ApprovalControls({
                   fontFamily: 'Space Mono, monospace', fontSize: '0.75rem', fontWeight: 700,
                 }}
               >
-                {busy ? '...' : showNotesModal === 'approve' ? 'CONFIRM APPROVE' : 'CONFIRM REJECT'}
+                {busy ? '…' : showNotesModal === 'approve' ? 'CONFIRM APPROVE' : 'CONFIRM REJECT'}
               </button>
             </div>
           </div>

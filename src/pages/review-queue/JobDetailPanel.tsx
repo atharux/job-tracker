@@ -106,6 +106,16 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
     onStatusChange()
   }
 
+  async function handleMarkSubmitted(jobId: string) {
+    await gatekeeper.markSubmittedManually(jobId)
+    onStatusChange()
+  }
+
+  async function handleReopen(jobId: string) {
+    await gatekeeper.reopen(jobId)
+    onStatusChange()
+  }
+
   async function handleRunDocuments(jobId: string) {
     setDocError(null)
     setGeneratingDocs(true)
@@ -221,6 +231,8 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
         submissionResult={submissionResult}
         onApprove={handleApprove}
         onReject={handleReject}
+        onMarkSubmitted={handleMarkSubmitted}
+        onReopen={handleReopen}
         onRunDocuments={handleRunDocuments}
       />
     </div>

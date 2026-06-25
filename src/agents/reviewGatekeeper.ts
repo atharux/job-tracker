@@ -97,6 +97,15 @@ export async function submit(jobId: string): Promise<ReviewQueueRecord> {
     )
   }
 
+  return _writeSubmitted(jobId)
+}
+
+// Mark as submitted without requiring 'approved' first — for manual applications.
+export async function markSubmittedManually(jobId: string): Promise<ReviewQueueRecord> {
+  return _writeSubmitted(jobId)
+}
+
+async function _writeSubmitted(jobId: string): Promise<ReviewQueueRecord> {
   const { data, error } = await supabase
     .from('application_review_queue')
     .update({
@@ -112,11 +121,32 @@ export async function submit(jobId: string): Promise<ReviewQueueRecord> {
     throw new Error(`Failed to submit job ${jobId}: ${error?.message}`)
   }
 
-  // Also update the jobs table status
+  // Sync to jobs table — 'applied' matches the kanban STATUS_OPTIONS in App.jsx
   await supabase
     .from('jobs')
-    .update({ status: 'submitted', updated_at: new Date().toISOString() })
+    .update({ status: 'applied', updated_at: new Date().toISOString() })
     .eq('id', jobId)
+
+  return data as ReviewQueueRecord
+}
+
+// Move a terminal/approved job back to pending review so it can be re-evaluated.
+export async function reopen(jobId: string): Promise<ReviewQueueRecord> {
+  const { data, error } = await supabase
+    .from('application_review_queue')
+    .update({
+      status: 'pending_review',
+      reviewed_at: null,
+      submitted_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('job_id', jobId)
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to reopen job ${jobId}: ${error?.message}`)
+  }
 
   return data as ReviewQueueRecord
 }
