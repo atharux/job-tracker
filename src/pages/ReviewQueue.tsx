@@ -118,20 +118,23 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
         .from('application_review_queue')
         .select(`*, job:jobs(*)`)
         .order('classifier_score', { ascending: false }),
-      // Select only columns that definitely exist on the jobs table.
-      // classifier_score / cv_track are added by migration 20260625000000 —
-      // if that hasn't run yet the column select still works; scores will just be null.
       supabase
         .from('jobs')
-        .select('id, title, company, location, url, created_at')
+        .select('id, title, company, location, url, created_at, classifier_score, cv_track')
         .order('created_at', { ascending: false })
         .limit(500),
     ])
 
     if (!queueRes.error && queueRes.data) setRecords(queueRes.data as ReviewQueueRecord[])
 
-    // Show ALL scouted jobs not already in the queue — scores optional
-    const allJobs = scoutedRes.data as Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score?: number | null; cv_track?: string | null }> ?? []
+    if (scoutedRes.error) {
+      console.error('[loadQueue] jobs query failed:', scoutedRes.error.message)
+      setScoutError(`DB error loading scouted jobs: ${scoutedRes.error.message}`)
+      setLoading(false)
+      return
+    }
+
+    const allJobs = (scoutedRes.data ?? []) as Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score?: number | null; cv_track?: string | null }>
     const queuedIds = new Set((queueRes.data ?? []).map((r: ReviewQueueRecord) => r.job_id))
     setScoutedJobs(
       allJobs
@@ -739,7 +742,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingBottom: '1rem' }}>
             {scoutedJobs.length === 0 ? (
               <div style={{ padding: '1.5rem 0.75rem', color: '#64748b', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', textAlign: 'center' }}>
-                No scored jobs yet — run Scout to classify all scouted postings.
+                No scouted jobs yet — hit RUN SCOUT to discover and classify postings.
               </div>
             ) : scoutedJobs.filter(job => {
                 const locOk = locationFilter === 'all'
