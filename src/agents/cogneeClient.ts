@@ -80,6 +80,34 @@ export async function cogneeSearch(query: string): Promise<string> {
   }
 }
 
+// Seed the user's full profile into Cognee so queries can reference both sides
+export async function cogneeRememberProfile(): Promise<void> {
+  if (!hasCogneeConfig()) return
+  // Dynamic import keeps USER_PROFILE out of every code path
+  const { USER_PROFILE } = await import('../config/userProfile')
+  const { name, background, location, locationPreferences, community, tracks, languages } = USER_PROFILE
+
+  const trackLines = Object.entries(tracks)
+    .map(([k, t]) => `  ${k.toUpperCase()}: ${t.label}\n  ${t.voice.slice(0, 300)}`)
+    .join('\n\n')
+
+  const langLine = languages.length
+    ? `Languages: ${languages.map(l => `${l.language} (${l.level})`).join(', ')}`
+    : ''
+
+  const text = [
+    `Candidate: ${name}`,
+    `Location: ${location}`,
+    `Location Preferences: ${locationPreferences}`,
+    langLine,
+    community ? `Community: ${community}` : '',
+    `Background: ${background}`,
+    `CV Tracks:\n${trackLines}`,
+  ].filter(Boolean).join('\n')
+
+  await cogneeRemember(text, 'user_profile')
+}
+
 // Build a structured memory entry for a classified job
 export function buildJobMemory(job: {
   title: string

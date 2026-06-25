@@ -1,5 +1,15 @@
 // Unified AI client for the agent system.
 // Priority: OpenRouter key (sessionStorage) → Anthropic BYOK (localStorage)
+//
+// Free OpenRouter models (June 2026):
+//   deepseek/deepseek-chat-v3-0324:free   — best quality for writing + JSON
+//   meta-llama/llama-4-maverick:free       — strong instruction following
+//   meta-llama/llama-4-scout:free          — 10M context, fast
+//   google/gemma-4-26b-it:free             — MoE, only 3.8B active, very fast
+//   google/gemma-3-12b-it:free             — lightweight, fast
+//   deepseek/deepseek-r1:free              — best reasoning/chain-of-thought
+// Groq (always free, LPU hardware ~320 tok/s):
+//   llama-3.3-70b-versatile                — fastest 70B model available
 
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant'
@@ -91,7 +101,7 @@ async function callViaAnthropic(key: string, opts: AIOptions): Promise<string> {
   const userMessages = opts.messages.filter((m) => m.role !== 'system')
 
   const body: Record<string, unknown> = {
-    model: opts.anthropicModel ?? 'claude-sonnet-4-20250514',
+    model: opts.anthropicModel ?? 'claude-haiku-4-5-20251001',
     max_tokens: opts.max_tokens ?? 4096,
     messages: userMessages,
   }

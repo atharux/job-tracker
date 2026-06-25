@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { hasCogneeConfig, cogneeSearch } from '../agents/cogneeClient'
+import { hasCogneeConfig, cogneeSearch, cogneeRememberProfile } from '../agents/cogneeClient'
 
 const TEAL = '#06b6d4'
 const PURPLE = '#8b5cf6'
@@ -139,7 +139,17 @@ export default function PipelineVisualization() {
   const [cogneeQuery, setCogneeQuery] = useState('')
   const [cogneeAnswer, setCogneeAnswer] = useState('')
   const [cogneeLoading, setCogneeLoading] = useState(false)
+  const [seedingProfile, setSeedingProfile] = useState(false)
+  const [profileSeeded, setProfileSeeded] = useState(false)
   const cogneeActive = hasCogneeConfig()
+
+  async function handleSeedProfile() {
+    setSeedingProfile(true)
+    await cogneeRememberProfile()
+    setSeedingProfile(false)
+    setProfileSeeded(true)
+    setTimeout(() => setProfileSeeded(false), 3000)
+  }
 
   async function handleCogneeQuery() {
     if (!cogneeQuery.trim() || cogneeLoading) return
@@ -325,7 +335,16 @@ export default function PipelineVisualization() {
 
         {/* COGNEE Layer */}
         <div style={{ marginTop: '40px', border: `1px solid ${cogneeActive ? PURPLE : '#1e293b'}`, borderRadius: '6px', padding: '24px', background: cogneeActive ? `${PURPLE}05` : '#0a0f1a', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 12, right: 16, display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ position: 'absolute', top: 12, right: 16, display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {cogneeActive && (
+              <button
+                onClick={handleSeedProfile}
+                disabled={seedingProfile}
+                style={{ fontSize: '9px', color: profileSeeded ? GREEN : PURPLE, background: `${PURPLE}11`, border: `1px solid ${PURPLE}33`, borderRadius: '2px', padding: '3px 10px', cursor: 'pointer', fontFamily: 'Space Mono, monospace', letterSpacing: '1px' }}
+              >
+                {profileSeeded ? '✓ PROFILE SEEDED' : seedingProfile ? 'SEEDING…' : 'SEED MY PROFILE'}
+              </button>
+            )}
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: cogneeActive ? PURPLE : '#334155', display: 'inline-block', animation: cogneeActive ? 'pulse 2s infinite' : 'none' }} />
             <span style={{ fontSize: '9px', color: cogneeActive ? PURPLE : '#334155', letterSpacing: '2px' }}>
               {cogneeActive ? 'COGNEE ACTIVE' : 'COGNEE — add key in Settings to activate'}

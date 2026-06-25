@@ -81,7 +81,7 @@ export async function writeCoverLetter(
   cvTrack: 'ux' | 'pm' | 'devrel' = 'ux'
 ): Promise<CoverLetter> {
   const text = await callAI({
-    model: 'meta-llama/llama-4-maverick:free',
+    model: 'deepseek/deepseek-chat-v3-0324:free',
     groqModel: 'llama-3.3-70b-versatile',
     max_tokens: 1500,
     temperature: 0.4,
