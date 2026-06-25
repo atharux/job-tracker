@@ -73,7 +73,7 @@ export async function classifyJob(
   let responseText: string
   try {
     responseText = await callAI({
-      model: 'meta-llama/llama-4-maverick:free',
+      model: 'meta-llama/llama-3.3-70b-instruct:free',
       groqModel: 'llama-3.3-70b-versatile',
       max_tokens: 800,
       messages: [

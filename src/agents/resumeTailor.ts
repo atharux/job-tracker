@@ -106,7 +106,7 @@ export async function tailorResume(
   cvTrack: 'ux' | 'pm' | 'devrel' = 'ux'
 ): Promise<TailoredResume> {
   const text = await callAI({
-    model: 'meta-llama/llama-4-maverick:free',
+    model: 'meta-llama/llama-3.3-70b-instruct:free',
     groqModel: 'llama-3.3-70b-versatile',
     max_tokens: 5000,
     temperature: 0.2,
