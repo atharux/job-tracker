@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import { callAI } from './openRouterClient'
+import { callAI, getPreferredFreeModel } from './openRouterClient'
 import { getGmailToken, isGmailConnected } from '../services/gmailAuth'
 import type { EmailResponseType, Job } from './types'
 
@@ -59,7 +59,7 @@ async function classifyEmailResponse(
   company: string
 ): Promise<EmailResponseType> {
   const result = await callAI({
-    model: 'meta-llama/llama-4-scout:free',
+    model: getPreferredFreeModel(),
     groqModel: 'llama-3.3-70b-versatile',
     messages: [
       {

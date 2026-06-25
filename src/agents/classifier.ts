@@ -1,5 +1,5 @@
 import type { ScoutResult, ClassifierResult } from './types'
-import { callAI } from './openRouterClient'
+import { callAI, getPreferredFreeModel } from './openRouterClient'
 import { USER_PROFILE } from '../config/userProfile'
 
 const SCORE_THRESHOLD = 3.0
@@ -73,7 +73,7 @@ export async function classifyJob(
   let responseText: string
   try {
     responseText = await callAI({
-      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      model: getPreferredFreeModel(),
       groqModel: 'llama-3.3-70b-versatile',
       max_tokens: 800,
       messages: [

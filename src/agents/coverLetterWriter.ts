@@ -1,4 +1,4 @@
-import { callAI } from './openRouterClient'
+import { callAI, getPreferredFreeModel } from './openRouterClient'
 import type { CoverLetter } from './types'
 import { USER_PROFILE } from '../config/userProfile'
 
@@ -81,7 +81,7 @@ export async function writeCoverLetter(
   cvTrack: 'ux' | 'pm' | 'devrel' = 'ux'
 ): Promise<CoverLetter> {
   const text = await callAI({
-    model: 'meta-llama/llama-3.3-70b-instruct:free',
+    model: getPreferredFreeModel(),
     groqModel: 'llama-3.3-70b-versatile',
     max_tokens: 1500,
     temperature: 0.4,

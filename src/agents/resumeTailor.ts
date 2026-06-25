@@ -1,4 +1,4 @@
-import { callAI } from './openRouterClient'
+import { callAI, getPreferredFreeModel } from './openRouterClient'
 import type { CVContent, TailoredResume } from './types'
 
 const SYSTEM_PROMPT =
@@ -106,7 +106,7 @@ export async function tailorResume(
   cvTrack: 'ux' | 'pm' | 'devrel' = 'ux'
 ): Promise<TailoredResume> {
   const text = await callAI({
-    model: 'meta-llama/llama-3.3-70b-instruct:free',
+    model: getPreferredFreeModel(),
     groqModel: 'llama-3.3-70b-versatile',
     max_tokens: 5000,
     temperature: 0.2,

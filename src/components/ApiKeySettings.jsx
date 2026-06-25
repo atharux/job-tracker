@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, ExternalLink, Save, Eye, EyeOff, Mail, CheckCircle } from 'lucide-react';
+import { X, Key, ExternalLink, Save, Eye, EyeOff, Mail, CheckCircle, RefreshCw } from 'lucide-react';
 import { initiateGmailAuth, isGmailConnected, getGmailUserEmail, disconnectGmail } from '../services/gmailAuth';
+import { fetchAndCacheFreeModels, getCachedFreeModels } from '../agents/openRouterClient';
+
+function getFreeModelsCacheInfo() {
+  try {
+    const raw = localStorage.getItem('openrouter_free_models');
+    if (!raw) return null;
+    const cache = JSON.parse(raw);
+    return { count: cache.models?.length ?? 0, cachedAt: cache.cachedAt ?? 0 };
+  } catch { return null; }
+}
 
 export default function ApiKeySettings({ isOpen, onClose }) {
   const [openRouterKey, setOpenRouterKey] = useState('');
@@ -15,6 +25,8 @@ export default function ApiKeySettings({ isOpen, onClose }) {
   const [saved, setSaved] = useState(false);
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailEmail, setGmailEmail] = useState('');
+  const [freeModelInfo, setFreeModelInfo] = useState(null);
+  const [refreshingModels, setRefreshingModels] = useState(false);
 
   useEffect(() => {
     setGmailConnected(isGmailConnected());
@@ -27,7 +39,17 @@ export default function ApiKeySettings({ isOpen, onClose }) {
     setClaudeKey(localStorage.getItem('anthropic_api_key') || '');
     setCogneeKey(localStorage.getItem('cognee_api_key') || '');
     setCogneeBaseUrl(localStorage.getItem('cognee_base_url') || '');
+    setFreeModelInfo(getFreeModelsCacheInfo());
   }, [isOpen]);
+
+  const handleRefreshModels = async () => {
+    const key = openRouterKey.trim() || localStorage.getItem('openrouter_api_key');
+    if (!key) return;
+    setRefreshingModels(true);
+    await fetchAndCacheFreeModels(key);
+    setFreeModelInfo(getFreeModelsCacheInfo());
+    setRefreshingModels(false);
+  };
 
   const handleSave = () => {
     if (openRouterKey.trim()) {
@@ -57,6 +79,11 @@ export default function ApiKeySettings({ isOpen, onClose }) {
       localStorage.setItem('cognee_base_url', cogneeBaseUrl.trim());
     } else {
       localStorage.removeItem('cognee_base_url');
+    }
+
+    // Background-refresh the free model cache whenever the OR key changes
+    if (openRouterKey.trim()) {
+      fetchAndCacheFreeModels(openRouterKey.trim()).then(() => setFreeModelInfo(getFreeModelsCacheInfo()));
     }
 
     // Notify same-tab listeners (e.g. ResumeAIAssistant) — native 'storage' only fires cross-tab.
@@ -356,6 +383,21 @@ export default function ApiKeySettings({ isOpen, onClose }) {
           <div className="api-settings-hint">
             For Scout &amp; all AI agents • Free credits available • Supports 200+ models
           </div>
+          {freeModelInfo && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', padding: '6px 10px', background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.18)', borderRadius: '6px' }}>
+              <span style={{ fontFamily: 'Space Mono, monospace', fontSize: '10px', color: '#64748b' }}>
+                {freeModelInfo.count} free models cached · {Math.round((Date.now() - freeModelInfo.cachedAt) / 60000)}m ago
+              </span>
+              <button
+                onClick={handleRefreshModels}
+                disabled={refreshingModels}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', cursor: refreshingModels ? 'not-allowed' : 'pointer', color: '#06b6d4', fontFamily: 'Space Mono, monospace', fontSize: '10px', padding: '2px 0' }}
+              >
+                <RefreshCw size={11} style={{ animation: refreshingModels ? 'spin 1s linear infinite' : 'none' }} />
+                {refreshingModels ? 'Refreshing…' : 'Refresh now'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Groq API Key */}
