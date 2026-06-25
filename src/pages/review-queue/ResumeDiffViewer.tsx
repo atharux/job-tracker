@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Edit2, Save, X, BookmarkPlus } from 'lucide-react'
+import { Edit2, Save, X, BookmarkPlus, Printer } from 'lucide-react'
 import { supabase } from '../../supabaseClient'
 import type { TailoredResume } from '../../agents/types'
 import {
@@ -65,6 +65,71 @@ function toEditState(t: TailoredResume): EditState {
   }
 }
 
+function printResume(resume: TailoredResume) {
+  const c = resume.contact
+  const header = c ? `
+    <div class="header">
+      <h1>${c.name ?? ''}</h1>
+      <div class="contact-line">${[c.email, c.phone, c.location, c.linkedin, c.portfolio].filter(Boolean).join(' · ')}</div>
+    </div>` : ''
+
+  const summary = resume.summary ? `<section><h2>SUMMARY</h2><p>${resume.summary}</p></section>` : ''
+
+  const experience = resume.experience?.length ? `
+    <section>
+      <h2>EXPERIENCE</h2>
+      ${resume.experience.map(e => `
+        <div class="role">
+          <div class="role-header">
+            <strong>${e.role}</strong> · ${e.company}
+            <span class="dates">${e.dates ?? ''}</span>
+          </div>
+          <ul>${(e.bullets ?? []).map(b => `<li>${b}</li>`).join('')}</ul>
+        </div>`).join('')}
+    </section>` : ''
+
+  const skills = resume.skills?.length ? `<section><h2>SKILLS</h2><p>${resume.skills.join(' · ')}</p></section>` : ''
+
+  const education = resume.education?.length ? `
+    <section>
+      <h2>EDUCATION</h2>
+      ${resume.education.map((e: { degree?: string; institution?: string; year?: string; location?: string }) =>
+        `<div><strong>${e.degree ?? ''}</strong> · ${e.institution ?? ''} ${e.year ? `· ${e.year}` : ''}</div>`
+      ).join('')}
+    </section>` : ''
+
+  const languages = resume.languages?.length ? `
+    <section>
+      <h2>LANGUAGES</h2>
+      <p>${resume.languages.map((l: { language: string; level?: string }) => `${l.language}${l.level ? ` (${l.level})` : ''}`).join(' · ')}</p>
+    </section>` : ''
+
+  const win = window.open('', '_blank', 'width=900,height=1100')
+  if (!win) return
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+    <title>Resume — ${c?.name ?? 'Tailored'}</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 11pt; color: #111; padding: 48px 56px; max-width: 800px; margin: 0 auto; line-height: 1.5; }
+      .header { text-align: center; margin-bottom: 20px; }
+      .header h1 { font-size: 20pt; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+      .contact-line { font-size: 9pt; color: #555; margin-top: 4px; }
+      section { margin-bottom: 18px; }
+      h2 { font-size: 9pt; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border-bottom: 1.5px solid #111; padding-bottom: 3px; margin-bottom: 10px; }
+      .role { margin-bottom: 12px; }
+      .role-header { display: flex; justify-content: space-between; font-size: 10.5pt; }
+      .dates { font-size: 9.5pt; color: #555; white-space: nowrap; }
+      ul { padding-left: 16px; margin-top: 4px; }
+      li { margin-bottom: 3px; font-size: 10.5pt; }
+      p { font-size: 10.5pt; }
+      @media print { body { padding: 0; } @page { margin: 18mm 16mm; } }
+    </style>
+  </head><body>${header}${summary}${experience}${skills}${education}${languages}</body></html>`)
+  win.document.close()
+  win.focus()
+  setTimeout(() => win.print(), 300)
+}
+
 function FullResumeView({
   tailored, jobId, onSaved,
 }: { tailored: TailoredResume; jobId: string; onSaved?: () => void }) {
@@ -88,6 +153,13 @@ function FullResumeView({
     setSavingToBuilder(true)
     setBuilderSuccess(null)
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('Sign in via the main app (/) before saving to Resume Builder.')
+        setSavingToBuilder(false)
+        setBuilderPrompt(false)
+        return
+      }
       // Map tailored resume → resume builder module shapes
       const current = editing
         ? { ...tailored, summary: draft.summary, experience: draft.experience, skills: draft.skills.split(',').map(s => s.trim()).filter(Boolean) }
@@ -208,6 +280,16 @@ function FullResumeView({
 
       {/* Toolbar */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        {/* Print Resume */}
+        {!editing && (
+          <button
+            onClick={() => printResume(tailored)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.9rem', background: 'transparent', border: '1px solid rgba(6,182,212,0.4)', borderRadius: '3px', color: '#06b6d4', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem' }}
+          >
+            <Printer size={12} /> PRINT / PDF
+          </button>
+        )}
+
         {/* Save to Resume Builder */}
         {!editing && (
           builderPrompt ? (
