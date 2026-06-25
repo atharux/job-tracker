@@ -297,6 +297,13 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
             REVIEW QUEUE
           </h1>
+          <span style={{ color: '#475569' }}>·</span>
+          <Link
+            to="/pipeline"
+            style={{ color: '#475569', textDecoration: 'none', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', letterSpacing: '1px' }}
+          >
+            PIPELINE ↗
+          </Link>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
