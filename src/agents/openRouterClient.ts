@@ -97,6 +97,32 @@ function getKey(): { provider: 'openrouter' | 'groq' | 'anthropic'; key: string 
 }
 
 const MODEL_UNAVAILABLE_RE = /unavailable|not found|does not exist|quota|no endpoints/i
+const RATE_LIMIT_RE = /rate.limit|too many requests|429/i
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// Exponential backoff for 429s: 2s, 4s, 8s
+async function withRateLimit<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  const delays = [2000, 4000, 8000]
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      const msg = String(err)
+      const isRateLimit = RATE_LIMIT_RE.test(msg)
+      if (isRateLimit && attempt < delays.length) {
+        const wait = delays[attempt]
+        console.warn(`[${label}] rate limited — retrying in ${wait / 1000}s (attempt ${attempt + 1}/${delays.length})`)
+        await sleep(wait)
+        continue
+      }
+      throw err
+    }
+  }
+  throw new Error(`${label}: exhausted retries`)
+}
 
 async function callViaOpenRouter(key: string, opts: AIOptions): Promise<AICallResult> {
   const cached = getCachedFreeModels() ?? [opts.model]
@@ -105,13 +131,60 @@ async function callViaOpenRouter(key: string, opts: AIOptions): Promise<AICallRe
 
   let lastError = ''
   for (const model of candidates) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const result = await withRateLimit(async () => {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+          'HTTP-Referer': (typeof window !== 'undefined' ? window.location.origin : '') || 'https://job-tracker.app',
+          'X-Title': 'Job Tracker',
+        },
+        body: JSON.stringify({
+          model,
+          messages: opts.messages,
+          max_tokens: opts.max_tokens,
+          temperature: opts.temperature,
+        }),
+      })
+
+      if (res.ok) {
+        if (model !== opts.model) console.warn(`[openrouter] fell back to ${model} (${opts.model} unavailable)`)
+        const data = await res.json() as {
+          choices: Array<{ message: { content: string } }>
+          usage?: { prompt_tokens?: number; completion_tokens?: number }
+        }
+        return {
+          text: data.choices?.[0]?.message?.content ?? '',
+          model,
+          usage: data.usage
+            ? { input: data.usage.prompt_tokens ?? 0, output: data.usage.completion_tokens ?? 0 }
+            : undefined,
+        } as AICallResult | null
+      }
+
+      const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
+      const msg = err?.error?.message ?? String(res.status)
+      if (res.status === 429 || RATE_LIMIT_RE.test(msg)) throw new Error(`rate limit: ${msg}`)
+      if (MODEL_UNAVAILABLE_RE.test(msg)) { lastError = msg; return null }
+      throw new Error(`OpenRouter error: ${msg}`)
+    }, 'openrouter')
+
+    if (result) return result
+    console.warn(`[openrouter] ${model} unavailable, trying next...`)
+  }
+
+  throw new Error(`OpenRouter error: ${lastError} (all ${candidates.length} models tried)`)
+}
+
+async function callViaGroq(key: string, opts: AIOptions): Promise<AICallResult> {
+  const model = opts.groqModel ?? 'llama-3.3-70b-versatile'
+  return withRateLimit(async () => {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${key}`,
-        'HTTP-Referer': (typeof window !== 'undefined' ? window.location.origin : '') || 'https://job-tracker.app',
-        'X-Title': 'Job Tracker',
       },
       body: JSON.stringify({
         model,
@@ -121,66 +194,25 @@ async function callViaOpenRouter(key: string, opts: AIOptions): Promise<AICallRe
       }),
     })
 
-    if (res.ok) {
-      if (model !== opts.model) console.warn(`[openrouter] fell back to ${model} (${opts.model} unavailable)`)
-      const data = await res.json() as {
-        choices: Array<{ message: { content: string } }>
-        usage?: { prompt_tokens?: number; completion_tokens?: number }
-      }
-      return {
-        text: data.choices?.[0]?.message?.content ?? '',
-        model,
-        usage: data.usage
-          ? { input: data.usage.prompt_tokens ?? 0, output: data.usage.completion_tokens ?? 0 }
-          : undefined,
-      }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
+      const msg = err?.error?.message ?? String(res.status)
+      if (res.status === 429 || RATE_LIMIT_RE.test(msg)) throw new Error(`rate limit: ${msg}`)
+      throw new Error(`Groq error: ${msg}`)
     }
 
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
-    const msg = err?.error?.message ?? String(res.status)
-    if (MODEL_UNAVAILABLE_RE.test(msg)) {
-      console.warn(`[openrouter] ${model} unavailable, trying next...`)
-      lastError = msg
-      continue
+    const data = await res.json() as {
+      choices: Array<{ message: { content: string } }>
+      usage?: { prompt_tokens?: number; completion_tokens?: number }
     }
-    throw new Error(`OpenRouter error: ${msg}`)
-  }
-
-  throw new Error(`OpenRouter error: ${lastError} (all ${candidates.length} models tried)`)
-}
-
-async function callViaGroq(key: string, opts: AIOptions): Promise<AICallResult> {
-  const model = opts.groqModel ?? 'llama-3.3-70b-versatile'
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
+    return {
+      text: data.choices?.[0]?.message?.content ?? '',
       model,
-      messages: opts.messages,
-      max_tokens: opts.max_tokens,
-      temperature: opts.temperature,
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
-    throw new Error(`Groq error: ${err?.error?.message ?? res.status}`)
-  }
-
-  const data = await res.json() as {
-    choices: Array<{ message: { content: string } }>
-    usage?: { prompt_tokens?: number; completion_tokens?: number }
-  }
-  return {
-    text: data.choices?.[0]?.message?.content ?? '',
-    model,
-    usage: data.usage
-      ? { input: data.usage.prompt_tokens ?? 0, output: data.usage.completion_tokens ?? 0 }
-      : undefined,
-  }
+      usage: data.usage
+        ? { input: data.usage.prompt_tokens ?? 0, output: data.usage.completion_tokens ?? 0 }
+        : undefined,
+    }
+  }, 'groq')
 }
 
 async function callViaAnthropic(key: string, opts: AIOptions): Promise<AICallResult> {

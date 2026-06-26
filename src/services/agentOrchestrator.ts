@@ -471,8 +471,12 @@ export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
   }
 
   const passing = classifications.filter(c => c.passedThreshold)
-  for (const classification of passing) {
+  for (let i = 0; i < passing.length; i++) {
+    const classification = passing[i]
     const jobId = classification.job_id
+
+    // Brief pause between jobs to avoid rate limits (not needed for first job)
+    if (i > 0) await new Promise(r => setTimeout(r, 1500))
 
     await runDocumentStep(jobId, classification, userId, onStep, trace)
     await runFormStep(jobId, userId, onStep, trace)
