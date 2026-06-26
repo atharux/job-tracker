@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, RefreshCw, Search, Key, Send, X, Mail } from 'lucide-react'
+import { RefreshCw, Search, Key, Send, X, Mail } from 'lucide-react'
 import { isGmailConnected } from '../services/gmailAuth'
 import { supabase } from '../supabaseClient'
 import type { ReviewQueueRecord } from '../agents/types'
@@ -10,6 +9,7 @@ import type { SubmissionResult } from '../agents/submitter'
 import JobQueueList from './review-queue/JobQueueList'
 import JobDetailPanel from './review-queue/JobDetailPanel'
 import ApiKeySettings from '../components/ApiKeySettings'
+import SharedNav from '../components/SharedNav'
 
 type StatusFilter = 'all' | 'pending_review' | 'approved' | 'submitted' | 'rejected'
 type TrackFilter = 'all' | 'ux' | 'pm' | 'devrel'
@@ -284,27 +284,13 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#07070f', color: '#e2e8f0', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div style={{ borderBottom: '1px solid #1e1e2e', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link
-            to="/"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#94a3b8', textDecoration: 'none', fontFamily: 'Space Mono, monospace', fontSize: '0.7rem' }}
-          >
-            <ArrowLeft size={14} /> FORGE
-          </Link>
-          <span style={{ color: '#475569' }}>·</span>
-          <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
-            REVIEW QUEUE
-          </h1>
-          <span style={{ color: '#475569' }}>·</span>
-          <Link
-            to="/pipeline"
-            style={{ color: '#475569', textDecoration: 'none', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', letterSpacing: '1px' }}
-          >
-            PIPELINE ↗
-          </Link>
-        </div>
+      <SharedNav />
+
+      {/* Page action bar */}
+      <div style={{ borderBottom: '1px solid #1e1e2e', padding: '0.6rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', background: '#07070f' }}>
+        <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+          REVIEW QUEUE
+        </h1>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button

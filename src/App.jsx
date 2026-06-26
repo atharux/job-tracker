@@ -1709,6 +1709,15 @@ export default function App() {
                 )}
               </Link>
 
+              <Link
+                to="/pipeline"
+                className="btn-header-action"
+                title="Agent Studio — architecture and controls"
+                style={{ textDecoration: 'none' }}
+              >
+                Agent Studio
+              </Link>
+
               <button
                 onClick={() => setShowOnboarding(true)}
                 className="btn-header-action"

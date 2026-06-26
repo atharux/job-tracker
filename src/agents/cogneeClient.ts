@@ -65,18 +65,35 @@ export async function cogneeSearch(query: string): Promise<string> {
   if (!hasCogneeConfig()) return ''
   try {
     const res = await proxyCall('search', { query, search_type: 'GRAPH_COMPLETION' })
-    if (!res.ok) return ''
-    const data = await res.json() as Record<string, unknown>
-    // Cognee returns different shapes depending on version
+    const raw = await res.text()
+    if (!res.ok) {
+      console.warn('[cognee] search HTTP error', res.status, raw)
+      return `⚠ Cognee error ${res.status}: ${raw.slice(0, 200)}`
+    }
+    if (!raw.trim()) return ''
+
+    let data: unknown
+    try { data = JSON.parse(raw) } catch { return raw }
+
+    // Cognee often returns an array of result nodes
+    if (Array.isArray(data)) {
+      if ((data as unknown[]).length === 0) return ''
+      return (data as Array<Record<string, unknown>>)
+        .map(item => (item.text as string) || (item.content as string) || (item.summary as string) || JSON.stringify(item))
+        .filter(Boolean)
+        .join('\n\n')
+    }
+
+    const obj = data as Record<string, unknown>
     return (
-      (data?.output as string) ??
-      (data?.result as string) ??
-      ((data?.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content) ??
-      JSON.stringify(data)
+      (obj?.output as string) ??
+      (obj?.result as string) ??
+      ((obj?.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content) ??
+      raw
     )
   } catch (err) {
     console.warn('[cognee] search error:', err)
-    return ''
+    return `⚠ ${(err as Error).message}`
   }
 }
 

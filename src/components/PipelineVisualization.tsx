@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { hasCogneeConfig, cogneeSearch, cogneeRememberProfile } from '../agents/cogneeClient'
 import { runScoutOnly } from '../services/agentOrchestrator'
+import SharedNav from './SharedNav'
 
 const TEAL = '#06b6d4'
 const PURPLE = '#8b5cf6'
@@ -175,7 +175,7 @@ export default function PipelineVisualization() {
     setCogneeLoading(true)
     setCogneeAnswer('')
     const result = await cogneeSearch(cogneeQuery)
-    setCogneeAnswer(result || 'No results — run Scout first to build the graph.')
+    setCogneeAnswer(result || 'No results. If you just ran Scout, Cognee\'s cognify step can take 1–2 minutes to build the graph — try again shortly.')
     setCogneeLoading(false)
   }
 
@@ -185,13 +185,17 @@ export default function PipelineVisualization() {
   return (
     <div style={{ background: '#0a0a0a', minHeight: '100vh', fontFamily: 'Space Mono, monospace', color: '#e2e8f0' }}>
 
-      {/* Nav */}
-      <div style={{ borderBottom: '1px solid #1e293b', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link to="/" style={{ color: '#64748b', textDecoration: 'none', fontSize: '12px' }}>← BACK TO TRACKER</Link>
-        <div style={{ fontSize: '11px', color: '#64748b' }}>JOB TRACKER // AGENT STUDIO</div>
+      <SharedNav />
+
+      {/* Page action bar */}
+      <div style={{ borderBottom: '1px solid #1e293b', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0a0a0a' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN, display: 'inline-block', animation: 'pulse 2s infinite' }} />
+          <span style={{ fontSize: '10px', color: GREEN, letterSpacing: '1px' }}>LIVE — 3 USERS</span>
+        </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {scoutStatus && (
-            <span style={{ fontSize: '10px', color: scoutStatus.startsWith('✓') ? GREEN : scoutStatus.startsWith('⚠') ? '#f97316' : '#94a3b8', fontFamily: 'Space Mono, monospace' }}>
+            <span style={{ fontSize: '10px', color: scoutStatus.startsWith('✓') ? GREEN : scoutStatus.startsWith('⚠') ? '#f97316' : '#94a3b8' }}>
               {scoutStatus}
             </span>
           )}
@@ -205,15 +209,12 @@ export default function PipelineVisualization() {
               padding: '5px 14px',
               color: scouting ? '#475569' : TEAL,
               fontSize: '10px',
-              fontFamily: 'Space Mono, monospace',
               letterSpacing: '1px',
               cursor: scouting ? 'not-allowed' : 'pointer',
             }}
           >
             {scouting ? 'RUNNING…' : 'RUN SCOUT'}
           </button>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN, display: 'inline-block', animation: 'pulse 2s infinite' }} />
-          <span style={{ fontSize: '11px', color: GREEN }}>LIVE — 3 USERS</span>
         </div>
       </div>
 
