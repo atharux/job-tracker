@@ -1,15 +1,49 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Settings, Plus } from 'lucide-react'
+import { Settings, Plus, LogOut } from 'lucide-react'
 import ApiKeySettings from './ApiKeySettings'
 import AddJobModal from './AddJobModal'
 
-export default function SharedNav() {
-  const location = useLocation()
-  const [showSettings, setShowSettings] = useState(false)
-  const [showAddJob, setShowAddJob] = useState(false)
+interface Props {
+  /** Extra items rendered between INTEL and the right-side icons */
+  rightSlot?: React.ReactNode
+}
 
-  function navLink(to: string, label: string) {
+export default function SharedNav({ rightSlot }: Props) {
+  const location = useLocation()
+  const [showSettings, setShowSettings]   = useState(false)
+  const [showAddJob, setShowAddJob]       = useState(false)
+  const [pendingCount, setPendingCount]   = useState(0)
+  const [userEmail, setUserEmail]         = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const { supabase } = await import('../supabaseClient')
+        const { data: { user } } = await supabase.auth.getUser()
+        if (cancelled || !user) return
+        setUserEmail(user.email ?? null)
+
+        const { count } = await supabase
+          .from('application_review_queue')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending')
+          .eq('user_id', user.id)
+        if (!cancelled) setPendingCount(count ?? 0)
+      } catch { /* not authenticated or offline */ }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [location.pathname])
+
+  async function handleLogout() {
+    const { supabase } = await import('../supabaseClient')
+    await supabase.auth.signOut()
+    window.location.href = '/'
+  }
+
+  function navLink(to: string, label: string | React.ReactNode, badge?: number) {
     const active = location.pathname === to
     return (
       <Link
@@ -23,9 +57,26 @@ export default function SharedNav() {
           padding: '4px 0',
           borderBottom: active ? '1px solid #06b6d4' : '1px solid transparent',
           transition: 'color 0.15s',
+          position: 'relative',
+          whiteSpace: 'nowrap',
         }}
+        onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#94a3b8' }}
+        onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#64748b' }}
       >
         {label}
+        {badge != null && badge > 0 && (
+          <span style={{
+            position: 'absolute', top: '-6px', right: '-10px',
+            background: '#8b5cf6', color: '#fff',
+            borderRadius: '9999px', fontSize: '9px',
+            fontFamily: 'Space Mono, monospace', fontWeight: 700,
+            minWidth: '15px', height: '15px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 3px', lineHeight: 1,
+          }}>
+            {badge}
+          </span>
+        )}
       </Link>
     )
   }
@@ -56,10 +107,19 @@ export default function SharedNav() {
         <span style={{ color: '#1e293b', fontSize: '16px', userSelect: 'none' }}>|</span>
 
         {navLink('/', 'TRACKER')}
-        {navLink('/review-queue', 'REVIEW QUEUE')}
+        {navLink('/review-queue', 'REVIEW QUEUE', pendingCount)}
         {navLink('/pipeline', 'INTEL')}
 
+        {/* Caller-supplied slot (e.g. tracker sub-nav toggle) */}
+        {rightSlot}
+
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {userEmail && (
+            <span style={{ fontSize: '10px', color: '#334155', fontFamily: 'Space Mono, monospace', display: 'none' /* hidden on small screens */ }}>
+              {userEmail}
+            </span>
+          )}
+
           <button
             onClick={() => setShowAddJob(true)}
             title="Add job to pipeline"
@@ -79,6 +139,7 @@ export default function SharedNav() {
             <Plus size={11} />
             ADD JOB
           </button>
+
           <button
             onClick={() => setShowSettings(true)}
             title="API Keys & Settings"
@@ -95,6 +156,25 @@ export default function SharedNav() {
           >
             <Settings size={14} />
           </button>
+
+          {userEmail && (
+            <button
+              onClick={handleLogout}
+              title="Log out"
+              style={{
+                background: 'transparent',
+                border: '1px solid #1e293b',
+                borderRadius: '4px',
+                padding: '5px 8px',
+                color: '#64748b',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <LogOut size={14} />
+            </button>
+          )}
         </div>
       </nav>
 

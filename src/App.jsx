@@ -38,6 +38,7 @@ import { handleGmailCallback } from './services/gmailAuth';
 import MilestoneToast from './MilestoneToast.jsx';
 import CelebrationAnimation from './components/CelebrationAnimation.jsx';
 import AppCompanion from './components/AppCompanion.jsx';
+import SharedNav from './components/SharedNav';
 import Leaderboard from './components/Leaderboard.jsx';
 import * as gamification from './gamification.js';
 import './App.css';
@@ -1557,213 +1558,98 @@ export default function App() {
       <div className="fixed inset-0 opacity-5 pointer-events-none grid-bg"></div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="header-row mb-4">
-            <div className="header-title-group">
-              {/* Forge logo mark — lightning bolt in brand teal */}
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-label="Forge" role="img">
-                <polygon points="13,2 5,13 12,13 11,22 19,11 12,11" fill="#06b6d4" />
-              </svg>
-              <AppCompanion
-                activeMilestone={activeMilestone}
-                statusCelebration={statusCelebration}
-                isSyncing={isSyncing}
-                inNav
-              />
-            </div>
-            <nav className="header-actions" aria-label="Main navigation">
-              <span className="text-slate-400 text-sm" aria-hidden="true">{user.email}</span>
-              <button
-                onClick={() => setCurrentView('applications')}
-                className={`btn-header-action ${currentView === 'applications' ? 'active' : ''}`}
-                aria-current={currentView === 'applications' ? 'page' : undefined}
-                title="Track your job applications"
-              >
-                Applications
-              </button>
-              <button
-                onClick={() => setCurrentView('analytics')}
-                className={`btn-header-action ${currentView === 'analytics' ? 'active' : ''}`}
-                aria-current={currentView === 'analytics' ? 'page' : undefined}
-                title="Analytics dashboard"
-              >
-                Analytics
-              </button>
-              <button
-                onClick={() => setCurrentView('resumes')}
-                className={`btn-header-action ${currentView === 'resumes' ? 'active' : ''}`}
-                aria-current={currentView === 'resumes' ? 'page' : undefined}
-                title="Manage your resume versions"
-              >
-                Resumes
-              </button>
+        {/* Unified top nav */}
+        <SharedNav />
 
-              {/* Tools dropdown — keyboard accessible */}
-              <div style={{ position: 'relative' }}>
-                <button
-                  ref={toolsTriggerRef}
-                  onClick={() => setShowToolsMenu(m => !m)}
-                  className={`btn-header-action ${currentView === 'resumeAI' || currentView === 'alvaPrep' ? 'active' : ''}`}
-                  aria-haspopup="menu"
-                  aria-expanded={showToolsMenu}
-                  aria-controls="tools-menu"
-                  title="Tools — Resume AI and Logic Prep"
+        {/* Tracker sub-nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 0 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '24px', flexWrap: 'wrap' }}>
+          <AppCompanion
+            activeMilestone={activeMilestone}
+            statusCelebration={statusCelebration}
+            isSyncing={isSyncing}
+            inNav
+          />
+          <span style={{ color: '#1e293b', fontSize: '14px', margin: '0 4px', userSelect: 'none' }}>|</span>
+          {[
+            { view: 'applications', label: 'Applications', title: 'Track your job applications' },
+            { view: 'analytics',    label: 'Analytics',    title: 'Analytics dashboard' },
+            { view: 'resumes',      label: 'Resumes',      title: 'Manage resume versions' },
+            { view: 'leaderboard',  label: 'Leaderboard',  title: 'Leaderboard and achievements' },
+          ].map(({ view, label, title }) => (
+            <button
+              key={view}
+              onClick={() => setCurrentView(view)}
+              title={title}
+              aria-current={currentView === view ? 'page' : undefined}
+              style={{
+                background: 'transparent', border: 'none',
+                fontFamily: 'Space Mono, monospace', fontSize: '11px', letterSpacing: '1px',
+                color: currentView === view ? '#06b6d4' : '#64748b',
+                borderBottom: currentView === view ? '1px solid #06b6d4' : '1px solid transparent',
+                padding: '4px 8px', cursor: 'pointer', transition: 'color 0.15s',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+
+          {/* Tools dropdown */}
+          <div style={{ position: 'relative' }}>
+            <button
+              ref={toolsTriggerRef}
+              onClick={() => setShowToolsMenu(m => !m)}
+              aria-haspopup="menu"
+              aria-expanded={showToolsMenu}
+              title="Tools"
+              style={{
+                background: 'transparent', border: 'none',
+                fontFamily: 'Space Mono, monospace', fontSize: '11px', letterSpacing: '1px',
+                color: currentView === 'resumeAI' || currentView === 'alvaPrep' ? '#06b6d4' : '#64748b',
+                borderBottom: currentView === 'resumeAI' || currentView === 'alvaPrep' ? '1px solid #06b6d4' : '1px solid transparent',
+                padding: '4px 8px', cursor: 'pointer',
+              }}
+            >
+              Tools ▾
+            </button>
+            {showToolsMenu && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowToolsMenu(false)} aria-hidden="true" />
+                <div
+                  ref={toolsMenuRef}
+                  role="menu"
+                  style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100, background: '#0d1117', border: '1px solid rgba(255,255,255,0.08)', borderTop: '2px solid #06b6d4', borderRadius: '4px', minWidth: '150px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', overflow: 'hidden' }}
                 >
-                  Tools ▾
-                </button>
-                {showToolsMenu && (
-                  <>
-                    <div
-                      style={{ position: 'fixed', inset: 0, zIndex: 99 }}
-                      onClick={() => setShowToolsMenu(false)}
-                      aria-hidden="true"
-                    />
-                    <div
-                      id="tools-menu"
-                      ref={toolsMenuRef}
-                      role="menu"
-                      aria-label="Tools submenu"
-                      style={{
-                        position: 'absolute',
-                        top: 'calc(100% + 6px)',
-                        right: 0,
-                        zIndex: 100,
-                        background: '#0d1117',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        borderTop: '2px solid #06b6d4',
-                        borderRadius: '4px',
-                        minWidth: '160px',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                        overflow: 'hidden',
-                      }}
+                  {[
+                    { view: 'resumeAI', label: 'Resume AI' },
+                    { view: 'alvaPrep', label: 'Logic Prep' },
+                  ].map(({ view, label }) => (
+                    <button
+                      key={view}
+                      role="menuitem"
+                      onClick={() => { setCurrentView(view); setShowToolsMenu(false); }}
+                      style={{ display: 'block', width: '100%', padding: '9px 14px', background: currentView === view ? 'rgba(6,182,212,0.08)' : 'transparent', border: 'none', borderLeft: currentView === view ? '2px solid #06b6d4' : '2px solid transparent', color: currentView === view ? '#06b6d4' : '#94a3b8', fontFamily: 'Space Mono, monospace', fontSize: '11px', textAlign: 'left', cursor: 'pointer' }}
                     >
-                      {[
-                        { view: 'resumeAI', label: 'Resume AI', desc: 'AI-powered resume assistant' },
-                        { view: 'alvaPrep', label: 'Logic Prep', desc: 'Logic test practice' },
-                      ].map(({ view, label, desc }) => (
-                        <button
-                          key={view}
-                          role="menuitem"
-                          onClick={() => { setCurrentView(view); setShowToolsMenu(false); }}
-                          aria-label={desc}
-                          style={{
-                            display: 'block',
-                            width: '100%',
-                            padding: '9px 14px',
-                            background: currentView === view ? 'rgba(6,182,212,0.08)' : 'transparent',
-                            border: 'none',
-                            borderLeft: currentView === view ? '2px solid #06b6d4' : '2px solid transparent',
-                            color: currentView === view ? '#06b6d4' : '#94a3b8',
-                            fontFamily: "'Space Mono', monospace",
-                            fontSize: '11px',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            transition: 'background 0.1s, color 0.1s',
-                          }}
-                          onMouseEnter={e => { if (currentView !== view) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#e2e8f0'; } }}
-                          onMouseLeave={e => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; } }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <button
-                onClick={() => setCurrentView('leaderboard')}
-                className={`btn-header-action ${currentView === 'leaderboard' ? 'active' : ''}`}
-                aria-current={currentView === 'leaderboard' ? 'page' : undefined}
-                title="View leaderboard and achievements"
-              >
-                Leaderboard
-              </button>
-
-              {/* Review Queue — shows pending count badge */}
-              <Link
-                to="/review-queue"
-                className="btn-header-action"
-                title="AI Review Queue — approve or reject pipeline applications"
-                aria-label={pendingReviewCount > 0 ? `Review Queue — ${pendingReviewCount} pending` : 'Review Queue'}
-                style={{ textDecoration: 'none', position: 'relative' }}
-              >
-                Review Queue
-                {pendingReviewCount > 0 && (
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      position: 'absolute', top: '-5px', right: '-5px',
-                      background: '#8b5cf6', color: '#fff',
-                      borderRadius: '9999px', fontSize: '9px',
-                      fontFamily: "'Space Mono', monospace", fontWeight: 700,
-                      minWidth: '16px', height: '16px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      padding: '0 3px', lineHeight: 1,
-                      boxShadow: '0 0 8px rgba(139,92,246,0.5)',
-                    }}
-                  >
-                    {pendingReviewCount}
-                  </span>
-                )}
-              </Link>
-
-              <Link
-                to="/pipeline"
-                className="btn-header-action"
-                title="INTEL — query your pipeline"
-                style={{ textDecoration: 'none' }}
-              >
-                Intel
-              </Link>
-
-              <button
-                onClick={() => setShowOnboarding(true)}
-                className="btn-header-action"
-                aria-label="Show app tutorial"
-                title="Show tutorial"
-              >
-                <HelpCircle size={16} aria-hidden="true" />
-              </button>
-              <button
-                onClick={() => setShowApiSettings(true)}
-                className="btn-header-action"
-                aria-label="Configure API keys"
-                title="Configure API keys"
-              >
-                <Settings size={16} aria-hidden="true" />
-              </button>
-              <button
-                onClick={() => setHighContrast(v => !v)}
-                className="btn-header-action"
-                aria-pressed={highContrast}
-                aria-label="Toggle high-contrast mode"
-                title="Toggle high-contrast mode"
-              >
-                <Contrast size={16} aria-hidden="true" />
-              </button>
-              <button
-                onClick={toggleTheme}
-                className="theme-toggle px-3 py-2 rounded-lg transition-colors"
-                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-              >
-                {theme === 'dark' ? '☀️' : '🌙'}
-              </button>
-              <button
-                onClick={handleLogout}
-                className="btn-header-action"
-                aria-label="Log out"
-                title="Logout"
-              >
-                <LogOut size={16} aria-hidden="true" />
-              </button>
-            </nav>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-slate-400 text-sm">Track job applications across your pipeline</p>
-            <p className="text-slate-400 text-xs">{isSyncing ? '● Syncing...' : '● Synced to cloud'}</p>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '10px', color: '#334155', fontFamily: 'Space Mono, monospace' }}>
+              {isSyncing ? '● Syncing…' : '● Synced'}
+            </span>
+            <button onClick={() => setShowOnboarding(true)} title="Show tutorial" style={{ background: 'transparent', border: '1px solid #1e293b', borderRadius: '4px', padding: '4px 7px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <HelpCircle size={13} aria-hidden="true" />
+            </button>
+            <button onClick={() => setHighContrast(v => !v)} title="Toggle high-contrast" aria-pressed={highContrast} style={{ background: 'transparent', border: '1px solid #1e293b', borderRadius: '4px', padding: '4px 7px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <Contrast size={13} aria-hidden="true" />
+            </button>
+            <button onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} style={{ background: 'transparent', border: '1px solid #1e293b', borderRadius: '4px', padding: '4px 7px', color: '#475569', cursor: 'pointer', fontSize: '12px' }}>
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
           </div>
         </div>
 
