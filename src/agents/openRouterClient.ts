@@ -124,14 +124,18 @@ async function withRateLimit<T>(fn: () => Promise<T>, label: string): Promise<T>
   throw new Error(`${label}: exhausted retries`)
 }
 
+// Coder/math models — high context but terrible rate limits and wrong use case
+const SKIP_MODEL_RE = /coder|math|code-/i
+
 async function callViaOpenRouter(key: string, opts: AIOptions): Promise<AICallResult> {
-  const cached = getCachedFreeModels() ?? [opts.model]
-  // Build retry list: requested model first, then remaining cached models
-  const candidates = [opts.model, ...cached.filter(m => m !== opts.model)].slice(0, 3)
+  const cached = (getCachedFreeModels() ?? [opts.model]).filter(m => !SKIP_MODEL_RE.test(m))
+  // Build retry list: requested model first (if not a coder model), then cached fallbacks
+  const base = SKIP_MODEL_RE.test(opts.model) ? FALLBACK_FREE_MODEL : opts.model
+  const candidates = [base, ...cached.filter(m => m !== base)].slice(0, 4)
 
   let lastError = ''
   for (const model of candidates) {
-    const result = await withRateLimit(async () => {
+    try {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -160,21 +164,34 @@ async function callViaOpenRouter(key: string, opts: AIOptions): Promise<AICallRe
           usage: data.usage
             ? { input: data.usage.prompt_tokens ?? 0, output: data.usage.completion_tokens ?? 0 }
             : undefined,
-        } as AICallResult | null
+        }
       }
 
       const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
       const msg = err?.error?.message ?? String(res.status)
-      if (res.status === 429 || RATE_LIMIT_RE.test(msg)) throw new Error(`rate limit: ${msg}`)
-      if (MODEL_UNAVAILABLE_RE.test(msg)) { lastError = msg; return null }
+      // Rate limited — skip this model immediately and try the next one
+      if (res.status === 429 || RATE_LIMIT_RE.test(msg)) {
+        console.warn(`[openrouter] ${model} rate limited — skipping to next model`)
+        lastError = `rate limit: ${msg}`
+        continue
+      }
+      if (MODEL_UNAVAILABLE_RE.test(msg)) {
+        lastError = msg
+        console.warn(`[openrouter] ${model} unavailable, trying next...`)
+        continue
+      }
       throw new Error(`OpenRouter error: ${msg}`)
-    }, 'openrouter')
-
-    if (result) return result
-    console.warn(`[openrouter] ${model} unavailable, trying next...`)
+    } catch (err) {
+      const msg = String(err)
+      if (RATE_LIMIT_RE.test(msg)) {
+        lastError = msg
+        continue
+      }
+      throw err
+    }
   }
 
-  throw new Error(`OpenRouter error: ${lastError} (all ${candidates.length} models tried)`)
+  throw new Error(`OpenRouter: all models rate limited or unavailable. Try again in a minute. (${lastError})`)
 }
 
 async function callViaGroq(key: string, opts: AIOptions): Promise<AICallResult> {
