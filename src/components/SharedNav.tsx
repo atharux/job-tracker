@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Settings } from 'lucide-react'
+import { Settings, Plus } from 'lucide-react'
 import ApiKeySettings from './ApiKeySettings'
+import AddJobModal from './AddJobModal'
 
 export default function SharedNav() {
   const location = useLocation()
   const [showSettings, setShowSettings] = useState(false)
+  const [showAddJob, setShowAddJob] = useState(false)
 
   function navLink(to: string, label: string) {
     const active = location.pathname === to
@@ -57,7 +59,26 @@ export default function SharedNav() {
         {navLink('/review-queue', 'REVIEW QUEUE')}
         {navLink('/pipeline', 'AGENT STUDIO')}
 
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={() => setShowAddJob(true)}
+            title="Add job to pipeline"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              background: 'rgba(6,182,212,0.08)',
+              border: '1px solid rgba(6,182,212,0.25)',
+              borderRadius: '4px',
+              padding: '5px 10px',
+              color: '#06b6d4',
+              cursor: 'pointer',
+              fontFamily: 'Space Mono, monospace',
+              fontSize: '10px',
+              letterSpacing: '0.06em',
+            }}
+          >
+            <Plus size={11} />
+            ADD JOB
+          </button>
           <button
             onClick={() => setShowSettings(true)}
             title="API Keys & Settings"
@@ -78,6 +99,7 @@ export default function SharedNav() {
       </nav>
 
       <ApiKeySettings isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <AddJobModal isOpen={showAddJob} onClose={() => setShowAddJob(false)} />
     </>
   )
 }

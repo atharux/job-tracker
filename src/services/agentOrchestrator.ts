@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { runScout } from '../agents/scout'
 import { classifyBatch } from '../agents/classifier'
+import { callAI } from '../agents/openRouterClient'
 import { hasCogneeConfig, cogneeRemember, buildJobMemory } from '../agents/cogneeClient'
 import { selectCV } from '../agents/cvSelector'
 import { tailorResume } from '../agents/resumeTailor'
@@ -520,6 +521,120 @@ export async function runDocumentsForJob(jobId: string): Promise<void> {
   }
 
   await runDocumentStep(jobId, classification, userId)
+}
+
+// Extract title/company/location from a pasted JD — fast LLM call, falls back gracefully
+async function extractJobMeta(url: string, rawJd?: string): Promise<{ title: string; company: string; location: string }> {
+  const urlHostname = (() => { try { return new URL(url).hostname.replace('www.', '') } catch { return url } })()
+  const atsMatch = url.match(/(?:greenhouse\.io|lever\.co|ashbyhq\.com|recruitee\.com|workable\.com|smartrecruiters\.com)\/([^/?#]+)/i)
+  const companyFromUrl = atsMatch ? atsMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : ''
+
+  if (!rawJd || rawJd.length < 80) {
+    return { title: 'Manual Job Entry', company: companyFromUrl || urlHostname, location: 'Unknown' }
+  }
+
+  try {
+    const raw = await callAI({
+      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      groqModel: 'llama-3.1-8b-instant',
+      messages: [{
+        role: 'user',
+        content: `Extract from this job posting. Return JSON only, no markdown:\n{"title":"...","company":"...","location":"..."}\n\n${rawJd.slice(0, 900)}`,
+      }],
+      max_tokens: 80,
+      temperature: 0,
+    })
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { title?: string; company?: string; location?: string }
+    return {
+      title: parsed.title || 'Manual Job Entry',
+      company: parsed.company || companyFromUrl || urlHostname,
+      location: parsed.location || 'Unknown',
+    }
+  } catch {
+    return { title: 'Manual Job Entry', company: companyFromUrl || urlHostname, location: 'Unknown' }
+  }
+}
+
+// Run the full pipeline on a single job submitted manually by the user.
+// Duplicate URLs are rejected — the DB constraint and getSeenJobId both guard this.
+export async function runManualJob(
+  url: string,
+  rawJd: string,
+  onStep?: StepCallback
+): Promise<void> {
+  const userId = await getCurrentUserId()
+
+  // Duplicate guard
+  const existingId = await getSeenJobId(url, userId)
+  if (existingId) throw new Error('This job URL is already in your pipeline.')
+
+  // Extract meta then insert
+  onStep?.('classifier', 'running')
+  const meta = await extractJobMeta(url, rawJd)
+
+  const { data, error } = await supabase
+    .from('jobs')
+    .insert({
+      title: meta.title,
+      company: meta.company,
+      location: meta.location,
+      url,
+      source: 'manual',
+      raw_jd: rawJd || '',
+      scraped_at: new Date().toISOString(),
+      status: 'discovered',
+      updated_at: new Date().toISOString(),
+      user_id: userId,
+    })
+    .select('id')
+    .single()
+
+  if (error || !data) throw new Error(`Failed to create job: ${error?.message}`)
+  const jobId = data.id as string
+
+  // Classify
+  const classifications = await classifyBatch([{
+    id: jobId,
+    title: meta.title,
+    company: meta.company,
+    location: meta.location,
+    url,
+    source: 'manual',
+    raw_jd: rawJd || '',
+    scraped_at: new Date().toISOString(),
+  }])
+
+  // Manual entries always proceed regardless of score
+  const classification: ClassifierResult = classifications[0] ?? {
+    job_id: jobId,
+    score: 7.0,
+    cv_track: 'ux' as const,
+    industry: 'Other',
+    score_rationale: 'Manual entry — no classification data',
+    key_matches: [],
+    red_flags: [],
+    passedThreshold: true,
+  }
+  classification.passedThreshold = true
+
+  await supabase.from('jobs').update({
+    classifier_score: classification.score,
+    cv_track: classification.cv_track,
+    status: 'classified',
+    updated_at: new Date().toISOString(),
+  }).eq('id', jobId)
+
+  onStep?.('classifier', 'success')
+
+  // Documents + form
+  await runDocumentStep(jobId, classification, userId, onStep)
+  await runFormStep(jobId, userId, onStep)
+
+  // Enqueue for human review
+  onStep?.('reviewGatekeeper', 'running')
+  await gatekeeper.enqueue(jobId, classification.score, classification.cv_track)
+  await supabase.from('jobs').update({ status: 'queued', updated_at: new Date().toISOString() }).eq('id', jobId)
+  onStep?.('reviewGatekeeper', 'success')
 }
 
 export async function approveAndSubmit(jobId: string, notes?: string): Promise<SubmissionResult> {

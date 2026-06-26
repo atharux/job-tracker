@@ -10,6 +10,7 @@ export interface ScoutResult {
     | 'himalayas' | 'wttj' | 'thehub' | 'workable' | 'personio'
     | 'weworkremotely' | 'jobicy'
     | 'remoteok' | 'berlinstartupjobs' | 'europeremotely'
+    | 'manual'
   raw_jd: string
   scraped_at: string
 }
