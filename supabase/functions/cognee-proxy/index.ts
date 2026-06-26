@@ -9,13 +9,20 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-// Paths to try for search, in order. Cognee Cloud moved search between versions.
-const SEARCH_PATHS = ['/api/v1/search', '/v1/search']
+// Each search attempt: { path, method }
+// Try POST first (Cognee self-hosted), then GET (some cloud variants).
+// Trailing-slash variants handle nginx/FastAPI strict routing.
+const SEARCH_ATTEMPTS = [
+  { path: '/api/v1/search', method: 'POST' },
+  { path: '/v1/search',     method: 'POST' },
+  { path: '/api/v1/search', method: 'GET'  },
+  { path: '/v1/search',     method: 'GET'  },
+]
 
 const COGNEE_PATHS: Record<string, string> = {
-  add: '/api/v1/add',
+  add:     '/api/v1/add',
   cognify: '/api/v1/cognify',
-  delete: '/api/v1/datasets',
+  delete:  '/api/v1/datasets',
 }
 
 serve(async (req: Request) => {
@@ -36,31 +43,47 @@ serve(async (req: Request) => {
       })
     }
 
-    // Search: try multiple paths until one returns non-405
     if (action === 'search') {
-      let lastStatus = 405
-      let lastText = ''
-      for (const path of SEARCH_PATHS) {
-        const res = await fetch(`${cogneeBaseUrl}${path}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${cogneeApiKey}`,
-          },
-          body: JSON.stringify(payload),
-        })
+      const p = payload as { query?: string; search_type?: string }
+      const attempts: Array<{ path: string; method: string; status: number; body: string; allow: string }> = []
+
+      for (const { path, method } of SEARCH_ATTEMPTS) {
+        let url = `${cogneeBaseUrl}${path}`
+        const headers: Record<string, string> = {
+          'Authorization': `Bearer ${cogneeApiKey}`,
+        }
+        let body: string | undefined
+
+        if (method === 'GET') {
+          const qs = new URLSearchParams()
+          if (p.query) qs.set('query', p.query)
+          if (p.search_type) qs.set('search_type', p.search_type)
+          url = `${url}?${qs.toString()}`
+        } else {
+          headers['Content-Type'] = 'application/json'
+          body = JSON.stringify(payload)
+        }
+
+        const res = await fetch(url, { method, headers, ...(body ? { body } : {}) })
         const text = await res.text()
-        if (res.status !== 405) {
+        const allow = res.headers.get('allow') ?? ''
+
+        if (res.status !== 405 && res.status !== 404) {
           return new Response(text, {
             status: res.status,
             headers: { ...CORS, 'Content-Type': 'application/json' },
           })
         }
-        lastStatus = res.status
-        lastText = text
+
+        attempts.push({ path, method, status: res.status, body: text.slice(0, 100), allow })
       }
-      return new Response(lastText || JSON.stringify({ error: 'Cognee search endpoint returned 405 on all known paths' }), {
-        status: lastStatus,
+
+      // All attempts failed — return diagnostic JSON so the client can show it
+      return new Response(JSON.stringify({
+        error: 'Cognee search: all path/method combinations returned 405 or 404',
+        attempts,
+      }), {
+        status: 405,
         headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }

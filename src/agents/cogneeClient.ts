@@ -68,6 +68,14 @@ export async function cogneeSearch(query: string): Promise<string> {
     const raw = await res.text()
     if (!res.ok) {
       console.warn('[cognee] search HTTP error', res.status, raw)
+      // If all path/method combos were tried, surface the diagnostic
+      try {
+        const diag = JSON.parse(raw) as { error?: string; attempts?: Array<{ path: string; method: string; status: number; allow: string }> }
+        if (diag.attempts) {
+          const summary = diag.attempts.map(a => `${a.method} ${a.path} → ${a.status}${a.allow ? ` (Allow: ${a.allow})` : ''}`).join(' | ')
+          return `⚠ Cognee search unreachable. Tried: ${summary}. Check the base URL in Settings — it may need to be the API endpoint, not the UI tenant URL.`
+        }
+      } catch { /* not JSON */ }
       return `⚠ Cognee error ${res.status}: ${raw.slice(0, 200)}`
     }
     if (!raw.trim()) return ''
