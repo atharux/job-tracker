@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { hasCogneeConfig, cogneeSearch, cogneeRememberProfile } from '../agents/cogneeClient'
+import { hasCogneeConfig, cogneeSearch, cogneeRememberProfile, localJobSearch } from '../agents/cogneeClient'
 import { runScoutOnly } from '../services/agentOrchestrator'
 import SharedNav from './SharedNav'
 
@@ -174,8 +174,21 @@ export default function PipelineVisualization() {
     if (!cogneeQuery.trim() || cogneeLoading) return
     setCogneeLoading(true)
     setCogneeAnswer('')
-    const result = await cogneeSearch(cogneeQuery)
-    setCogneeAnswer(result || 'No results. If you just ran Scout, Cognee\'s cognify step can take 1–2 minutes to build the graph — try again shortly.')
+
+    // Try Cognee first; fall back to local LLM query over Supabase jobs
+    let result = await cogneeSearch(cogneeQuery)
+    const cogneeUnavailable = !result || result.startsWith('⚠')
+
+    if (cogneeUnavailable) {
+      const local = await localJobSearch(cogneeQuery)
+      if (local) {
+        result = `📊 (from local job data)\n\n${local}`
+      } else {
+        result = 'No results — run Scout first to populate job data.'
+      }
+    }
+
+    setCogneeAnswer(result)
     setCogneeLoading(false)
   }
 

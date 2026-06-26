@@ -105,6 +105,47 @@ export async function cogneeSearch(query: string): Promise<string> {
   }
 }
 
+// Fallback: query Supabase jobs directly with an LLM when Cognee is unavailable.
+// Returns formatted answer or empty string on failure.
+export async function localJobSearch(query: string): Promise<string> {
+  try {
+    const { supabase } = await import('../supabaseClient')
+    const { callAI } = await import('./openRouterClient')
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('title, company, location, classifier_score, cv_track, industry, url')
+      .not('classifier_score', 'is', null)
+      .order('classifier_score', { ascending: false })
+      .limit(60)
+
+    if (!jobs || jobs.length === 0) return ''
+
+    const jobList = jobs.map((j, i) =>
+      `${i + 1}. ${j.title} @ ${j.company} | score:${j.classifier_score} | track:${j.cv_track} | ${j.industry ?? 'unknown'} | ${j.location ?? 'remote'}`
+    ).join('\n')
+
+    const answer = await callAI({
+      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      groqModel: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a job search assistant. Answer the user\'s query based on the job data provided. Be concise and direct. Format lists as bullet points.',
+        },
+        {
+          role: 'user',
+          content: `Job data:\n${jobList}\n\nQuery: ${query}`,
+        },
+      ],
+      max_tokens: 400,
+    })
+    return answer
+  } catch (err) {
+    console.warn('[localJobSearch] error:', err)
+    return ''
+  }
+}
+
 // Seed the user's full profile into Cognee so queries can reference both sides
 export async function cogneeRememberProfile(): Promise<void> {
   if (!hasCogneeConfig()) return
