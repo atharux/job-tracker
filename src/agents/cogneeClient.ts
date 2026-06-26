@@ -195,6 +195,11 @@ export async function localJobSearch(query: string): Promise<JobSearchResult> {
 
     // Try LLM for a smarter answer — fall back to plain list if unavailable
     try {
+      const { USER_PROFILE } = await import('../config/userProfile')
+      const profileSnippet = `Candidate: ${USER_PROFILE.name}. Location: ${USER_PROFILE.location}. Preferences: ${USER_PROFILE.locationPreferences}.
+Background: ${USER_PROFILE.background}
+Tracks: UX Engineer (React/Figma/AI systems), Product Manager (Lean Six Sigma/analytics), Developer Relations (community/agentic demos).`
+
       const lines: string[] = []
       apps.forEach((a, i) => {
         lines.push(`APP-${i + 1} [id:${a.id}] ${a.position} @ ${a.company} | status:${a.status} | applied:${a.date_applied ?? 'unknown'}${a.interview_date ? ` | interview:${a.interview_date}` : ''}`)
@@ -215,7 +220,12 @@ export async function localJobSearch(query: string): Promise<JobSearchResult> {
           messages: [
             {
               role: 'system',
-              content: `You are a job search assistant. Answer the query based on the data, then output a JSON block.
+              content: `You are a job search assistant helping a specific candidate evaluate their pipeline.
+
+CANDIDATE PROFILE:
+${profileSnippet}
+
+Answer queries by cross-referencing the candidate's background against the pipeline data. Be specific and actionable.
 Format your response as:
 <answer>
 Your prose answer here (bullet points ok).
@@ -227,10 +237,10 @@ The ids array must contain only the exact UUID values from [id:...] for records 
             },
             {
               role: 'user',
-              content: `Data:\n${lines.join('\n')}\n\nQuery: ${query}`,
+              content: `Pipeline data:\n${lines.join('\n')}\n\nQuery: ${query}`,
             },
           ],
-          max_tokens: 600,
+          max_tokens: 700,
         }),
         timeout,
       ])

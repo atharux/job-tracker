@@ -470,18 +470,35 @@ export default function PipelineVisualization() {
               {!cogneeAnswer && cogneeActive && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {[
-                    'Show me everything in my pipeline right now',
-                    'Which jobs scored highest for my profile?',
-                    'Which cv track has the most roles — UX, PM, or DevRel?',
-                    'What Berlin-based roles am I tracking?',
-                    'Any interviews or calls scheduled?',
-                    'Which applications are still waiting for a response?',
-                    'Show my most recently added jobs',
-                    'Which companies appear most in my pipeline?',
-                  ].map(q => (
-                    <button key={q} onClick={() => handleCogneeQuery(q)} style={{ background: 'transparent', border: 'none', padding: '3px 0', color: '#475569', fontSize: '10px', fontFamily: 'Space Mono, monospace', cursor: 'pointer', textAlign: 'left' }}>
-                      → {q}
-                    </button>
+                    { label: 'PIPELINE', queries: [
+                      'Show me everything in my pipeline right now',
+                      'Which jobs scored highest for my profile?',
+                      'Which cv track has the most roles — UX, PM, or DevRel?',
+                      'What Berlin-based roles am I tracking?',
+                      'Any interviews or calls scheduled?',
+                      'Which applications are still waiting for a response?',
+                      'Show my most recently added jobs',
+                      'Which companies appear most in my pipeline?',
+                    ]},
+                    { label: 'PROFILE MATCH', queries: [
+                      'Which roles best match my React, TypeScript and Supabase stack?',
+                      'Which jobs align with my agentic AI pipeline experience?',
+                      'Show DevRel roles that match my community building background',
+                      'Which high-scoring roles fit my UX Engineer and AI builder profile?',
+                      'Which companies in my pipeline work in AI or developer tooling?',
+                      'Where does my Lean Six Sigma background add value in the pipeline?',
+                      'Which roles match my Berlin or Remote Europe location preference?',
+                      'What skills from my background appear most in top-scored jobs?',
+                    ]},
+                  ].map(({ label, queries }) => (
+                    <div key={label}>
+                      <div style={{ fontSize: '9px', color: '#334155', letterSpacing: '1px', marginTop: '8px', marginBottom: '2px' }}>{label}</div>
+                      {queries.map(q => (
+                        <button key={q} onClick={() => handleCogneeQuery(q)} style={{ background: 'transparent', border: 'none', padding: '3px 0', color: '#475569', fontSize: '10px', fontFamily: 'Space Mono, monospace', cursor: 'pointer', textAlign: 'left', display: 'block', width: '100%' }}>
+                          → {q}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
