@@ -592,28 +592,40 @@ export async function runManualJob(
   if (error || !data) throw new Error(`Failed to create job: ${error?.message}`)
   const jobId = data.id as string
 
-  // Classify
-  const classifications = await classifyBatch([{
-    id: jobId,
-    title: meta.title,
-    company: meta.company,
-    location: meta.location,
-    url,
-    source: 'manual',
-    raw_jd: rawJd || '',
-    scraped_at: new Date().toISOString(),
-  }])
-
-  // Manual entries always proceed regardless of score
-  const classification: ClassifierResult = classifications[0] ?? {
-    job_id: jobId,
-    score: 7.0,
-    cv_track: 'ux' as const,
-    industry: 'Other',
-    score_rationale: 'Manual entry — no classification data',
-    key_matches: [],
-    red_flags: [],
-    passedThreshold: true,
+  // Classify — degrade gracefully on rate limit
+  let classification: ClassifierResult
+  try {
+    const classifications = await classifyBatch([{
+      id: jobId,
+      title: meta.title,
+      company: meta.company,
+      location: meta.location,
+      url,
+      source: 'manual',
+      raw_jd: rawJd || '',
+      scraped_at: new Date().toISOString(),
+    }])
+    classification = classifications[0] ?? {
+      job_id: jobId,
+      score: 7.0,
+      cv_track: 'ux' as const,
+      industry: 'Other',
+      score_rationale: 'Manual entry — no classification data',
+      key_matches: [],
+      red_flags: [],
+      passedThreshold: true,
+    }
+  } catch {
+    classification = {
+      job_id: jobId,
+      score: 7.0,
+      cv_track: 'ux' as const,
+      industry: 'Other',
+      score_rationale: 'Manual entry — classifier unavailable (rate limited)',
+      key_matches: [],
+      red_flags: [],
+      passedThreshold: true,
+    }
   }
   classification.passedThreshold = true
 
@@ -626,9 +638,20 @@ export async function runManualJob(
 
   onStep?.('classifier', 'success')
 
-  // Documents + form
-  await runDocumentStep(jobId, classification, userId, onStep)
-  await runFormStep(jobId, userId, onStep)
+  // Documents + form — failures are non-fatal; job still reaches review queue
+  try {
+    await runDocumentStep(jobId, classification, userId, onStep)
+  } catch (err) {
+    console.warn('[runManualJob] document step failed (rate limit?):', err)
+    onStep?.('resumeTailor', 'failed')
+    onStep?.('coverLetterWriter', 'failed')
+  }
+  try {
+    await runFormStep(jobId, userId, onStep)
+  } catch (err) {
+    console.warn('[runManualJob] form step failed:', err)
+    onStep?.('formMapper', 'failed')
+  }
 
   // Enqueue for human review
   onStep?.('reviewGatekeeper', 'running')
