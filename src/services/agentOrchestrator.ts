@@ -592,40 +592,39 @@ export async function runManualJob(
   if (error || !data) throw new Error(`Failed to create job: ${error?.message}`)
   const jobId = data.id as string
 
-  // Classify — degrade gracefully on rate limit
+  const DEFAULT_CLASSIFICATION: ClassifierResult = {
+    job_id: jobId,
+    score: 7.0,
+    cv_track: 'ux' as const,
+    industry: 'Other',
+    score_rationale: 'Manual entry — classifier unavailable',
+    key_matches: [],
+    red_flags: [],
+    passedThreshold: true,
+  }
+
+  // Classify — 10s timeout, degrade gracefully on rate limit or slow response
   let classification: ClassifierResult
   try {
-    const classifications = await classifyBatch([{
-      id: jobId,
-      title: meta.title,
-      company: meta.company,
-      location: meta.location,
-      url,
-      source: 'manual',
-      raw_jd: rawJd || '',
-      scraped_at: new Date().toISOString(),
-    }])
-    classification = classifications[0] ?? {
-      job_id: jobId,
-      score: 7.0,
-      cv_track: 'ux' as const,
-      industry: 'Other',
-      score_rationale: 'Manual entry — no classification data',
-      key_matches: [],
-      red_flags: [],
-      passedThreshold: true,
-    }
+    const timeout = new Promise<ClassifierResult[]>((_, reject) =>
+      setTimeout(() => reject(new Error('classifier timeout')), 10_000)
+    )
+    const classifications = await Promise.race([
+      classifyBatch([{
+        id: jobId,
+        title: meta.title,
+        company: meta.company,
+        location: meta.location,
+        url,
+        source: 'manual',
+        raw_jd: rawJd || '',
+        scraped_at: new Date().toISOString(),
+      }]),
+      timeout,
+    ])
+    classification = classifications[0] ?? DEFAULT_CLASSIFICATION
   } catch {
-    classification = {
-      job_id: jobId,
-      score: 7.0,
-      cv_track: 'ux' as const,
-      industry: 'Other',
-      score_rationale: 'Manual entry — classifier unavailable (rate limited)',
-      key_matches: [],
-      red_flags: [],
-      passedThreshold: true,
-    }
+    classification = DEFAULT_CLASSIFICATION
   }
   classification.passedThreshold = true
 
