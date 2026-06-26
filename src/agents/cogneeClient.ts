@@ -135,10 +135,12 @@ export async function localJobSearch(query: string): Promise<JobSearchResult> {
       supabase
         .from('jobs')
         .select('id, title, company, location, classifier_score, cv_track, url')
-        .not('classifier_score', 'is', null)
-        .order('classifier_score', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(40),
     ])
+
+    if (appsResult.error) console.warn('[localJobSearch] applications error:', appsResult.error)
+    if (jobsResult.error) console.warn('[localJobSearch] jobs error:', jobsResult.error)
 
     const apps = appsResult.data ?? []
     const jobs = jobsResult.data ?? []
@@ -151,7 +153,9 @@ export async function localJobSearch(query: string): Promise<JobSearchResult> {
       lines.push(`APP-${i + 1} [id:${a.id}] ${a.position} @ ${a.company} | status:${a.status} | applied:${a.date_applied ?? 'unknown'}${a.interview_date ? ` | interview:${a.interview_date}` : ''}`)
     })
     jobs.forEach((j, i) => {
-      lines.push(`JOB-${i + 1} [id:${j.id}] ${j.title} @ ${j.company} | score:${j.classifier_score} | track:${j.cv_track} | ${j.location ?? 'remote'}`)
+      const score = j.classifier_score != null ? ` | score:${j.classifier_score}` : ''
+      const track = j.cv_track ? ` | track:${j.cv_track}` : ''
+      lines.push(`JOB-${i + 1} [id:${j.id}] ${j.title} @ ${j.company}${score}${track} | ${j.location ?? 'remote'}`)
     })
 
     const raw = await callAI({
