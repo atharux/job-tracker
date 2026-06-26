@@ -26,11 +26,11 @@ const STEPS = [
     icon: Search,
     label: 'SCOUT',
     title: 'Discover roles automatically.',
-    body: 'Every scan checks 8+ live sources — Arbeitnow, Remotive, GermanTechJobs, Greenhouse, SmartRecruiters, Lever, and more — and surfaces roles matched to your three CV tracks.',
+    body: 'Every scan checks 14 live sources — all free, no API keys needed. Trigger a run from Agent Studio in the top nav. Matched roles flow straight into the pipeline and Review Queue.',
     accent: '#06b6d4',
     visual: (
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
-        {['Arbeitnow', 'Remotive', 'GermanTechJobs', 'Greenhouse', 'SmartRecruiters', 'Lever', 'Recruitee', 'EURemote'].map(s => (
+        {['Arbeitnow', 'Remotive', 'GermanTechJobs', 'Greenhouse', 'SmartRecruiters', 'Lever', 'Recruitee', 'RemoteOK', 'WeWorkRemotely', 'Jobicy', 'BerlinStartupJobs', 'EuropeRemotely', 'Ashby', 'EURemote'].map(s => (
           <span key={s} style={{
             fontFamily: "'Space Mono', monospace", fontSize: '9px', letterSpacing: '0.04em',
             padding: '3px 7px', borderRadius: '2px',
