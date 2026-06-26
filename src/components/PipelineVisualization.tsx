@@ -182,7 +182,7 @@ export default function PipelineVisualization() {
     if (cogneeUnavailable) {
       const local = await localJobSearch(cogneeQuery)
       if (local) {
-        result = `📊 (from local job data)\n\n${local}`
+        result = `[LOCAL DATA]\n\n${local}`
       } else {
         result = 'No results — run Scout first to populate job data.'
       }
