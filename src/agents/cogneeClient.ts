@@ -119,6 +119,29 @@ export interface JobSearchResult {
   links: JobSearchLink[]
 }
 
+function buildFallbackAnswer(
+  apps: Array<{ position: string; company: string; status: string; date_applied?: string | null }>,
+  jobs: Array<{ title: string; company: string; classifier_score?: number | null; cv_track?: string | null; location?: string | null }>,
+  query: string
+): string {
+  const parts: string[] = [`Results for: "${query}"\n`]
+  if (apps.length) {
+    parts.push('**Applications**')
+    apps.slice(0, 10).forEach(a => {
+      parts.push(`• ${a.position} @ ${a.company} — ${a.status}${a.date_applied ? ` (${a.date_applied})` : ''}`)
+    })
+  }
+  if (jobs.length) {
+    parts.push('\n**Pipeline jobs**')
+    jobs.slice(0, 10).forEach(j => {
+      const score = j.classifier_score != null ? ` · score ${j.classifier_score}` : ''
+      const track = j.cv_track ? ` · ${j.cv_track}` : ''
+      parts.push(`• ${j.title} @ ${j.company}${score}${track}`)
+    })
+  }
+  return parts.join('\n')
+}
+
 // Fallback: query Supabase application data with an LLM when Cognee is unavailable.
 // Returns prose answer + structured links for matched records.
 export async function localJobSearch(query: string): Promise<JobSearchResult> {
@@ -147,24 +170,50 @@ export async function localJobSearch(query: string): Promise<JobSearchResult> {
 
     if (apps.length === 0 && jobs.length === 0) return { answer: '', links: [] }
 
-    // Build numbered item list with IDs for LLM to reference
-    const lines: string[] = []
-    apps.forEach((a, i) => {
-      lines.push(`APP-${i + 1} [id:${a.id}] ${a.position} @ ${a.company} | status:${a.status} | applied:${a.date_applied ?? 'unknown'}${a.interview_date ? ` | interview:${a.interview_date}` : ''}`)
-    })
-    jobs.forEach((j, i) => {
-      const score = j.classifier_score != null ? ` | score:${j.classifier_score}` : ''
-      const track = j.cv_track ? ` | track:${j.cv_track}` : ''
-      lines.push(`JOB-${i + 1} [id:${j.id}] ${j.title} @ ${j.company}${score}${track} | ${j.location ?? 'remote'}`)
-    })
+    // Build a plain-text summary without LLM — always works regardless of rate limits
+    const fallbackAnswer = buildFallbackAnswer(apps, jobs, query)
+    const allLinks: JobSearchLink[] = [
+      ...apps.map(a => ({
+        id: a.id,
+        title: a.position,
+        company: a.company,
+        url: a.job_posting_url ?? null,
+        meta: a.status,
+        source: 'application' as const,
+      })),
+      ...jobs.map(j => ({
+        id: j.id,
+        title: j.title,
+        company: j.company,
+        url: j.url ?? null,
+        meta: j.classifier_score != null ? `score ${j.classifier_score}${j.cv_track ? ` · ${j.cv_track}` : ''}` : j.cv_track ?? '',
+        source: 'pipeline' as const,
+      })),
+    ]
 
-    const raw = await callAI({
-      model: 'meta-llama/llama-3.3-70b-instruct:free',
-      groqModel: 'llama-3.3-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a job search assistant. Answer the query based on the data, then output a JSON block.
+    // Try LLM for a smarter answer — fall back to plain list if unavailable
+    try {
+      const lines: string[] = []
+      apps.forEach((a, i) => {
+        lines.push(`APP-${i + 1} [id:${a.id}] ${a.position} @ ${a.company} | status:${a.status} | applied:${a.date_applied ?? 'unknown'}${a.interview_date ? ` | interview:${a.interview_date}` : ''}`)
+      })
+      jobs.forEach((j, i) => {
+        const score = j.classifier_score != null ? ` | score:${j.classifier_score}` : ''
+        const track = j.cv_track ? ` | track:${j.cv_track}` : ''
+        lines.push(`JOB-${i + 1} [id:${j.id}] ${j.title} @ ${j.company}${score}${track} | ${j.location ?? 'remote'}`)
+      })
+
+      const timeout = new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('llm timeout')), 8_000)
+      )
+      const raw = await Promise.race([
+        callAI({
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          groqModel: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a job search assistant. Answer the query based on the data, then output a JSON block.
 Format your response as:
 <answer>
 Your prose answer here (bullet points ok).
@@ -173,56 +222,33 @@ Your prose answer here (bullet points ok).
 ["id-uuid-1", "id-uuid-2"]
 </ids>
 The ids array must contain only the exact UUID values from [id:...] for records most relevant to the query. Max 8 ids. Empty array if none are specifically relevant.`,
-        },
-        {
-          role: 'user',
-          content: `Data:\n${lines.join('\n')}\n\nQuery: ${query}`,
-        },
-      ],
-      max_tokens: 600,
-    })
+            },
+            {
+              role: 'user',
+              content: `Data:\n${lines.join('\n')}\n\nQuery: ${query}`,
+            },
+          ],
+          max_tokens: 600,
+        }),
+        timeout,
+      ])
 
-    // Parse <answer> and <ids> tags
-    const answerMatch = raw.match(/<answer>([\s\S]*?)<\/answer>/)
-    const idsMatch = raw.match(/<ids>([\s\S]*?)<\/ids>/)
+      const answerMatch = raw.match(/<answer>([\s\S]*?)<\/answer>/)
+      const idsMatch = raw.match(/<ids>([\s\S]*?)<\/ids>/)
+      const answer = answerMatch ? answerMatch[1].trim() : raw.trim()
 
-    const answer = answerMatch ? answerMatch[1].trim() : raw.trim()
+      let matchedIds: string[] = []
+      if (idsMatch) {
+        try { matchedIds = JSON.parse(idsMatch[1].trim()) } catch { /* ignore */ }
+      }
 
-    let matchedIds: string[] = []
-    if (idsMatch) {
-      try { matchedIds = JSON.parse(idsMatch[1].trim()) } catch { /* ignore */ }
+      const idSet = new Set(matchedIds)
+      const links = allLinks.filter(l => idSet.has(l.id))
+      return { answer, links: links.length ? links : allLinks.slice(0, 8) }
+    } catch {
+      // LLM unavailable — return plain list
+      return { answer: fallbackAnswer, links: allLinks.slice(0, 8) }
     }
-
-    // Build link objects from matched IDs using local data (no hallucination)
-    const idSet = new Set(matchedIds)
-    const links: JobSearchLink[] = []
-
-    apps.forEach(a => {
-      if (idSet.has(a.id)) {
-        links.push({
-          id: a.id,
-          title: a.position,
-          company: a.company,
-          url: a.job_posting_url ?? null,
-          meta: a.status,
-          source: 'application',
-        })
-      }
-    })
-    jobs.forEach(j => {
-      if (idSet.has(j.id)) {
-        links.push({
-          id: j.id,
-          title: j.title,
-          company: j.company,
-          url: j.url ?? null,
-          meta: `score ${j.classifier_score} · ${j.cv_track}`,
-          source: 'pipeline',
-        })
-      }
-    })
-
-    return { answer, links }
   } catch (err) {
     console.warn('[localJobSearch] error:', err)
     return { answer: '', links: [] }
