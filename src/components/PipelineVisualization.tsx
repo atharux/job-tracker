@@ -4,158 +4,111 @@ import type { JobSearchLink } from '../agents/cogneeClient'
 import { runScoutOnly } from '../services/agentOrchestrator'
 import SharedNav from './SharedNav'
 
-const TEAL = '#06b6d4'
+const TEAL   = '#06b6d4'
 const PURPLE = '#8b5cf6'
 const ORANGE = '#f97316'
-const AMBER = '#f59e0b'
-const GREEN = '#22c55e'
+const AMBER  = '#f59e0b'
+const GREEN  = '#16a34a'
+
+// Light graphite palette
+const BG      = '#f5f4f0'
+const SURFACE = '#ffffff'
+const BORDER  = '#e2e0db'
+const TEXT1   = '#18181b'
+const TEXT2   = '#52525b'
+const TEXT3   = '#a1a1aa'
+const CHIP    = '#f0ede8'
 
 const DATA_SOURCES = [
-  { name: 'Arbeitnow', type: 'REST', geo: 'EU' },
-  { name: 'Remotive', type: 'REST', geo: 'Remote' },
-  { name: 'GermanTechJobs', type: 'RSS', geo: 'DE' },
-  { name: 'Greenhouse', type: 'REST', geo: 'Multi' },
-  { name: 'SmartRecruiters', type: 'REST', geo: 'Multi' },
-  { name: 'Lever', type: 'REST', geo: 'EU' },
-  { name: 'Ashby', type: 'REST', geo: 'Startups' },
-  { name: 'Recruitee', type: 'REST', geo: 'EU' },
-  { name: 'WeWorkRemotely', type: 'RSS', geo: 'Remote' },
-  { name: 'Jobicy', type: 'RSS', geo: 'Remote' },
-  { name: 'RemoteOK', type: 'REST', geo: 'Remote' },
-  { name: 'BerlinStartupJobs', type: 'RSS', geo: 'Berlin' },
-  { name: 'EuropeRemotely', type: 'RSS', geo: 'EU' },
-  { name: 'Proxy (5 more)', type: 'Edge Fn', geo: 'CORS' },
+  { name: 'Arbeitnow',        type: 'REST', geo: 'EU' },
+  { name: 'Remotive',         type: 'REST', geo: 'Remote' },
+  { name: 'GermanTechJobs',   type: 'RSS',  geo: 'DE' },
+  { name: 'Greenhouse',       type: 'REST', geo: 'Multi' },
+  { name: 'SmartRecruiters',  type: 'REST', geo: 'Multi' },
+  { name: 'Lever',            type: 'REST', geo: 'EU' },
+  { name: 'Ashby',            type: 'REST', geo: 'Startups' },
+  { name: 'Recruitee',        type: 'REST', geo: 'EU' },
+  { name: 'WeWorkRemotely',   type: 'RSS',  geo: 'Remote' },
+  { name: 'Jobicy',           type: 'RSS',  geo: 'Remote' },
+  { name: 'RemoteOK',         type: 'REST', geo: 'Remote' },
+  { name: 'BerlinStartupJobs',type: 'RSS',  geo: 'Berlin' },
+  { name: 'EuropeRemotely',   type: 'RSS',  geo: 'EU' },
+  { name: 'Proxy (5 more)',   type: 'Edge', geo: 'CORS' },
 ]
 
 const AGENTS = [
-  {
-    id: 'scout',
-    label: 'SCOUT',
-    model: '14 free APIs',
-    description: 'Aggregates jobs from 14 sources in parallel. Deduplicates by URL. Keyword-matches against 60+ role titles across all 3 CV tracks.',
-    output: 'ScoutResult[]',
-    table: 'jobs',
-    color: TEAL,
-  },
-  {
-    id: 'classifier',
-    label: 'CLASSIFIER',
-    model: 'Groq (llama-3.3)',
-    description: 'Scores each job 0–10 against your profile. Assigns CV track (ux/pm/devrel). Filters out scores below 3.0.',
-    output: 'ClassifierResult',
-    table: 'agent_runs',
-    color: TEAL,
-  },
-  {
-    id: 'cvselector',
-    label: 'CV SELECTOR',
-    model: 'Supabase query',
-    description: 'Picks the right CV version from Supabase based on the classified track. Three tracks: UX Engineer, Product Manager, Developer Relations.',
-    output: 'cv_track + base CV',
-    table: 'cv_versions',
-    color: TEAL,
-    branches: true,
-  },
-  {
-    id: 'resumetailor',
-    label: 'RESUME TAILOR',
-    model: 'OpenRouter (free)',
-    description: 'Rewrites CV bullets to mirror the job description language. Track-specific emphasis. Preserves all truthful content.',
-    output: 'tailored_resume',
-    table: 'application_artifacts',
-    color: TEAL,
-  },
-  {
-    id: 'coverletter',
-    label: 'COVER LETTER',
-    model: 'OpenRouter (free)',
-    description: 'Generates a 3-paragraph cover letter from the tailored CV + JD. Tone matches the track voice.',
-    output: 'cover_letter',
-    table: 'application_artifacts',
-    color: TEAL,
-  },
-  {
-    id: 'formmapper',
-    label: 'FORM MAPPER',
-    model: 'OpenRouter (free)',
-    description: 'Maps application form fields to the tailored content. Handles custom questions, portfolio links, salary fields.',
-    output: 'form_mapping',
-    table: 'application_artifacts',
-    color: TEAL,
-  },
-  {
-    id: 'screenshot',
-    label: 'SCREENSHOT',
-    model: 'Cloudflare Puppeteer',
-    description: 'Captures before/after screenshots of the job posting. Creates a visual audit trail for each application.',
-    output: 'screenshot_urls',
-    table: 'application_artifacts',
-    color: TEAL,
-  },
-  {
-    id: 'gatekeeper',
-    label: 'REVIEW GATEKEEPER',
-    model: '⚠ HUMAN IN THE LOOP',
-    description: 'Hard gate — nothing is submitted without human approval. You review the tailored CV, cover letter, form mapping, and screenshots before approving.',
-    output: 'approved / rejected',
-    table: 'application_review_queue',
-    color: AMBER,
-    isGate: true,
-  },
-  {
-    id: 'status',
-    label: 'STATUS TRACKER',
-    model: 'Gmail MCP',
-    description: 'Monitors your inbox for responses. Tracks application state: applied → interview → offered → rejected / accepted.',
-    output: 'application_status',
-    table: 'jobs',
-    color: GREEN,
-  },
-]
-
-const SUPABASE_TABLES = [
-  { name: 'jobs', desc: 'discovered postings + status', color: TEAL },
-  { name: 'agent_runs', desc: 'full audit log per agent', color: '#64748b' },
-  { name: 'application_artifacts', desc: 'resume, cover letter, form, screenshots', color: PURPLE },
-  { name: 'application_review_queue', desc: 'human approval state machine', color: AMBER },
-  { name: 'cv_versions', desc: 'base CV per track (ux/pm/devrel)', color: ORANGE },
+  { id: 'scout',         label: 'SCOUT',          model: '14 free APIs',      color: TEAL,   description: 'Aggregates jobs from 14 sources in parallel. Deduplicates by URL. Keyword-matches across 60+ role titles.', output: 'ScoutResult[]',    table: 'jobs' },
+  { id: 'classifier',   label: 'CLASSIFIER',      model: 'Groq llama-3.3',    color: TEAL,   description: 'Scores each job 0–10 against your profile. Assigns CV track (ux/pm/devrel). Filters scores below 3.0.', output: 'ClassifierResult', table: 'agent_runs' },
+  { id: 'cvselector',   label: 'CV SELECTOR',     model: 'Supabase query',    color: TEAL,   description: 'Picks the right CV from Supabase based on classified track. Three tracks: UX Engineer, PM, DevRel.', output: 'cv_track + CV',    table: 'cv_versions', branches: true },
+  { id: 'resumetailor', label: 'RESUME TAILOR',   model: 'OpenRouter (free)', color: TEAL,   description: 'Rewrites CV bullets to mirror JD language. Track-specific emphasis. Preserves all truthful content.', output: 'tailored_resume',  table: 'application_artifacts' },
+  { id: 'coverletter',  label: 'COVER LETTER',    model: 'OpenRouter (free)', color: TEAL,   description: 'Generates a 3-paragraph cover letter from tailored CV + JD. Tone matches track voice.', output: 'cover_letter',     table: 'application_artifacts' },
+  { id: 'formmapper',   label: 'FORM MAPPER',     model: 'OpenRouter (free)', color: TEAL,   description: 'Maps application form fields using ATS pattern detection. Handles Greenhouse, Lever, Ashby, Workable.', output: 'form_mapping',    table: 'application_artifacts' },
+  { id: 'screenshot',   label: 'SCREENSHOT',      model: 'CF Browser',        color: TEXT3,  description: 'Before/after screenshots of the application form. Stubbed — Cloudflare Browser Rendering binding.', output: 'screenshots',      table: 'application_artifacts' },
+  { id: 'gate',         label: 'REVIEW GATE',     model: 'Human',             color: AMBER,  description: 'Human-in-the-loop gate. You approve or reject before any submission. No application goes out without sign-off.', output: 'approved/rejected', table: 'application_review_queue', isGate: true },
+  { id: 'tracker',      label: 'STATUS TRACKER',  model: 'Gmail MCP',         color: ORANGE, description: 'Watches inbox for reply signals — interview invites, rejections, ghosting. Updates job status automatically.', output: 'status update',   table: 'jobs' },
 ]
 
 const CV_TRACKS = [
-  { key: 'ux', label: 'UX Engineer', color: TEAL },
-  { key: 'pm', label: 'Product Manager', color: PURPLE },
-  { key: 'devrel', label: 'Developer Relations', color: ORANGE },
+  { key: 'ux',     label: 'UX Engineer',  color: TEAL },
+  { key: 'pm',     label: 'Product Mgr',  color: PURPLE },
+  { key: 'devrel', label: 'Dev Relations', color: ORANGE },
 ]
 
-const COGNEE_NODES = [
-  'Company → Roles Graph',
-  'Skills → Requirements Map',
-  'Application History',
-  'Outcome Patterns',
-  'Sector Relationships',
+const SUPABASE_TABLES = [
+  { name: 'jobs',                   desc: 'All scouted postings',    color: TEAL },
+  { name: 'agent_runs',             desc: 'Full audit log',          color: TEAL },
+  { name: 'application_artifacts',  desc: 'CV, cover letter, form',  color: PURPLE },
+  { name: 'application_review_queue', desc: 'Human gate state',      color: AMBER },
+  { name: 'cv_versions',            desc: '3 track base CVs',        color: ORANGE },
+  { name: 'applications',           desc: 'Kanban tracker',          color: TEXT3 },
+]
+
+const COGNEE_NODES = ['company', 'role_title', 'required_skills', 'fit_score', 'cv_track', 'industry', 'location']
+
+const PRESET_GROUPS = [
+  { label: 'PIPELINE', queries: [
+    'Show me everything in my pipeline right now',
+    'Which jobs scored highest for my profile?',
+    'Which cv track has the most roles — UX, PM, or DevRel?',
+    'What Berlin-based roles am I tracking?',
+    'Any interviews or calls scheduled?',
+    'Which applications are still waiting for a response?',
+    'Show my most recently added jobs',
+    'Which companies appear most in my pipeline?',
+  ]},
+  { label: 'PROFILE MATCH', queries: [
+    'Which roles best match my React, TypeScript and Supabase stack?',
+    'Which jobs align with my agentic AI pipeline experience?',
+    'Show DevRel roles that match my community building background',
+    'Which high-scoring roles fit my UX Engineer and AI builder profile?',
+    'Which companies in my pipeline work in AI or developer tooling?',
+    'Where does my Lean Six Sigma background add value in the pipeline?',
+    'Which roles match my Berlin or Remote Europe location preference?',
+    'What skills from my background appear most in top-scored jobs?',
+  ]},
 ]
 
 export default function PipelineVisualization() {
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected]           = useState<string | null>(null)
   const [showAllSources, setShowAllSources] = useState(false)
-  const [cogneeQuery, setCogneeQuery] = useState('')
-  const [cogneeAnswer, setCogneeAnswer] = useState('')
-  const [cogneeLinks, setCogneeLinks] = useState<JobSearchLink[]>([])
+  const [cogneeQuery, setCogneeQuery]     = useState('')
+  const [cogneeAnswer, setCogneeAnswer]   = useState('')
+  const [cogneeLinks, setCogneeLinks]     = useState<JobSearchLink[]>([])
   const [cogneeLoading, setCogneeLoading] = useState(false)
+  const [scoutStatus, setScoutStatus]     = useState('')
+  const [scouting, setScouting]           = useState(false)
   const [seedingProfile, setSeedingProfile] = useState(false)
-  const [profileSeeded, setProfileSeeded] = useState(false)
-  const [scouting, setScouting] = useState(false)
-  const [scoutStatus, setScoutStatus] = useState('')
-  const cogneeActive = hasCogneeConfig()
+  const [profileSeeded, setProfileSeeded]   = useState(false)
+  const [pipelineOpen, setPipelineOpen]   = useState(false)
+
+  const cogneeActive = true // local fallback always works
 
   async function handleRunScout() {
     setScouting(true)
-    setScoutStatus('RUNNING…')
+    setScoutStatus('Running…')
     try {
-      const jobs = await runScoutOnly((agent, status) => {
-        if (status === 'running') setScoutStatus(`${agent.toUpperCase()}…`)
-      })
-      setScoutStatus(`✓ ${jobs.length} jobs found`)
+      const count = await runScoutOnly()
+      setScoutStatus(`✓ ${count} new jobs found`)
     } catch (err) {
       setScoutStatus(`⚠ ${(err as Error).message}`)
     } finally {
@@ -185,7 +138,7 @@ export default function PipelineVisualization() {
 
     if (cogneeUnavailable) {
       const local = await localJobSearch(q)
-      result = local.answer || 'No results — run Scout first to populate job data.'
+      result = local.answer || 'No results — add a job or run Scout first.'
       setCogneeLinks(local.links)
     }
 
@@ -193,370 +146,286 @@ export default function PipelineVisualization() {
     setCogneeLoading(false)
   }
 
-  const selectedAgent = AGENTS.find(a => a.id === selected)
-  const visibleSources = showAllSources ? DATA_SOURCES : DATA_SOURCES.slice(0, 6)
+  const selectedAgent   = AGENTS.find(a => a.id === selected)
+  const visibleSources  = showAllSources ? DATA_SOURCES : DATA_SOURCES.slice(0, 6)
 
   return (
-    <div style={{ background: '#0a0a0a', minHeight: '100vh', fontFamily: 'Space Mono, monospace', color: '#e2e8f0' }}>
+    <div style={{ background: BG, minHeight: '100vh', fontFamily: 'Space Mono, monospace', color: TEXT1 }}>
 
       <SharedNav />
 
-      {/* Page action bar */}
-      <div style={{ borderBottom: '1px solid #1e293b', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0a0a0a' }}>
+      {/* Action bar */}
+      <div style={{ borderBottom: `1px solid ${BORDER}`, padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: SURFACE }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN, display: 'inline-block', animation: 'pulse 2s infinite' }} />
           <span style={{ fontSize: '10px', color: GREEN, letterSpacing: '1px' }}>LIVE — 3 USERS</span>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {scoutStatus && (
-            <span style={{ fontSize: '10px', color: scoutStatus.startsWith('✓') ? GREEN : scoutStatus.startsWith('⚠') ? '#f97316' : '#94a3b8' }}>
+            <span style={{ fontSize: '10px', color: scoutStatus.startsWith('✓') ? GREEN : scoutStatus.startsWith('⚠') ? ORANGE : TEXT2 }}>
               {scoutStatus}
             </span>
           )}
           <button
             onClick={handleRunScout}
             disabled={scouting}
-            style={{
-              background: scouting ? 'transparent' : `${TEAL}18`,
-              border: `1px solid ${TEAL}55`,
-              borderRadius: '3px',
-              padding: '5px 14px',
-              color: scouting ? '#475569' : TEAL,
-              fontSize: '10px',
-              letterSpacing: '1px',
-              cursor: scouting ? 'not-allowed' : 'pointer',
-            }}
+            style={{ background: scouting ? CHIP : `${TEAL}14`, border: `1px solid ${TEAL}55`, borderRadius: '3px', padding: '5px 14px', color: scouting ? TEXT3 : TEAL, fontSize: '10px', letterSpacing: '1px', cursor: scouting ? 'not-allowed' : 'pointer' }}
           >
             {scouting ? 'RUNNING…' : 'RUN SCOUT'}
           </button>
         </div>
       </div>
 
-      {/* Langfuse bar */}
-      <div style={{ background: '#0d1117', borderBottom: '1px solid #1a2e1a', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <span style={{ fontSize: '10px', color: GREEN, letterSpacing: '2px' }}>LANGFUSE OBSERVABILITY</span>
-        {['scout.run', 'classifier.score', 'resumeTailor.generate', 'coverLetter.generate', 'gate.review'].map(span => (
-          <span key={span} style={{ fontSize: '10px', color: '#334155', background: '#111827', border: '1px solid #1e3a1e', padding: '2px 8px', borderRadius: '2px' }}>
-            {span}
-          </span>
-        ))}
-        <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#334155' }}>+ traces wired to each agent call</span>
-      </div>
-
-      <div style={{ padding: '32px 24px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{ padding: '32px 24px', maxWidth: '1000px', margin: '0 auto' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: '40px' }}>
-          <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '28px', fontWeight: 900, margin: 0, letterSpacing: '-1px' }}>
-            AGENT STUDIO
+        <div style={{ marginBottom: '32px' }}>
+          <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '28px', fontWeight: 900, margin: 0, letterSpacing: '-1px', color: TEXT1 }}>
+            INTEL
           </h1>
-          <p style={{ color: '#64748b', fontSize: '13px', marginTop: '8px', fontFamily: 'Space Mono' }}>
-            Scout → Classify → Select → Tailor → Write → Map → Screenshot → Gate → Track
+          <p style={{ color: TEXT2, fontSize: '12px', marginTop: '6px', fontFamily: 'Space Mono', margin: '6px 0 0' }}>
+            Query your pipeline · profile-aware · powered by local data + LLM
           </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 240px', gap: '24px', alignItems: 'start' }}>
-
-          {/* LEFT — Data Sources */}
-          <div>
-            <div style={{ fontSize: '10px', color: '#64748b', letterSpacing: '2px', marginBottom: '12px' }}>DATA SOURCES ({DATA_SOURCES.length})</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {visibleSources.map(s => (
-                <div key={s.name} style={{ background: '#0f1923', border: '1px solid #1e293b', borderRadius: '3px', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>{s.name}</span>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <span style={{ fontSize: '9px', color: '#475569', background: '#1e293b', padding: '1px 5px', borderRadius: '2px' }}>{s.type}</span>
-                    <span style={{ fontSize: '9px', color: '#475569', background: '#1e293b', padding: '1px 5px', borderRadius: '2px' }}>{s.geo}</span>
-                  </div>
-                </div>
-              ))}
-              {!showAllSources && (
-                <button
-                  onClick={() => setShowAllSources(true)}
-                  style={{ background: 'transparent', border: '1px dashed #1e293b', borderRadius: '3px', padding: '6px 10px', color: '#475569', fontSize: '11px', cursor: 'pointer', textAlign: 'left' }}
-                >
-                  + {DATA_SOURCES.length - 6} more sources
-                </button>
-              )}
-            </div>
-
-            {/* Arrow to Scout */}
-            <div style={{ textAlign: 'center', marginTop: '12px' }}>
-              <div style={{ width: '1px', height: '32px', background: `linear-gradient(${TEAL}, transparent)`, margin: '0 auto 4px', opacity: 0.4 }} />
-              <span style={{ fontSize: '10px', color: '#475569' }}>14 parallel fetches</span>
-            </div>
+        {/* ── QUERY HERO ── */}
+        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: '8px', padding: '28px', marginBottom: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: cogneeAnswer ? '16px' : '20px' }}>
+            <input
+              type="text"
+              value={cogneeQuery}
+              onChange={e => setCogneeQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCogneeQuery()}
+              placeholder="Ask anything about your pipeline — 'which jobs fit my stack?' or 'any interviews scheduled?'"
+              autoFocus
+              style={{
+                flex: 1, background: BG, border: `1.5px solid ${BORDER}`, borderRadius: '6px',
+                padding: '11px 14px', color: TEXT1, fontSize: '13px',
+                fontFamily: 'Space Mono, monospace', outline: 'none',
+                transition: 'border-color 0.15s',
+              }}
+              onFocus={e => { e.currentTarget.style.borderColor = PURPLE }}
+              onBlur={e => { e.currentTarget.style.borderColor = BORDER }}
+            />
+            <button
+              onClick={() => handleCogneeQuery()}
+              disabled={cogneeLoading || !cogneeQuery.trim()}
+              style={{
+                background: cogneeLoading ? CHIP : PURPLE,
+                border: 'none', borderRadius: '6px',
+                padding: '11px 22px', color: cogneeLoading ? TEXT3 : '#fff',
+                fontSize: '11px', fontWeight: 700, letterSpacing: '1px',
+                fontFamily: 'Space Mono, monospace',
+                cursor: cogneeLoading || !cogneeQuery.trim() ? 'not-allowed' : 'pointer',
+                transition: 'background 0.15s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {cogneeLoading ? '…' : 'ASK →'}
+            </button>
           </div>
 
-          {/* CENTER — Pipeline */}
-          <div>
-            {AGENTS.map((agent, i) => (
-              <div key={agent.id}>
-                {/* CV track branches after CV Selector */}
-                {agent.branches && (
-                  <div style={{ display: 'flex', gap: '8px', margin: '8px 0', justifyContent: 'center' }}>
-                    {CV_TRACKS.map(t => (
-                      <div key={t.key} style={{ flex: 1, border: `1px solid ${t.color}22`, borderRadius: '3px', padding: '6px 8px', textAlign: 'center', background: `${t.color}08` }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: t.color, margin: '0 auto 4px' }} />
-                        <div style={{ fontSize: '9px', color: t.color, letterSpacing: '1px' }}>{t.key.toUpperCase()}</div>
-                        <div style={{ fontSize: '9px', color: '#475569', marginTop: '2px' }}>{t.label}</div>
+          {/* Answer */}
+          {cogneeAnswer && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ background: `${PURPLE}08`, border: `1px solid ${PURPLE}20`, borderRadius: '6px', padding: '14px 16px', fontSize: '12px', color: TEXT1, lineHeight: 1.8, maxHeight: '260px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                {cogneeAnswer}
+              </div>
+              {cogneeLinks.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                  {cogneeLinks.map(link => (
+                    <div key={link.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: BG, border: `1px solid ${BORDER}`, borderRadius: '5px', padding: '9px 13px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '12px', color: TEXT1, fontFamily: 'Syne, sans-serif', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {link.title}
+                        </div>
+                        <div style={{ fontSize: '10px', color: TEXT2, marginTop: '2px' }}>
+                          {link.company} · {link.meta}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Agent node */}
-                <div
-                  onClick={() => setSelected(selected === agent.id ? null : agent.id)}
-                  style={{
-                    border: `1px solid ${selected === agent.id ? agent.color : (agent.isGate ? `${AMBER}44` : '#1e293b')}`,
-                    borderRadius: '4px',
-                    padding: '14px 20px',
-                    cursor: 'pointer',
-                    background: selected === agent.id ? `${agent.color}0a` : (agent.isGate ? '#1a1400' : '#0a0f1a'),
-                    transition: 'all 0.15s',
-                    position: 'relative',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: agent.color, display: 'inline-block', flexShrink: 0 }} />
-                      <span style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '1px', color: agent.isGate ? AMBER : '#e2e8f0' }}>
-                        {agent.label}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <span style={{ fontSize: '10px', color: '#475569', background: '#111827', border: '1px solid #1e293b', padding: '2px 7px', borderRadius: '2px' }}>
-                        {agent.model}
-                      </span>
-                      <span style={{ fontSize: '10px', color: '#334155' }}>→ {agent.table}</span>
-                    </div>
-                  </div>
-
-                  {/* Expanded detail */}
-                  {selected === agent.id && (
-                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${agent.color}22` }}>
-                      <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 8px', lineHeight: 1.6 }}>{agent.description}</p>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <span style={{ fontSize: '10px', color: agent.color, background: `${agent.color}11`, border: `1px solid ${agent.color}33`, padding: '2px 8px', borderRadius: '2px' }}>
-                          OUTPUT: {agent.output}
-                        </span>
-                        <span style={{ fontSize: '10px', color: '#64748b', background: '#111827', border: '1px solid #1e293b', padding: '2px 8px', borderRadius: '2px' }}>
-                          TABLE: {agent.table}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Connector line */}
-                {i < AGENTS.length - 1 && (
-                  <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                      <div style={{ width: 1, height: 16, background: `linear-gradient(${agent.color}66, ${AGENTS[i + 1].color}44)` }} />
-                      <div style={{ fontSize: '8px', color: '#334155' }}>↓</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* RIGHT — Supabase */}
-          <div>
-            <div style={{ fontSize: '10px', color: '#64748b', letterSpacing: '2px', marginBottom: '12px' }}>SUPABASE TABLES</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {SUPABASE_TABLES.map(t => (
-                <div key={t.name} style={{ border: `1px solid ${t.color}22`, borderRadius: '3px', padding: '8px 10px', background: `${t.color}05` }}>
-                  <div style={{ fontSize: '11px', color: t.color, fontWeight: 700 }}>{t.name}</div>
-                  <div style={{ fontSize: '10px', color: '#475569', marginTop: '2px' }}>{t.desc}</div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginTop: '24px', fontSize: '10px', color: '#64748b', letterSpacing: '2px', marginBottom: '12px' }}>AI PROVIDERS</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {[
-                { name: 'Groq', use: 'Classifier (fast inference)', color: ORANGE },
-                { name: 'OpenRouter', use: 'Document agents (free)', color: PURPLE },
-                { name: 'Anthropic', use: 'Fallback / SDK direct', color: TEAL },
-              ].map(p => (
-                <div key={p.name} style={{ background: '#0f1923', border: '1px solid #1e293b', borderRadius: '3px', padding: '6px 10px' }}>
-                  <div style={{ fontSize: '11px', color: p.color }}>{p.name}</div>
-                  <div style={{ fontSize: '10px', color: '#475569' }}>{p.use}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* COGNEE Layer */}
-        <div style={{ marginTop: '40px', border: `1px solid ${cogneeActive ? PURPLE : '#1e293b'}`, borderRadius: '6px', padding: '24px', background: cogneeActive ? `${PURPLE}05` : '#0a0f1a', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 12, right: 16, display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {cogneeActive && (
-              <button
-                onClick={handleSeedProfile}
-                disabled={seedingProfile}
-                style={{ fontSize: '9px', color: profileSeeded ? GREEN : PURPLE, background: `${PURPLE}11`, border: `1px solid ${PURPLE}33`, borderRadius: '2px', padding: '3px 10px', cursor: 'pointer', fontFamily: 'Space Mono, monospace', letterSpacing: '1px' }}
-              >
-                {profileSeeded ? '✓ PROFILE SEEDED' : seedingProfile ? 'SEEDING…' : 'SEED MY PROFILE'}
-              </button>
-            )}
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: cogneeActive ? PURPLE : '#334155', display: 'inline-block', animation: cogneeActive ? 'pulse 2s infinite' : 'none' }} />
-            <span style={{ fontSize: '9px', color: cogneeActive ? PURPLE : '#334155', letterSpacing: '2px' }}>
-              {cogneeActive ? 'COGNEE ACTIVE' : 'COGNEE — add key in Settings to activate'}
-            </span>
-          </div>
-
-          <div style={{ fontSize: '10px', color: PURPLE, letterSpacing: '3px', marginBottom: '16px' }}>COGNEE KNOWLEDGE GRAPH LAYER</div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
-            <div>
-              <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 16px', lineHeight: 1.7 }}>
-                After each Scout run, every classified job is fed into Cognee as structured memory — company, role, required skills, fit score. The graph builds up over time so the pipeline gets smarter with every run.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[
-                  { agent: 'Classifier', gain: 'scores anchored to outcome history across companies' },
-                  { agent: 'CV Selector', gain: 'track choice informed by what worked at similar companies' },
-                  { agent: 'Resume Tailor', gain: 'bullets match skills that recur across high-scoring JDs' },
-                ].map(row => (
-                  <div key={row.agent} style={{ display: 'flex', gap: '10px', fontSize: '11px' }}>
-                    <span style={{ color: PURPLE, minWidth: '110px', fontWeight: 700 }}>{row.agent}</span>
-                    <span style={{ color: '#64748b' }}>+ {row.gain}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '16px' }}>
-                {COGNEE_NODES.map(node => (
-                  <div key={node} style={{ border: `1px solid ${PURPLE}33`, borderRadius: '3px', padding: '4px 10px', fontSize: '10px', color: `${PURPLE}99`, background: `${PURPLE}06` }}>
-                    {node}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Live query panel */}
-            <div>
-              <div style={{ fontSize: '10px', color: '#475569', letterSpacing: '1px', marginBottom: '8px' }}>QUERY THE GRAPH</div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <input
-                  type="text"
-                  value={cogneeQuery}
-                  onChange={e => setCogneeQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleCogneeQuery()}
-                  placeholder={cogneeActive ? 'e.g. What skills appear most in UX Engineer roles?' : 'Add Cognee key in Settings to query'}
-                  disabled={!cogneeActive}
-                  style={{
-                    flex: 1, background: '#0a0f1a', border: `1px solid ${PURPLE}33`, borderRadius: '3px',
-                    padding: '8px 12px', color: '#e2e8f0', fontSize: '11px',
-                    fontFamily: 'Space Mono, monospace', outline: 'none',
-                    opacity: cogneeActive ? 1 : 0.4,
-                  }}
-                />
-                <button
-                  onClick={handleCogneeQuery}
-                  disabled={!cogneeActive || cogneeLoading}
-                  style={{
-                    background: cogneeActive ? `${PURPLE}22` : 'transparent',
-                    border: `1px solid ${PURPLE}44`, borderRadius: '3px',
-                    padding: '8px 14px', color: PURPLE, fontSize: '11px',
-                    fontFamily: 'Space Mono, monospace', cursor: cogneeActive ? 'pointer' : 'not-allowed',
-                    opacity: cogneeActive ? 1 : 0.4,
-                  }}
-                >
-                  {cogneeLoading ? '…' : 'ASK'}
-                </button>
-              </div>
-              {!cogneeAnswer && cogneeActive && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {[
-                    { label: 'PIPELINE', queries: [
-                      'Show me everything in my pipeline right now',
-                      'Which jobs scored highest for my profile?',
-                      'Which cv track has the most roles — UX, PM, or DevRel?',
-                      'What Berlin-based roles am I tracking?',
-                      'Any interviews or calls scheduled?',
-                      'Which applications are still waiting for a response?',
-                      'Show my most recently added jobs',
-                      'Which companies appear most in my pipeline?',
-                    ]},
-                    { label: 'PROFILE MATCH', queries: [
-                      'Which roles best match my React, TypeScript and Supabase stack?',
-                      'Which jobs align with my agentic AI pipeline experience?',
-                      'Show DevRel roles that match my community building background',
-                      'Which high-scoring roles fit my UX Engineer and AI builder profile?',
-                      'Which companies in my pipeline work in AI or developer tooling?',
-                      'Where does my Lean Six Sigma background add value in the pipeline?',
-                      'Which roles match my Berlin or Remote Europe location preference?',
-                      'What skills from my background appear most in top-scored jobs?',
-                    ]},
-                  ].map(({ label, queries }) => (
-                    <div key={label}>
-                      <div style={{ fontSize: '9px', color: '#334155', letterSpacing: '1px', marginTop: '8px', marginBottom: '2px' }}>{label}</div>
-                      {queries.map(q => (
-                        <button key={q} onClick={() => handleCogneeQuery(q)} style={{ background: 'transparent', border: 'none', padding: '3px 0', color: '#475569', fontSize: '10px', fontFamily: 'Space Mono, monospace', cursor: 'pointer', textAlign: 'left', display: 'block', width: '100%' }}>
-                          → {q}
-                        </button>
-                      ))}
+                      {link.url ? (
+                        <a href={link.url} target="_blank" rel="noopener noreferrer"
+                          style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: link.source === 'pipeline' ? TEAL : PURPLE, border: `1px solid ${link.source === 'pipeline' ? TEAL : PURPLE}44`, borderRadius: '3px', padding: '3px 10px', textDecoration: 'none', letterSpacing: '1px', whiteSpace: 'nowrap' }}
+                        >OPEN ↗</a>
+                      ) : (
+                        <span style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: TEXT3, letterSpacing: '1px' }}>NO URL</span>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
-              {cogneeAnswer && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ background: `${PURPLE}08`, border: `1px solid ${PURPLE}22`, borderRadius: '4px', padding: '12px', fontSize: '12px', color: '#94a3b8', lineHeight: 1.7, maxHeight: '200px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
-                    {cogneeAnswer}
-                  </div>
-                  {cogneeLinks.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {cogneeLinks.map(link => (
-                        <div key={link.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0d1117', border: '1px solid #1e293b', borderRadius: '4px', padding: '8px 12px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                            <span style={{ fontSize: '11px', color: '#e2e8f0', fontFamily: 'Syne, sans-serif', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {link.title}
-                            </span>
-                            <span style={{ fontSize: '10px', color: '#475569' }}>
-                              {link.company} · {link.meta}
-                            </span>
-                          </div>
-                          {link.url ? (
-                            <a
-                              href={link.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: link.source === 'pipeline' ? TEAL : PURPLE, border: `1px solid ${link.source === 'pipeline' ? TEAL : PURPLE}44`, borderRadius: '3px', padding: '3px 10px', textDecoration: 'none', letterSpacing: '1px', whiteSpace: 'nowrap' }}
-                            >
-                              OPEN ↗
-                            </a>
-                          ) : (
-                            <span style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: '#334155', letterSpacing: '1px' }}>NO URL</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              <button onClick={() => { setCogneeAnswer(''); setCogneeLinks([]); setCogneeQuery('') }}
+                style={{ marginTop: '10px', background: 'none', border: 'none', color: TEXT3, fontSize: '10px', cursor: 'pointer', fontFamily: 'Space Mono, monospace', padding: 0 }}>
+                ← clear
+              </button>
             </div>
-          </div>
+          )}
+
+          {/* Presets */}
+          {!cogneeAnswer && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              {PRESET_GROUPS.map(({ label, queries }) => (
+                <div key={label}>
+                  <div style={{ fontSize: '9px', color: TEXT3, letterSpacing: '2px', marginBottom: '8px' }}>{label}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {queries.map(q => (
+                      <button key={q} onClick={() => handleCogneeQuery(q)}
+                        style={{ background: 'none', border: 'none', padding: '4px 0', color: TEXT2, fontSize: '11px', fontFamily: 'Space Mono, monospace', cursor: 'pointer', textAlign: 'left', display: 'block', width: '100%', transition: 'color 0.1s' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = PURPLE }}
+                        onMouseLeave={e => { e.currentTarget.style.color = TEXT2 }}
+                      >
+                        → {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Stats footer */}
-        <div style={{ marginTop: '32px', display: 'flex', gap: '32px', borderTop: '1px solid #1e293b', paddingTop: '24px' }}>
-          {[
-            { label: 'DATA SOURCES', value: '14' },
-            { label: 'AGENTS', value: '9' },
-            { label: 'CV TRACKS', value: '3' },
-            { label: 'ACTIVE USERS', value: '3' },
-            { label: 'HUMAN GATES', value: '1', color: AMBER },
-            { label: 'DEPLOY', value: 'CF Pages' },
-          ].map(s => (
-            <div key={s.label}>
-              <div style={{ fontSize: '22px', fontWeight: 900, fontFamily: 'Syne, sans-serif', color: s.color || TEAL }}>{s.value}</div>
-              <div style={{ fontSize: '9px', color: '#475569', letterSpacing: '1px', marginTop: '2px' }}>{s.label}</div>
+        {/* ── PIPELINE ARCHITECTURE (collapsible) ── */}
+        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+          <button
+            onClick={() => setPipelineOpen(o => !o)}
+            style={{ width: '100%', background: 'none', border: 'none', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontFamily: 'Space Mono, monospace' }}
+          >
+            <div style={{ display: 'flex', align: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '10px', color: TEXT2, letterSpacing: '2px' }}>PIPELINE ARCHITECTURE</span>
+              <span style={{ fontSize: '10px', color: TEXT3, marginLeft: '10px' }}>9 agents · 14 sources · 3 CV tracks</span>
             </div>
-          ))}
+            <span style={{ fontSize: '12px', color: TEXT3 }}>{pipelineOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {pipelineOpen && (
+            <div style={{ borderTop: `1px solid ${BORDER}`, padding: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 200px', gap: '24px', alignItems: 'start' }}>
+
+                {/* LEFT — Data Sources */}
+                <div>
+                  <div style={{ fontSize: '9px', color: TEXT3, letterSpacing: '2px', marginBottom: '10px' }}>DATA SOURCES ({DATA_SOURCES.length})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {visibleSources.map(s => (
+                      <div key={s.name} style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: '3px', padding: '5px 9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '11px', color: TEXT1 }}>{s.name}</span>
+                        <div style={{ display: 'flex', gap: '3px' }}>
+                          <span style={{ fontSize: '9px', color: TEXT3, background: CHIP, padding: '1px 5px', borderRadius: '2px' }}>{s.type}</span>
+                          <span style={{ fontSize: '9px', color: TEXT3, background: CHIP, padding: '1px 5px', borderRadius: '2px' }}>{s.geo}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {!showAllSources && (
+                      <button onClick={() => setShowAllSources(true)}
+                        style={{ background: 'transparent', border: `1px dashed ${BORDER}`, borderRadius: '3px', padding: '5px 9px', color: TEXT3, fontSize: '11px', cursor: 'pointer', textAlign: 'left' }}>
+                        + {DATA_SOURCES.length - 6} more
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                    <div style={{ width: 1, height: 24, background: `linear-gradient(${TEAL}, transparent)`, margin: '0 auto 4px', opacity: 0.3 }} />
+                    <span style={{ fontSize: '9px', color: TEXT3 }}>14 parallel fetches</span>
+                  </div>
+                </div>
+
+                {/* CENTER — Agents */}
+                <div>
+                  {AGENTS.map((agent, i) => (
+                    <div key={agent.id}>
+                      {agent.branches && (
+                        <div style={{ display: 'flex', gap: '6px', margin: '6px 0', justifyContent: 'center' }}>
+                          {CV_TRACKS.map(t => (
+                            <div key={t.key} style={{ flex: 1, border: `1px solid ${t.color}30`, borderRadius: '3px', padding: '5px 7px', textAlign: 'center', background: `${t.color}06` }}>
+                              <div style={{ width: 7, height: 7, borderRadius: '50%', background: t.color, margin: '0 auto 3px' }} />
+                              <div style={{ fontSize: '9px', color: t.color, letterSpacing: '1px' }}>{t.key.toUpperCase()}</div>
+                              <div style={{ fontSize: '9px', color: TEXT2, marginTop: '1px' }}>{t.label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div
+                        onClick={() => setSelected(selected === agent.id ? null : agent.id)}
+                        style={{
+                          border: `1px solid ${selected === agent.id ? agent.color : (agent.isGate ? `${AMBER}40` : BORDER)}`,
+                          borderLeft: `3px solid ${agent.color}`,
+                          borderRadius: '4px', padding: '11px 16px', cursor: 'pointer',
+                          background: selected === agent.id ? `${agent.color}06` : (agent.isGate ? `${AMBER}04` : SURFACE),
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1px', color: agent.isGate ? AMBER : TEXT1 }}>{agent.label}</span>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '10px', color: TEXT3, background: CHIP, border: `1px solid ${BORDER}`, padding: '1px 7px', borderRadius: '2px' }}>{agent.model}</span>
+                            <span style={{ fontSize: '10px', color: TEXT3 }}>→ {agent.table}</span>
+                          </div>
+                        </div>
+                        {selected === agent.id && (
+                          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: `1px solid ${BORDER}` }}>
+                            <p style={{ fontSize: '12px', color: TEXT2, margin: '0 0 8px', lineHeight: 1.6 }}>{agent.description}</p>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <span style={{ fontSize: '10px', color: agent.color, background: `${agent.color}10`, border: `1px solid ${agent.color}30`, padding: '2px 8px', borderRadius: '2px' }}>
+                                OUTPUT: {agent.output}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {i < AGENTS.length - 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '3px 0' }}>
+                          <div style={{ width: 1, height: 14, background: `linear-gradient(${agent.color}55, ${AGENTS[i + 1].color}33)` }} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* RIGHT — Tables + Providers */}
+                <div>
+                  <div style={{ fontSize: '9px', color: TEXT3, letterSpacing: '2px', marginBottom: '10px' }}>SUPABASE TABLES</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {SUPABASE_TABLES.map(t => (
+                      <div key={t.name} style={{ border: `1px solid ${t.color}20`, borderLeft: `2px solid ${t.color}60`, borderRadius: '3px', padding: '7px 9px', background: `${t.color}04` }}>
+                        <div style={{ fontSize: '10px', color: t.color, fontWeight: 700 }}>{t.name}</div>
+                        <div style={{ fontSize: '9px', color: TEXT2, marginTop: '1px' }}>{t.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: '20px', fontSize: '9px', color: TEXT3, letterSpacing: '2px', marginBottom: '10px' }}>AI PROVIDERS</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {[
+                      { name: 'Groq',       use: 'Classifier (fast)',   color: ORANGE },
+                      { name: 'OpenRouter', use: 'Documents (free)',    color: PURPLE },
+                      { name: 'Anthropic',  use: 'Fallback / direct',  color: TEAL },
+                    ].map(p => (
+                      <div key={p.name} style={{ background: BG, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${p.color}`, borderRadius: '3px', padding: '5px 9px' }}>
+                        <div style={{ fontSize: '10px', color: p.color, fontWeight: 700 }}>{p.name}</div>
+                        <div style={{ fontSize: '9px', color: TEXT2 }}>{p.use}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div style={{ marginTop: '24px', display: 'flex', gap: '28px', borderTop: `1px solid ${BORDER}`, paddingTop: '20px' }}>
+                {[
+                  { label: 'DATA SOURCES', value: '14',      color: TEAL },
+                  { label: 'AGENTS',       value: '9',       color: TEAL },
+                  { label: 'CV TRACKS',    value: '3',       color: TEAL },
+                  { label: 'ACTIVE USERS', value: '3',       color: TEXT2 },
+                  { label: 'HUMAN GATES',  value: '1',       color: AMBER },
+                  { label: 'DEPLOY',       value: 'CF Pages', color: TEXT2 },
+                ].map(s => (
+                  <div key={s.label}>
+                    <div style={{ fontSize: '20px', fontWeight: 900, fontFamily: 'Syne, sans-serif', color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: '9px', color: TEXT3, letterSpacing: '1px', marginTop: '2px' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+
       </div>
 
       <style>{`

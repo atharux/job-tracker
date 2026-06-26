@@ -57,7 +57,7 @@ export default function SharedNav() {
 
         {navLink('/', 'TRACKER')}
         {navLink('/review-queue', 'REVIEW QUEUE')}
-        {navLink('/pipeline', 'AGENT STUDIO')}
+        {navLink('/pipeline', 'INTEL')}
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button

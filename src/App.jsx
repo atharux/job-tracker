@@ -1712,10 +1712,10 @@ export default function App() {
               <Link
                 to="/pipeline"
                 className="btn-header-action"
-                title="Agent Studio — architecture and controls"
+                title="INTEL — query your pipeline"
                 style={{ textDecoration: 'none' }}
               >
-                Agent Studio
+                Intel
               </Link>
 
               <button
