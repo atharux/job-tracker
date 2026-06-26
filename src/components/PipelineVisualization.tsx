@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { hasCogneeConfig, cogneeSearch, cogneeRememberProfile } from '../agents/cogneeClient'
+import { runScoutOnly } from '../services/agentOrchestrator'
 
 const TEAL = '#06b6d4'
 const PURPLE = '#8b5cf6'
@@ -141,7 +142,25 @@ export default function PipelineVisualization() {
   const [cogneeLoading, setCogneeLoading] = useState(false)
   const [seedingProfile, setSeedingProfile] = useState(false)
   const [profileSeeded, setProfileSeeded] = useState(false)
+  const [scouting, setScouting] = useState(false)
+  const [scoutStatus, setScoutStatus] = useState('')
   const cogneeActive = hasCogneeConfig()
+
+  async function handleRunScout() {
+    setScouting(true)
+    setScoutStatus('RUNNING…')
+    try {
+      const jobs = await runScoutOnly((agent, status) => {
+        if (status === 'running') setScoutStatus(`${agent.toUpperCase()}…`)
+      })
+      setScoutStatus(`✓ ${jobs.length} jobs found`)
+    } catch (err) {
+      setScoutStatus(`⚠ ${(err as Error).message}`)
+    } finally {
+      setScouting(false)
+      setTimeout(() => setScoutStatus(''), 5000)
+    }
+  }
 
   async function handleSeedProfile() {
     setSeedingProfile(true)
@@ -169,8 +188,30 @@ export default function PipelineVisualization() {
       {/* Nav */}
       <div style={{ borderBottom: '1px solid #1e293b', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link to="/" style={{ color: '#64748b', textDecoration: 'none', fontSize: '12px' }}>← BACK TO TRACKER</Link>
-        <div style={{ fontSize: '11px', color: '#64748b' }}>JOB TRACKER // PIPELINE ARCHITECTURE v2026</div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ fontSize: '11px', color: '#64748b' }}>JOB TRACKER // AGENT STUDIO</div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {scoutStatus && (
+            <span style={{ fontSize: '10px', color: scoutStatus.startsWith('✓') ? GREEN : scoutStatus.startsWith('⚠') ? '#f97316' : '#94a3b8', fontFamily: 'Space Mono, monospace' }}>
+              {scoutStatus}
+            </span>
+          )}
+          <button
+            onClick={handleRunScout}
+            disabled={scouting}
+            style={{
+              background: scouting ? 'transparent' : `${TEAL}18`,
+              border: `1px solid ${TEAL}55`,
+              borderRadius: '3px',
+              padding: '5px 14px',
+              color: scouting ? '#475569' : TEAL,
+              fontSize: '10px',
+              fontFamily: 'Space Mono, monospace',
+              letterSpacing: '1px',
+              cursor: scouting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {scouting ? 'RUNNING…' : 'RUN SCOUT'}
+          </button>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN, display: 'inline-block', animation: 'pulse 2s infinite' }} />
           <span style={{ fontSize: '11px', color: GREEN }}>LIVE — 3 USERS</span>
         </div>
@@ -192,7 +233,7 @@ export default function PipelineVisualization() {
         {/* Header */}
         <div style={{ marginBottom: '40px' }}>
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '28px', fontWeight: 900, margin: 0, letterSpacing: '-1px' }}>
-            9-AGENT JOB APPLICATION PIPELINE
+            AGENT STUDIO
           </h1>
           <p style={{ color: '#64748b', fontSize: '13px', marginTop: '8px', fontFamily: 'Space Mono' }}>
             Scout → Classify → Select → Tailor → Write → Map → Screenshot → Gate → Track
