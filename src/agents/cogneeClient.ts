@@ -105,24 +105,44 @@ export async function cogneeSearch(query: string): Promise<string> {
   }
 }
 
-// Fallback: query Supabase jobs directly with an LLM when Cognee is unavailable.
-// Returns formatted answer or empty string on failure.
+// Fallback: query Supabase application data with an LLM when Cognee is unavailable.
+// Queries both the manual applications table and Scout-discovered jobs table.
 export async function localJobSearch(query: string): Promise<string> {
   try {
     const { supabase } = await import('../supabaseClient')
     const { callAI } = await import('./openRouterClient')
-    const { data: jobs } = await supabase
-      .from('jobs')
-      .select('title, company, location, classifier_score, cv_track, industry, url')
-      .not('classifier_score', 'is', null)
-      .order('classifier_score', { ascending: false })
-      .limit(60)
 
-    if (!jobs || jobs.length === 0) return ''
+    const [appsResult, jobsResult] = await Promise.all([
+      supabase
+        .from('applications')
+        .select('company, position, status, date_applied, interview_date, notes')
+        .order('date_applied', { ascending: false })
+        .limit(80),
+      supabase
+        .from('jobs')
+        .select('title, company, location, classifier_score, cv_track, industry')
+        .not('classifier_score', 'is', null)
+        .order('classifier_score', { ascending: false })
+        .limit(40),
+    ])
 
-    const jobList = jobs.map((j, i) =>
-      `${i + 1}. ${j.title} @ ${j.company} | score:${j.classifier_score} | track:${j.cv_track} | ${j.industry ?? 'unknown'} | ${j.location ?? 'remote'}`
-    ).join('\n')
+    const sections: string[] = []
+
+    if (appsResult.data && appsResult.data.length > 0) {
+      const list = appsResult.data.map((a, i) =>
+        `${i + 1}. ${a.position} @ ${a.company} | status:${a.status} | applied:${a.date_applied ?? 'unknown'}${a.interview_date ? ` | interview:${a.interview_date}` : ''}${a.notes ? ` | notes:${a.notes.slice(0, 60)}` : ''}`
+      ).join('\n')
+      sections.push(`APPLICATION TRACKER (${appsResult.data.length} entries):\n${list}`)
+    }
+
+    if (jobsResult.data && jobsResult.data.length > 0) {
+      const list = jobsResult.data.map((j, i) =>
+        `${i + 1}. ${j.title} @ ${j.company} | score:${j.classifier_score} | track:${j.cv_track} | ${j.industry ?? 'unknown'} | ${j.location ?? 'remote'}`
+      ).join('\n')
+      sections.push(`SCOUT PIPELINE JOBS (${jobsResult.data.length} scored):\n${list}`)
+    }
+
+    if (sections.length === 0) return ''
 
     const answer = await callAI({
       model: 'meta-llama/llama-3.3-70b-instruct:free',
@@ -130,14 +150,14 @@ export async function localJobSearch(query: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: 'You are a job search assistant. Answer the user\'s query based on the job data provided. Be concise and direct. Format lists as bullet points.',
+          content: 'You are a job search assistant. Answer the user\'s query based on the data provided. Be concise and direct. Format lists as bullet points.',
         },
         {
           role: 'user',
-          content: `Job data:\n${jobList}\n\nQuery: ${query}`,
+          content: `${sections.join('\n\n')}\n\nQuery: ${query}`,
         },
       ],
-      max_tokens: 400,
+      max_tokens: 500,
     })
     return answer
   } catch (err) {
