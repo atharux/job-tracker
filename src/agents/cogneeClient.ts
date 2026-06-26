@@ -105,9 +105,23 @@ export async function cogneeSearch(query: string): Promise<string> {
   }
 }
 
+export interface JobSearchLink {
+  id: string
+  title: string
+  company: string
+  url: string | null
+  meta: string
+  source: 'application' | 'pipeline'
+}
+
+export interface JobSearchResult {
+  answer: string
+  links: JobSearchLink[]
+}
+
 // Fallback: query Supabase application data with an LLM when Cognee is unavailable.
-// Queries both the manual applications table and Scout-discovered jobs table.
-export async function localJobSearch(query: string): Promise<string> {
+// Returns prose answer + structured links for matched records.
+export async function localJobSearch(query: string): Promise<JobSearchResult> {
   try {
     const { supabase } = await import('../supabaseClient')
     const { callAI } = await import('./openRouterClient')
@@ -115,54 +129,99 @@ export async function localJobSearch(query: string): Promise<string> {
     const [appsResult, jobsResult] = await Promise.all([
       supabase
         .from('applications')
-        .select('company, position, status, date_applied, interview_date, notes')
+        .select('id, company, position, status, date_applied, interview_date, job_posting_url')
         .order('date_applied', { ascending: false })
         .limit(80),
       supabase
         .from('jobs')
-        .select('title, company, location, classifier_score, cv_track, industry')
+        .select('id, title, company, location, classifier_score, cv_track, url')
         .not('classifier_score', 'is', null)
         .order('classifier_score', { ascending: false })
         .limit(40),
     ])
 
-    const sections: string[] = []
+    const apps = appsResult.data ?? []
+    const jobs = jobsResult.data ?? []
 
-    if (appsResult.data && appsResult.data.length > 0) {
-      const list = appsResult.data.map((a, i) =>
-        `${i + 1}. ${a.position} @ ${a.company} | status:${a.status} | applied:${a.date_applied ?? 'unknown'}${a.interview_date ? ` | interview:${a.interview_date}` : ''}${a.notes ? ` | notes:${a.notes.slice(0, 60)}` : ''}`
-      ).join('\n')
-      sections.push(`APPLICATION TRACKER (${appsResult.data.length} entries):\n${list}`)
-    }
+    if (apps.length === 0 && jobs.length === 0) return { answer: '', links: [] }
 
-    if (jobsResult.data && jobsResult.data.length > 0) {
-      const list = jobsResult.data.map((j, i) =>
-        `${i + 1}. ${j.title} @ ${j.company} | score:${j.classifier_score} | track:${j.cv_track} | ${j.industry ?? 'unknown'} | ${j.location ?? 'remote'}`
-      ).join('\n')
-      sections.push(`SCOUT PIPELINE JOBS (${jobsResult.data.length} scored):\n${list}`)
-    }
+    // Build numbered item list with IDs for LLM to reference
+    const lines: string[] = []
+    apps.forEach((a, i) => {
+      lines.push(`APP-${i + 1} [id:${a.id}] ${a.position} @ ${a.company} | status:${a.status} | applied:${a.date_applied ?? 'unknown'}${a.interview_date ? ` | interview:${a.interview_date}` : ''}`)
+    })
+    jobs.forEach((j, i) => {
+      lines.push(`JOB-${i + 1} [id:${j.id}] ${j.title} @ ${j.company} | score:${j.classifier_score} | track:${j.cv_track} | ${j.location ?? 'remote'}`)
+    })
 
-    if (sections.length === 0) return ''
-
-    const answer = await callAI({
+    const raw = await callAI({
       model: 'meta-llama/llama-3.3-70b-instruct:free',
       groqModel: 'llama-3.3-70b-versatile',
       messages: [
         {
           role: 'system',
-          content: 'You are a job search assistant. Answer the user\'s query based on the data provided. Be concise and direct. Format lists as bullet points.',
+          content: `You are a job search assistant. Answer the query based on the data, then output a JSON block.
+Format your response as:
+<answer>
+Your prose answer here (bullet points ok).
+</answer>
+<ids>
+["id-uuid-1", "id-uuid-2"]
+</ids>
+The ids array must contain only the exact UUID values from [id:...] for records most relevant to the query. Max 8 ids. Empty array if none are specifically relevant.`,
         },
         {
           role: 'user',
-          content: `${sections.join('\n\n')}\n\nQuery: ${query}`,
+          content: `Data:\n${lines.join('\n')}\n\nQuery: ${query}`,
         },
       ],
-      max_tokens: 500,
+      max_tokens: 600,
     })
-    return answer
+
+    // Parse <answer> and <ids> tags
+    const answerMatch = raw.match(/<answer>([\s\S]*?)<\/answer>/)
+    const idsMatch = raw.match(/<ids>([\s\S]*?)<\/ids>/)
+
+    const answer = answerMatch ? answerMatch[1].trim() : raw.trim()
+
+    let matchedIds: string[] = []
+    if (idsMatch) {
+      try { matchedIds = JSON.parse(idsMatch[1].trim()) } catch { /* ignore */ }
+    }
+
+    // Build link objects from matched IDs using local data (no hallucination)
+    const idSet = new Set(matchedIds)
+    const links: JobSearchLink[] = []
+
+    apps.forEach(a => {
+      if (idSet.has(a.id)) {
+        links.push({
+          id: a.id,
+          title: a.position,
+          company: a.company,
+          url: a.job_posting_url ?? null,
+          meta: a.status,
+          source: 'application',
+        })
+      }
+    })
+    jobs.forEach(j => {
+      if (idSet.has(j.id)) {
+        links.push({
+          id: j.id,
+          title: j.title,
+          company: j.company,
+          url: j.url ?? null,
+          meta: `score ${j.classifier_score} · ${j.cv_track}`,
+          source: 'pipeline',
+        })
+      }
+    })
+
+    return { answer, links }
   } catch (err) {
     console.warn('[localJobSearch] error:', err)
-    return ''
+    return { answer: '', links: [] }
   }
 }
 

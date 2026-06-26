@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { hasCogneeConfig, cogneeSearch, cogneeRememberProfile, localJobSearch } from '../agents/cogneeClient'
+import type { JobSearchLink } from '../agents/cogneeClient'
 import { runScoutOnly } from '../services/agentOrchestrator'
 import SharedNav from './SharedNav'
 
@@ -139,6 +140,7 @@ export default function PipelineVisualization() {
   const [showAllSources, setShowAllSources] = useState(false)
   const [cogneeQuery, setCogneeQuery] = useState('')
   const [cogneeAnswer, setCogneeAnswer] = useState('')
+  const [cogneeLinks, setCogneeLinks] = useState<JobSearchLink[]>([])
   const [cogneeLoading, setCogneeLoading] = useState(false)
   const [seedingProfile, setSeedingProfile] = useState(false)
   const [profileSeeded, setProfileSeeded] = useState(false)
@@ -174,15 +176,16 @@ export default function PipelineVisualization() {
     if (!cogneeQuery.trim() || cogneeLoading) return
     setCogneeLoading(true)
     setCogneeAnswer('')
+    setCogneeLinks([])
 
-    // Try Cognee first; fall back to local LLM query over Supabase jobs
     let result = await cogneeSearch(cogneeQuery)
     const cogneeUnavailable = !result || result.startsWith('⚠')
 
     if (cogneeUnavailable) {
       const local = await localJobSearch(cogneeQuery)
-      if (local) {
-        result = `[LOCAL DATA]\n\n${local}`
+      if (local.answer) {
+        result = `[LOCAL DATA]\n\n${local.answer}`
+        setCogneeLinks(local.links)
       } else {
         result = 'No results — run Scout first to populate job data.'
       }
@@ -480,8 +483,38 @@ export default function PipelineVisualization() {
                 </div>
               )}
               {cogneeAnswer && (
-                <div style={{ background: `${PURPLE}08`, border: `1px solid ${PURPLE}22`, borderRadius: '4px', padding: '12px', fontSize: '12px', color: '#94a3b8', lineHeight: 1.7, maxHeight: '200px', overflowY: 'auto' }}>
-                  {cogneeAnswer}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ background: `${PURPLE}08`, border: `1px solid ${PURPLE}22`, borderRadius: '4px', padding: '12px', fontSize: '12px', color: '#94a3b8', lineHeight: 1.7, maxHeight: '200px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                    {cogneeAnswer}
+                  </div>
+                  {cogneeLinks.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {cogneeLinks.map(link => (
+                        <div key={link.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0d1117', border: '1px solid #1e293b', borderRadius: '4px', padding: '8px 12px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                            <span style={{ fontSize: '11px', color: '#e2e8f0', fontFamily: 'Syne, sans-serif', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {link.title}
+                            </span>
+                            <span style={{ fontSize: '10px', color: '#475569' }}>
+                              {link.company} · {link.meta}
+                            </span>
+                          </div>
+                          {link.url ? (
+                            <a
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: link.source === 'pipeline' ? TEAL : PURPLE, border: `1px solid ${link.source === 'pipeline' ? TEAL : PURPLE}44`, borderRadius: '3px', padding: '3px 10px', textDecoration: 'none', letterSpacing: '1px', whiteSpace: 'nowrap' }}
+                            >
+                              OPEN ↗
+                            </a>
+                          ) : (
+                            <span style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: '#334155', letterSpacing: '1px' }}>NO URL</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
