@@ -172,17 +172,19 @@ export default function PipelineVisualization() {
     setTimeout(() => setProfileSeeded(false), 3000)
   }
 
-  async function handleCogneeQuery() {
-    if (!cogneeQuery.trim() || cogneeLoading) return
+  async function handleCogneeQuery(overrideQuery?: string) {
+    const q = (overrideQuery ?? cogneeQuery).trim()
+    if (!q || cogneeLoading) return
+    if (overrideQuery) setCogneeQuery(overrideQuery)
     setCogneeLoading(true)
     setCogneeAnswer('')
     setCogneeLinks([])
 
-    let result = await cogneeSearch(cogneeQuery)
+    let result = await cogneeSearch(q)
     const cogneeUnavailable = !result || result.startsWith('⚠')
 
     if (cogneeUnavailable) {
-      const local = await localJobSearch(cogneeQuery)
+      const local = await localJobSearch(q)
       result = local.answer || 'No results — run Scout first to populate job data.'
       setCogneeLinks(local.links)
     }
@@ -468,11 +470,16 @@ export default function PipelineVisualization() {
               {!cogneeAnswer && cogneeActive && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {[
-                    'What companies are hiring UX Engineers in Berlin?',
-                    'Which roles have the most Figma requirements?',
-                    'What industries score highest for my profile?',
+                    'Show me everything in my pipeline right now',
+                    'Which jobs scored highest for my profile?',
+                    'Which cv track has the most roles — UX, PM, or DevRel?',
+                    'What Berlin-based roles am I tracking?',
+                    'Any interviews or calls scheduled?',
+                    'Which applications are still waiting for a response?',
+                    'Show my most recently added jobs',
+                    'Which companies appear most in my pipeline?',
                   ].map(q => (
-                    <button key={q} onClick={() => { setCogneeQuery(q); }} style={{ background: 'transparent', border: 'none', padding: '3px 0', color: '#475569', fontSize: '10px', fontFamily: 'Space Mono, monospace', cursor: 'pointer', textAlign: 'left' }}>
+                    <button key={q} onClick={() => handleCogneeQuery(q)} style={{ background: 'transparent', border: 'none', padding: '3px 0', color: '#475569', fontSize: '10px', fontFamily: 'Space Mono, monospace', cursor: 'pointer', textAlign: 'left' }}>
                       → {q}
                     </button>
                   ))}
