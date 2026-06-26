@@ -11,7 +11,7 @@ import * as gatekeeper from '../agents/reviewGatekeeper'
 import { syncStatus, watchJob, isStatusTrackerReady } from '../agents/statusTracker'
 import { submitApplication } from '../agents/submitter'
 import type { SubmissionResult } from '../agents/submitter'
-import type { ScoutResult, ClassifierResult, TailoredResume, CoverLetter } from '../agents/types'
+import type { ScoutResult, ClassifierResult, TailoredResume, CoverLetter, ScreenshotResult } from '../agents/types'
 import { createLangfuse, setActiveTrace, setActiveSpan } from '../ai/langfuseClient'
 import type { LangfuseTraceClient } from '../ai/langfuseClient'
 
@@ -19,7 +19,7 @@ import type { LangfuseTraceClient } from '../ai/langfuseClient'
 // Step observability callback
 // ---------------------------------------------------------------------------
 
-export type AgentStatus = 'running' | 'success' | 'failed'
+export type AgentStatus = 'running' | 'success' | 'failed' | 'skipped'
 export type StepCallback = (agent: string, status: AgentStatus) => void
 
 // ---------------------------------------------------------------------------
@@ -332,7 +332,7 @@ async function runFormStep(
   setActiveSpan(fmSpan)
   let formMapping
   try {
-    formMapping = await mapForm(job.url)
+    formMapping = await mapForm(job.url, job.raw_jd ?? undefined)
     await saveArtifact(jobId, 'form_mapping', formMapping)
     await completeRun(fmRunId, formMapping, undefined, Date.now() - t0)
     onStep?.('formMapper', 'success')
@@ -349,11 +349,16 @@ async function runFormStep(
   const t0ss = Date.now()
   onStep?.('screenshotCapturer', 'running')
   try {
-    const screenshots = await captureScreenshots(jobId, job.url, formMapping)
-    await saveArtifact(jobId, 'screenshot_before', null, null, screenshots.before_url)
-    await saveArtifact(jobId, 'screenshot_filled', null, null, screenshots.filled_url)
-    await completeRun(ssRunId, screenshots, undefined, Date.now() - t0ss)
-    onStep?.('screenshotCapturer', 'success')
+    const screenshots = await captureScreenshots(jobId, job.url, formMapping) as ScreenshotResult & { skipped?: boolean; skip_reason?: string }
+    if (screenshots.skipped) {
+      await completeRun(ssRunId, { skipped: true, reason: 'Browser worker not deployed' }, undefined, Date.now() - t0ss)
+      onStep?.('screenshotCapturer', 'skipped' as AgentStatus)
+    } else {
+      await saveArtifact(jobId, 'screenshot_before', null, null, screenshots.before_url)
+      await saveArtifact(jobId, 'screenshot_filled', null, null, screenshots.filled_url)
+      await completeRun(ssRunId, screenshots, undefined, Date.now() - t0ss)
+      onStep?.('screenshotCapturer', 'success')
+    }
   } catch (err) {
     await failRun(ssRunId, err)
     onStep?.('screenshotCapturer', 'failed')
