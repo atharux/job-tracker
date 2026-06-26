@@ -162,13 +162,15 @@ export async function localJobSearch(query: string): Promise<JobSearchResult> {
         .limit(40),
     ])
 
-    if (appsResult.error) console.warn('[localJobSearch] applications error:', appsResult.error)
-    if (jobsResult.error) console.warn('[localJobSearch] jobs error:', jobsResult.error)
-
     const apps = appsResult.data ?? []
     const jobs = jobsResult.data ?? []
 
-    if (apps.length === 0 && jobs.length === 0) return { answer: '', links: [] }
+    if (apps.length === 0 && jobs.length === 0) {
+      const appsErr = appsResult.error?.message ?? 'none'
+      const jobsErr = jobsResult.error?.message ?? 'none'
+      const answer = `No data found in your pipeline.\n\napplications query error: ${appsErr}\njobs query error: ${jobsErr}\n\nIf both say "none", your tables are empty — add a job or run Scout first.`
+      return { answer, links: [] }
+    }
 
     // Build a plain-text summary without LLM — always works regardless of rate limits
     const fallbackAnswer = buildFallbackAnswer(apps, jobs, query)
