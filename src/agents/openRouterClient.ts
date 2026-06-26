@@ -9,6 +9,8 @@
 // Groq (always free, LPU hardware ~320 tok/s):
 //   llama-3.3-70b-versatile  — fastest 70B, used as groqModel fallback
 
+import { getActiveParent } from '../ai/langfuseClient'
+
 const FREE_MODELS_CACHE_KEY = 'openrouter_free_models'
 const FREE_MODELS_CACHE_TTL = 24 * 60 * 60 * 1000 // 24h
 const FALLBACK_FREE_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
@@ -72,6 +74,12 @@ export interface AIOptions {
   temperature?: number
 }
 
+interface AICallResult {
+  text: string
+  model: string
+  usage?: { input: number; output: number }
+}
+
 function getKey(): { provider: 'openrouter' | 'groq' | 'anthropic'; key: string } {
   if (typeof sessionStorage !== 'undefined') {
     const orKey = sessionStorage.getItem('openrouter_api_key')
@@ -90,7 +98,7 @@ function getKey(): { provider: 'openrouter' | 'groq' | 'anthropic'; key: string 
 
 const MODEL_UNAVAILABLE_RE = /unavailable|not found|does not exist|quota|no endpoints/i
 
-async function callViaOpenRouter(key: string, opts: AIOptions): Promise<string> {
+async function callViaOpenRouter(key: string, opts: AIOptions): Promise<AICallResult> {
   const cached = getCachedFreeModels() ?? [opts.model]
   // Build retry list: requested model first, then remaining cached models
   const candidates = [opts.model, ...cached.filter(m => m !== opts.model)].slice(0, 3)
@@ -115,8 +123,17 @@ async function callViaOpenRouter(key: string, opts: AIOptions): Promise<string> 
 
     if (res.ok) {
       if (model !== opts.model) console.warn(`[openrouter] fell back to ${model} (${opts.model} unavailable)`)
-      const data = await res.json() as { choices: Array<{ message: { content: string } }> }
-      return data.choices?.[0]?.message?.content ?? ''
+      const data = await res.json() as {
+        choices: Array<{ message: { content: string } }>
+        usage?: { prompt_tokens?: number; completion_tokens?: number }
+      }
+      return {
+        text: data.choices?.[0]?.message?.content ?? '',
+        model,
+        usage: data.usage
+          ? { input: data.usage.prompt_tokens ?? 0, output: data.usage.completion_tokens ?? 0 }
+          : undefined,
+      }
     }
 
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
@@ -132,7 +149,7 @@ async function callViaOpenRouter(key: string, opts: AIOptions): Promise<string> 
   throw new Error(`OpenRouter error: ${lastError} (all ${candidates.length} models tried)`)
 }
 
-async function callViaGroq(key: string, opts: AIOptions): Promise<string> {
+async function callViaGroq(key: string, opts: AIOptions): Promise<AICallResult> {
   const model = opts.groqModel ?? 'llama-3.3-70b-versatile'
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -153,16 +170,26 @@ async function callViaGroq(key: string, opts: AIOptions): Promise<string> {
     throw new Error(`Groq error: ${err?.error?.message ?? res.status}`)
   }
 
-  const data = await res.json() as { choices: Array<{ message: { content: string } }> }
-  return data.choices?.[0]?.message?.content ?? ''
+  const data = await res.json() as {
+    choices: Array<{ message: { content: string } }>
+    usage?: { prompt_tokens?: number; completion_tokens?: number }
+  }
+  return {
+    text: data.choices?.[0]?.message?.content ?? '',
+    model,
+    usage: data.usage
+      ? { input: data.usage.prompt_tokens ?? 0, output: data.usage.completion_tokens ?? 0 }
+      : undefined,
+  }
 }
 
-async function callViaAnthropic(key: string, opts: AIOptions): Promise<string> {
+async function callViaAnthropic(key: string, opts: AIOptions): Promise<AICallResult> {
   const systemMsg = opts.messages.find((m) => m.role === 'system')
   const userMessages = opts.messages.filter((m) => m.role !== 'system')
+  const model = opts.anthropicModel ?? 'claude-haiku-4-5-20251001'
 
   const body: Record<string, unknown> = {
-    model: opts.anthropicModel ?? 'claude-haiku-4-5-20251001',
+    model,
     max_tokens: opts.max_tokens ?? 4096,
     messages: userMessages,
   }
@@ -184,35 +211,78 @@ async function callViaAnthropic(key: string, opts: AIOptions): Promise<string> {
     throw new Error(`Anthropic error: ${err?.error?.message ?? res.status}`)
   }
 
-  const data = await res.json() as { content: Array<{ type: string; text?: string }> }
-  return data.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text ?? '')
-    .join('')
+  const data = await res.json() as {
+    content: Array<{ type: string; text?: string }>
+    usage?: { input_tokens?: number; output_tokens?: number }
+  }
+  return {
+    text: data.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''),
+    model,
+    usage: data.usage
+      ? { input: data.usage.input_tokens ?? 0, output: data.usage.output_tokens ?? 0 }
+      : undefined,
+  }
 }
 
 export async function callAI(opts: AIOptions): Promise<string> {
   const { provider, key } = getKey()
+  const parent = getActiveParent()
+  const startTime = new Date()
 
-  if (provider === 'openrouter') {
-    try {
-      return await callViaOpenRouter(key, opts)
-    } catch (err) {
-      // OR failed entirely — fall through to Groq or Anthropic if keys exist
-      const groqKey = typeof localStorage !== 'undefined' ? localStorage.getItem('groq_api_key') : null
-      if (groqKey) {
-        console.warn('[callAI] OpenRouter failed, falling back to Groq:', err)
-        return callViaGroq(groqKey, opts)
+  let result: AICallResult
+  try {
+    if (provider === 'openrouter') {
+      try {
+        result = await callViaOpenRouter(key, opts)
+      } catch (err) {
+        const groqKey = typeof localStorage !== 'undefined' ? localStorage.getItem('groq_api_key') : null
+        if (groqKey) {
+          console.warn('[callAI] OpenRouter failed, falling back to Groq:', err)
+          result = await callViaGroq(groqKey, opts)
+        } else {
+          const anthropicKey = typeof localStorage !== 'undefined' ? localStorage.getItem('anthropic_api_key') : null
+          if (anthropicKey) {
+            console.warn('[callAI] OpenRouter failed, falling back to Anthropic:', err)
+            result = await callViaAnthropic(anthropicKey, opts)
+          } else {
+            throw err
+          }
+        }
       }
-      const anthropicKey = typeof localStorage !== 'undefined' ? localStorage.getItem('anthropic_api_key') : null
-      if (anthropicKey) {
-        console.warn('[callAI] OpenRouter failed, falling back to Anthropic:', err)
-        return callViaAnthropic(anthropicKey, opts)
-      }
-      throw err
+    } else if (provider === 'groq') {
+      result = await callViaGroq(key, opts)
+    } else {
+      result = await callViaAnthropic(key, opts)
     }
+  } catch (err) {
+    if (parent) {
+      const gen = parent.generation({
+        name: 'llm_call',
+        model: opts.model,
+        input: opts.messages,
+        startTime,
+        level: 'ERROR',
+        statusMessage: String(err),
+      })
+      gen.end()
+    }
+    throw err
   }
 
-  if (provider === 'groq') return callViaGroq(key, opts)
-  return callViaAnthropic(key, opts)
+  if (parent) {
+    const gen = parent.generation({
+      name: 'llm_call',
+      model: result.model,
+      input: opts.messages,
+      startTime,
+    })
+    gen.end({
+      output: result.text,
+      usage: result.usage
+        ? { input: result.usage.input, output: result.usage.output, unit: 'TOKENS' }
+        : undefined,
+    })
+  }
+
+  return result.text
 }

@@ -112,7 +112,8 @@ export async function classifyBatch(
   for (const job of jobs) {
     const result = await classifyJob(job, job.id)
     if (result) {
-      results.push({ ...result, passedThreshold: result.score >= SCORE_THRESHOLD })
+      // Override job_id with the real Supabase UUID — LLMs sometimes hallucinate a slug
+      results.push({ ...result, job_id: job.id, passedThreshold: result.score >= SCORE_THRESHOLD })
     }
   }
 

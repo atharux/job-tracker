@@ -12,6 +12,8 @@ import { syncStatus, watchJob, isStatusTrackerReady } from '../agents/statusTrac
 import { submitApplication } from '../agents/submitter'
 import type { SubmissionResult } from '../agents/submitter'
 import type { ScoutResult, ClassifierResult, TailoredResume, CoverLetter } from '../agents/types'
+import { createLangfuse, setActiveTrace, setActiveSpan } from '../ai/langfuseClient'
+import type { LangfuseTraceClient } from '../ai/langfuseClient'
 
 // ---------------------------------------------------------------------------
 // Step observability callback
@@ -251,11 +253,12 @@ async function runDocumentStep(
   jobId: string,
   classification: ClassifierResult,
   userId: string,
-  onStep?: StepCallback
+  onStep?: StepCallback,
+  trace?: LangfuseTraceClient | null
 ): Promise<void> {
   const job = await getJobRawJd(jobId)
 
-  // CV Base
+  // CV Base — no LLM call, no span needed
   const cvRunId = await startRun('cvSelector', jobId, { track: classification.cv_track }, userId)
   const t0cv = Date.now()
   onStep?.('cvSelector', 'running')
@@ -271,10 +274,12 @@ async function runDocumentStep(
     throw err
   }
 
-  // Resume Tailor
+  // Resume Tailor — LLM call: set active span so callAI logs generation under it
   const tailorRunId = await startRun('resumeTailor', jobId, { track: classification.cv_track }, userId)
   const t0tailor = Date.now()
   onStep?.('resumeTailor', 'running')
+  const tailorSpan = trace?.span({ name: 'resumeTailor', input: { track: classification.cv_track, jobId }, startTime: new Date() }) ?? null
+  setActiveSpan(tailorSpan)
   let tailored
   try {
     tailored = await tailorResume(cvVersion.content, job.raw_jd ?? '', classification.cv_track)
@@ -285,12 +290,17 @@ async function runDocumentStep(
     await failRun(tailorRunId, err)
     onStep?.('resumeTailor', 'failed')
     throw err
+  } finally {
+    setActiveSpan(null)
+    tailorSpan?.end()
   }
 
-  // Cover Letter
+  // Cover Letter — LLM call
   const clRunId = await startRun('coverLetterWriter', jobId, { title: job.title }, userId)
   const t0cl = Date.now()
   onStep?.('coverLetterWriter', 'running')
+  const clSpan = trace?.span({ name: 'coverLetterWriter', input: { title: job.title, company: job.company }, startTime: new Date() }) ?? null
+  setActiveSpan(clSpan)
   try {
     const letter = await writeCoverLetter(job.title, job.company, job.raw_jd ?? '', classification.cv_track)
     await saveArtifact(jobId, 'cover_letter', letter)
@@ -300,16 +310,26 @@ async function runDocumentStep(
     await failRun(clRunId, err)
     onStep?.('coverLetterWriter', 'failed')
     throw err
+  } finally {
+    setActiveSpan(null)
+    clSpan?.end()
   }
 }
 
-async function runFormStep(jobId: string, userId: string, onStep?: StepCallback): Promise<void> {
+async function runFormStep(
+  jobId: string,
+  userId: string,
+  onStep?: StepCallback,
+  trace?: LangfuseTraceClient | null
+): Promise<void> {
   const job = await getJobRawJd(jobId)
   if (!job.url) return
 
   const fmRunId = await startRun('formMapper', jobId, { url: job.url }, userId)
   const t0 = Date.now()
   onStep?.('formMapper', 'running')
+  const fmSpan = trace?.span({ name: 'formMapper', input: { url: job.url }, startTime: new Date() }) ?? null
+  setActiveSpan(fmSpan)
   let formMapping
   try {
     formMapping = await mapForm(job.url)
@@ -320,6 +340,9 @@ async function runFormStep(jobId: string, userId: string, onStep?: StepCallback)
     await failRun(fmRunId, err)
     onStep?.('formMapper', 'failed')
     return
+  } finally {
+    setActiveSpan(null)
+    fmSpan?.end()
   }
 
   const ssRunId = await startRun('screenshotCapturer', jobId, { url: job.url }, userId)
@@ -342,9 +365,24 @@ async function runFormStep(jobId: string, userId: string, onStep?: StepCallback)
 // ---------------------------------------------------------------------------
 
 export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]> {
+  const lf = createLangfuse()
+  const trace = lf?.trace({
+    name: 'scout_pipeline',
+    input: { trigger: 'manual', timestamp: new Date().toISOString() },
+  }) ?? null
+  setActiveTrace(trace)
+
   const userId = await getCurrentUserId()
+
+  // Scout — no LLM calls
   const jobs = await runScoutStep(userId, onStep)
+
+  // Classifier — LLM call per job
+  const classifySpan = trace?.span({ name: 'classifier', input: { jobCount: jobs.length }, startTime: new Date() }) ?? null
+  setActiveSpan(classifySpan)
   const classifications = await runClassifyStep(jobs, userId, onStep)
+  setActiveSpan(null)
+  classifySpan?.end({ output: { classified: classifications.length } })
 
   // Write scores to ALL classified jobs — critical path, must succeed
   for (const c of classifications) {
@@ -374,8 +412,10 @@ export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]
       .catch(() => onStep?.('cognee', 'failed'))
   }
 
+  // Gatekeeper — no LLM
+  const passing = classifications.filter(c => c.passedThreshold)
   onStep?.('reviewGatekeeper', 'running')
-  for (const classification of classifications.filter(c => c.passedThreshold)) {
+  for (const classification of passing) {
     await gatekeeper.enqueue(classification.job_id, classification.score, classification.cv_track)
     await supabase
       .from('jobs')
@@ -384,13 +424,32 @@ export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]
   }
   onStep?.('reviewGatekeeper', 'success')
 
+  trace?.update({ output: { jobsFound: jobs.length, classified: classifications.length, queued: passing.length } })
+  setActiveTrace(null)
+  await lf?.flushAsync().catch(() => { /* non-critical */ })
+
   return jobs
 }
 
 export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
+  const lf = createLangfuse()
+  const trace = lf?.trace({
+    name: 'full_pipeline',
+    input: { trigger: 'manual', timestamp: new Date().toISOString() },
+  }) ?? null
+  setActiveTrace(trace)
+
   const userId = await getCurrentUserId()
+
+  // Scout — no LLM
   const jobs = await runScoutStep(userId, onStep)
+
+  // Classifier — LLM per job
+  const classifySpan = trace?.span({ name: 'classifier', input: { jobCount: jobs.length }, startTime: new Date() }) ?? null
+  setActiveSpan(classifySpan)
   const classifications = await runClassifyStep(jobs, userId, onStep)
+  setActiveSpan(null)
+  classifySpan?.end({ output: { classified: classifications.length } })
 
   // Write scores to ALL classified jobs — critical path
   for (const c of classifications) {
@@ -406,11 +465,12 @@ export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
     }
   }
 
-  for (const classification of classifications.filter(c => c.passedThreshold)) {
+  const passing = classifications.filter(c => c.passedThreshold)
+  for (const classification of passing) {
     const jobId = classification.job_id
 
-    await runDocumentStep(jobId, classification, userId, onStep)
-    await runFormStep(jobId, userId, onStep)
+    await runDocumentStep(jobId, classification, userId, onStep, trace)
+    await runFormStep(jobId, userId, onStep, trace)
 
     onStep?.('reviewGatekeeper', 'running')
     await gatekeeper.enqueue(jobId, classification.score, classification.cv_track)
@@ -420,6 +480,10 @@ export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
       .eq('id', jobId)
     onStep?.('reviewGatekeeper', 'success')
   }
+
+  trace?.update({ output: { jobsFound: jobs.length, classified: classifications.length, queued: passing.length } })
+  setActiveTrace(null)
+  await lf?.flushAsync().catch(() => { /* non-critical */ })
 }
 
 export async function runDocumentsForJob(jobId: string): Promise<void> {
@@ -439,9 +503,11 @@ export async function runDocumentsForJob(jobId: string): Promise<void> {
     job_id: jobId,
     score: queueRecord.classifier_score ?? 0,
     cv_track: queueRecord.cv_track as 'ux' | 'pm' | 'devrel',
+    industry: 'Other',
     score_rationale: '',
     key_matches: [],
     red_flags: [],
+    passedThreshold: true,
   }
 
   await runDocumentStep(jobId, classification, userId)

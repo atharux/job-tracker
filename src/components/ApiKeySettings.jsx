@@ -18,10 +18,14 @@ export default function ApiKeySettings({ isOpen, onClose }) {
   const [claudeKey, setClaudeKey] = useState('');
   const [cogneeKey, setCogneeKey] = useState('');
   const [cogneeBaseUrl, setCogneeBaseUrl] = useState('');
+  const [langfusePublicKey, setLangfusePublicKey] = useState('');
+  const [langfuseSecretKey, setLangfuseSecretKey] = useState('');
+  const [langfuseHost, setLangfuseHost] = useState('');
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [showClaudeKey, setShowClaudeKey] = useState(false);
   const [showCogneeKey, setShowCogneeKey] = useState(false);
+  const [showLangfuseSecretKey, setShowLangfuseSecretKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailEmail, setGmailEmail] = useState('');
@@ -39,6 +43,9 @@ export default function ApiKeySettings({ isOpen, onClose }) {
     setClaudeKey(localStorage.getItem('anthropic_api_key') || '');
     setCogneeKey(localStorage.getItem('cognee_api_key') || '');
     setCogneeBaseUrl(localStorage.getItem('cognee_base_url') || '');
+    setLangfusePublicKey(localStorage.getItem('langfuse_public_key') || '');
+    setLangfuseSecretKey(localStorage.getItem('langfuse_secret_key') || '');
+    setLangfuseHost(localStorage.getItem('langfuse_host') || '');
     setFreeModelInfo(getFreeModelsCacheInfo());
   }, [isOpen]);
 
@@ -79,6 +86,22 @@ export default function ApiKeySettings({ isOpen, onClose }) {
       localStorage.setItem('cognee_base_url', cogneeBaseUrl.trim());
     } else {
       localStorage.removeItem('cognee_base_url');
+    }
+
+    if (langfusePublicKey.trim()) {
+      localStorage.setItem('langfuse_public_key', langfusePublicKey.trim());
+    } else {
+      localStorage.removeItem('langfuse_public_key');
+    }
+    if (langfuseSecretKey.trim()) {
+      localStorage.setItem('langfuse_secret_key', langfuseSecretKey.trim());
+    } else {
+      localStorage.removeItem('langfuse_secret_key');
+    }
+    if (langfuseHost.trim()) {
+      localStorage.setItem('langfuse_host', langfuseHost.trim());
+    } else {
+      localStorage.removeItem('langfuse_host');
     }
 
     // Background-refresh the free model cache whenever the OR key changes
@@ -551,6 +574,63 @@ export default function ApiKeySettings({ isOpen, onClose }) {
           />
           <div className="api-settings-hint">
             Cloud: from platform.cognee.ai dashboard · Self-hosted: http://localhost:8000
+          </div>
+        </div>
+
+        {/* Langfuse — Pipeline Observability */}
+        <div className="api-settings-section" style={{ borderTop: '1px solid #1e1e2e', paddingTop: '1rem' }}>
+          <div className="api-settings-label">
+            <span style={{ color: '#06b6d4' }}>Langfuse Public Key</span>
+            <a
+              href="https://cloud.langfuse.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="api-settings-link"
+            >
+              Get Keys <ExternalLink size={12} />
+            </a>
+          </div>
+          <div className="api-settings-input-wrapper">
+            <input
+              type="text"
+              className="api-settings-input"
+              placeholder="pk-lf-..."
+              value={langfusePublicKey}
+              onChange={(e) => setLangfusePublicKey(e.target.value)}
+            />
+          </div>
+          <div className="api-settings-label" style={{ marginTop: '0.75rem' }}>
+            <span style={{ color: '#06b6d4' }}>Langfuse Secret Key</span>
+          </div>
+          <div className="api-settings-input-wrapper">
+            <input
+              type={showLangfuseSecretKey ? 'text' : 'password'}
+              className="api-settings-input"
+              placeholder="sk-lf-..."
+              value={langfuseSecretKey}
+              onChange={(e) => setLangfuseSecretKey(e.target.value)}
+            />
+            <button
+              className="api-settings-toggle"
+              onClick={() => setShowLangfuseSecretKey(!showLangfuseSecretKey)}
+              type="button"
+            >
+              {showLangfuseSecretKey ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <div className="api-settings-label" style={{ marginTop: '0.75rem' }}>
+            <span>Langfuse Host</span>
+          </div>
+          <input
+            type="text"
+            className="api-settings-input"
+            placeholder="https://cloud.langfuse.com"
+            value={langfuseHost}
+            onChange={(e) => setLangfuseHost(e.target.value)}
+            style={{ marginTop: '0.25rem' }}
+          />
+          <div className="api-settings-hint">
+            LLM traces per pipeline run — model, latency, tokens, input/output per agent · EU: eu.cloud.langfuse.com
           </div>
         </div>
 
