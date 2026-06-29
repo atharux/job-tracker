@@ -82,6 +82,9 @@ const LiveRegion = ({ message }) => (
 );
 
 function useFocusTrap(ref, isOpen, onClose) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!isOpen || !ref.current) return;
     const previouslyFocused = document.activeElement;
@@ -93,7 +96,7 @@ function useFocusTrap(ref, isOpen, onClose) {
     const last = focusables[focusables.length - 1];
     first?.focus();
     const handleKey = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); onCloseRef.current(); return; }
       if (e.key !== 'Tab') return;
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
@@ -103,7 +106,7 @@ function useFocusTrap(ref, isOpen, onClose) {
       document.removeEventListener('keydown', handleKey);
       previouslyFocused?.focus?.();
     };
-  }, [isOpen, ref, onClose]);
+  }, [isOpen, ref]);
 }
 
 // ----------------------------------------------------------------------------
