@@ -94,7 +94,12 @@ export async function writeCoverLetter(
     ],
   })
 
-  const letter = JSON.parse(extractJson(stripMarkdown(text))) as CoverLetter
+  let letter: CoverLetter
+  try {
+    letter = JSON.parse(extractJson(stripMarkdown(text))) as CoverLetter
+  } catch {
+    throw new Error('Cover letter writer: LLM returned incomplete JSON — the model likely hit its output limit. Try again, or add a Groq API key in Settings for more reliable output.')
+  }
   letter.word_count = countWords(letter.body)
   return letter
 }

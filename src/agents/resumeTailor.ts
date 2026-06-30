@@ -36,7 +36,7 @@ function stripHtml(html: string): string {
 
 function buildPrompt(baseResume: CVContent, rawJd: string, cvTrack: string): string {
   const trackCtx = TRACK_CONTEXT[cvTrack] ?? TRACK_CONTEXT.ux
-  const cleanJd = stripHtml(rawJd).slice(0, 3500)
+  const cleanJd = stripHtml(rawJd).slice(0, 2000)
 
   return `Tailor this resume for the job below.
 
@@ -116,7 +116,12 @@ export async function tailorResume(
     ],
   })
 
-  const parsed = JSON.parse(extractJson(stripMarkdown(text))) as TailoredResume
+  let parsed: TailoredResume
+  try {
+    parsed = JSON.parse(extractJson(stripMarkdown(text))) as TailoredResume
+  } catch {
+    throw new Error('Resume tailor: LLM returned incomplete JSON — the model likely hit its output limit. Try again, or add a Groq API key in Settings for more reliable output.')
+  }
 
   if (!parsed.languages?.length)       parsed.languages       = baseResume.languages ?? []
   if (!parsed.certifications?.length)  parsed.certifications  = baseResume.certifications ?? []
