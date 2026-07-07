@@ -1,4 +1,4 @@
-# Forge — Quick Start
+# Hydra — Quick Start
 
 A 9-agent pipeline that finds, tailors, and queues job applications for your review.
 Setup takes about 20 minutes.
@@ -17,7 +17,7 @@ Setup takes about 20 minutes.
 ## Step 1 — Install
 
 ```bash
-unzip forge-v2.zip && cd forge-v2
+unzip hydra-v2.zip && cd hydra-v2
 npm install
 ```
 

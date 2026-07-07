@@ -75,7 +75,7 @@ const CERTIFICATIONS = [
 
 const PROJECTS = [
   {
-    name: 'Forge — Job Tracker',
+    name: 'Hydra — Job Tracker',
     url: 'https://job-tracker-a5x.pages.dev/',
     github: 'https://github.com/atharux/job-tracker',
     description:
@@ -98,7 +98,7 @@ const PROJECTS = [
 // Bullets use the XYZ formula: Accomplished [X] as measured by [Y] by doing [Z]
 const EXPERIENCE = [
   {
-    company: 'Forge — Job Tracker (Open Source)',
+    company: 'Hydra — Job Tracker (Open Source)',
     role: 'AI Systems Architect & Full-Stack Developer',
     dates: '2024 – Present',
     bullets: [
@@ -300,7 +300,7 @@ const CV_VERSIONS = [
       title: 'Developer Relations Engineer & Agentic AI Builder',
       summary:
         'Developer advocate and agentic AI builder. ' +
-        'Ships production multi-agent systems: 9-agent job search pipeline (Forge, public repo, 3 real users) ' +
+        'Ships production multi-agent systems: 9-agent job search pipeline (Hydra, public repo, 3 real users) ' +
         'and agentic venue intelligence platform (deployed for Hydrat3 startup, public repo). ' +
         'Organiser and co-host of AgentCon Berlin 2026 (speakers: Neo4j, Microsoft; sponsors: Neo4j, Microsoft, Qdrant, MemVerge). ' +
         'Volunteer at Global AI Berlin (120+ members). ' +

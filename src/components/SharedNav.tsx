@@ -100,7 +100,7 @@ export default function SharedNav({ rightSlot }: Props) {
             <polygon points="13,2 5,13 12,13 11,22 19,11 12,11" fill="#06b6d4" />
           </svg>
           <span style={{ color: '#06b6d4', fontFamily: 'Space Mono, monospace', fontSize: '11px', letterSpacing: '2px', fontWeight: 700 }}>
-            FORGE
+            HYDRA
           </span>
         </Link>
 

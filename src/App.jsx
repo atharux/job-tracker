@@ -1369,7 +1369,7 @@ export default function App() {
 
         <div className="auth-card">
           <div className="auth-header">
-            <h1 className="auth-title">Forge</h1>
+            <h1 className="auth-title">Hydra</h1>
             <p className="auth-subtitle">Track your job applications with style</p>
           </div>
 

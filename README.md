@@ -1,4 +1,4 @@
-# Forge - AI-Powered Job Application Tracker
+# Hydra - AI-Powered Job Application Tracker
 
 A modern, cloud-backed job application tracking platform with AI-powered resume customization. Built with React, Vite, Supabase, and AI.
 
@@ -168,7 +168,7 @@ See `CLOUDFLARE_WORKER_SETUP.md` for detailed instructions.
 ## 📁 Project Structure
 
 ```
-forge/
+hydra/
 ├── src/
 │   ├── components/
 │   │   ├── ResumeManager.jsx      # Resume management UI

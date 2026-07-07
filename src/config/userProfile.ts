@@ -1,6 +1,6 @@
 // ── USER PROFILE ──────────────────────────────────────────────────────────────
 // Fill this in before running the pipeline. All agents pull from here.
-// This is the only file you need to edit to personalise Forge for yourself.
+// This is the only file you need to edit to personalise Hydra for yourself.
 
 export const USER_PROFILE = {
   name: 'Athar Hafiz',
