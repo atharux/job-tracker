@@ -1,0 +1,15 @@
+name = "hydra-supabase-keepalive"
+main = "index.js"
+compatibility_date = "2026-07-07"
+
+# Pings the Supabase REST API twice a week so the free-tier project never
+# hits the 7-day-inactivity auto-pause. Deploy with:
+#   cd src/workers/supabase-keepalive
+#   npx wrangler deploy
+
+[triggers]
+crons = ["0 6 * * 1,4"]
+
+[vars]
+SUPABASE_URL = "https://ncympgnvdjqpeioypkja.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jeW1wZ252ZGpxcGVpb3lwa2phIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2ODU0NzAsImV4cCI6MjA4NTI2MTQ3MH0.FAYTofnukoAHjS_CH2LZjH4xRdYd9a0pmkPbG2sybTo"
