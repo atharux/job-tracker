@@ -1575,7 +1575,8 @@ export default function App() {
           {[
             { view: 'applications', label: 'Applications', title: 'Track your job applications' },
             { view: 'analytics',    label: 'Analytics',    title: 'Analytics dashboard' },
-            { view: 'resumes',      label: 'Resumes',      title: 'Manage resume versions' },
+            { view: 'resumes',      label: 'My Resumes',   title: 'Personal resume library' },
+            { view: 'resumeAI',     label: 'Resume AI',    title: 'AI resume assistant — same library as My Resumes' },
             { view: 'leaderboard',  label: 'Leaderboard',  title: 'Leaderboard and achievements' },
           ].map(({ view, label, title }) => (
             <button
@@ -1606,8 +1607,8 @@ export default function App() {
               style={{
                 background: 'transparent', border: 'none',
                 fontFamily: 'Space Mono, monospace', fontSize: '11px', letterSpacing: '1px',
-                color: currentView === 'resumeAI' || currentView === 'alvaPrep' ? '#06b6d4' : '#64748b',
-                borderBottom: currentView === 'resumeAI' || currentView === 'alvaPrep' ? '1px solid #06b6d4' : '1px solid transparent',
+                color: currentView === 'alvaPrep' ? '#06b6d4' : '#64748b',
+                borderBottom: currentView === 'alvaPrep' ? '1px solid #06b6d4' : '1px solid transparent',
                 padding: '4px 8px', cursor: 'pointer',
               }}
             >
@@ -1622,7 +1623,6 @@ export default function App() {
                   style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100, background: '#0d1117', border: '1px solid rgba(255,255,255,0.08)', borderTop: '2px solid #06b6d4', borderRadius: '4px', minWidth: '150px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', overflow: 'hidden' }}
                 >
                   {[
-                    { view: 'resumeAI', label: 'Resume AI' },
                     { view: 'alvaPrep', label: 'Logic Prep' },
                   ].map(({ view, label }) => (
                     <button
