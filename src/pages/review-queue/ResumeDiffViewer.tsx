@@ -1,12 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Edit2, Save, X, BookmarkPlus, Printer } from 'lucide-react'
+import { Edit2, Save, X, Printer } from 'lucide-react'
 import { supabase } from '../../supabaseClient'
 import type { TailoredResume } from '../../agents/types'
-import {
-  createResumeVersion,
-  batchCreateModules,
-  addModuleToVersion,
-} from '../../utils/resumeDatabase'
 
 interface Props {
   tailored: TailoredResume | null
@@ -138,100 +133,10 @@ function FullResumeView({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [builderPrompt, setBuilderPrompt] = useState(false)
-  const [versionName, setVersionName] = useState('')
-  const [savingToBuilder, setSavingToBuilder] = useState(false)
-  const [builderSuccess, setBuilderSuccess] = useState<string | null>(null)
-
   useEffect(() => {
     setDraft(toEditState(tailored))
     setEditing(false)
   }, [tailored])
-
-  async function handleSaveToBuilder() {
-    if (!versionName.trim()) return
-    setSavingToBuilder(true)
-    setBuilderSuccess(null)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setError('Sign in via the main app (/) before saving to Resume Builder.')
-        setSavingToBuilder(false)
-        setBuilderPrompt(false)
-        return
-      }
-      // Map tailored resume → resume builder module shapes
-      const current = editing
-        ? { ...tailored, summary: draft.summary, experience: draft.experience, skills: draft.skills.split(',').map(s => s.trim()).filter(Boolean) }
-        : tailored
-
-      const modules: Array<{ type: string; content: unknown }> = []
-
-      modules.push({ type: 'summary', content: { text: current.summary } })
-
-      for (const exp of current.experience) {
-        const dates = (exp as typeof exp & { dates?: string }).dates ?? ''
-        const [startDate = '', endDate = ''] = dates.split('–').map(s => s.trim())
-        modules.push({
-          type: 'experience',
-          content: {
-            company: exp.company,
-            position: exp.role,
-            location: '',
-            startDate,
-            endDate,
-            achievements: exp.bullets,
-            technologies: [],
-          },
-        })
-      }
-
-      if (current.skills.length > 0) {
-        modules.push({ type: 'skills', content: { category: 'Technical Skills', skills: current.skills } })
-      }
-
-      for (const edu of current.education ?? []) {
-        modules.push({
-          type: 'education',
-          content: {
-            institution: edu.institution,
-            degree: edu.degree,
-            field: '',
-            startDate: '',
-            endDate: edu.year,
-            gpa: '',
-            honors: [],
-          },
-        })
-      }
-
-      if (current.languages && current.languages.length > 0) {
-        modules.push({
-          type: 'custom',
-          content: { label: 'Languages', languages: current.languages },
-        })
-      }
-
-      const createdModules = await batchCreateModules(modules) as Array<{ id: string }>
-      const version = await createResumeVersion({ name: versionName.trim(), template_id: 'default' }) as { id: string }
-      await Promise.all(
-        createdModules.map((mod, i: number) =>
-          addModuleToVersion(version.id, mod.id, i)
-        )
-      )
-
-      setBuilderSuccess(`Saved as "${versionName.trim()}" in Resume Builder`)
-      setBuilderPrompt(false)
-      setVersionName('')
-    } catch (e: unknown) {
-      const msg = e instanceof Error
-        ? e.message
-        : (e as { message?: string })?.message ?? JSON.stringify(e)
-      setError(`Save to builder failed: ${msg}`)
-    } finally {
-      setSavingToBuilder(false)
-    }
-  }
 
   function updateBullet(expIdx: number, bulletIdx: number, value: string) {
     setDraft(d => {
@@ -293,32 +198,6 @@ function FullResumeView({
           </button>
         )}
 
-        {/* Save to Resume Builder */}
-        {!editing && (
-          builderPrompt ? (
-            <>
-              <input
-                autoFocus
-                value={versionName}
-                onChange={e => setVersionName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSaveToBuilder(); if (e.key === 'Escape') { setBuilderPrompt(false); setVersionName('') } }}
-                placeholder="Version name (e.g. Talon.one — UX Engineer)"
-                style={{ padding: '0.35rem 0.6rem', background: '#0f0f1a', border: '1px solid #2d2d3f', borderRadius: '3px', color: '#e2e8f0', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', width: '260px' }}
-              />
-              <button onClick={() => { setBuilderPrompt(false); setVersionName('') }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.7rem', background: 'transparent', border: '1px solid #1e1e2e', borderRadius: '3px', color: '#475569', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem' }}>
-                <X size={12} />
-              </button>
-              <button onClick={handleSaveToBuilder} disabled={savingToBuilder || !versionName.trim()} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.9rem', background: '#22c55e', border: 'none', borderRadius: '3px', color: '#000', cursor: savingToBuilder ? 'not-allowed' : 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem', fontWeight: 700 }}>
-                <BookmarkPlus size={12} /> {savingToBuilder ? 'SAVING...' : 'SAVE'}
-              </button>
-            </>
-          ) : (
-            <button onClick={() => setBuilderPrompt(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.9rem', background: 'transparent', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '3px', color: '#22c55e', cursor: 'pointer', fontFamily: 'Space Mono, monospace', fontSize: '0.65rem' }}>
-              <BookmarkPlus size={12} /> SAVE TO BUILDER
-            </button>
-          )
-        )}
-
         {/* Edit / Save / Cancel */}
         {editing ? (
           <>
@@ -336,9 +215,6 @@ function FullResumeView({
         )}
       </div>
 
-      {builderSuccess && (
-        <p style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', color: '#22c55e', marginBottom: '0.75rem' }}>✓ {builderSuccess}</p>
-      )}
       {error && <p style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.7rem', color: '#ef4444', marginBottom: '0.75rem' }}>⚠ {error}</p>}
 
       {/* Contact — always read-only */}
