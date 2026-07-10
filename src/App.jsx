@@ -26,7 +26,6 @@ import {
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AlvaPrepModule from './components/AlvaPrepModule.jsx';
-import ResumeBuilder from './components/ResumeBuilder.jsx';
 
 import ResumeManager from './components/ResumeManager.jsx';
 import ResumeAIAssistant from './components/ResumeAIAssistant.jsx'; // new import
