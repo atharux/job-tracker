@@ -1,13 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { CVContent, TailoredResume } from '../types'
 
-const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }))
-
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: class MockAnthropic {
-    messages = { create: mockCreate }
-  },
-}))
+const mockFetch = vi.fn()
 
 import { tailorResume } from '../resumeTailor'
 
@@ -35,15 +29,22 @@ const mockTailored: TailoredResume = {
   ],
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  localStorage.setItem('groq_api_key', 'test-groq-key')
+  vi.stubGlobal('fetch', mockFetch)
+})
 
-function makeResponse(text: string) {
-  return { content: [{ type: 'text', text }] }
+function makeResponse(content: string) {
+  return {
+    ok: true,
+    json: async () => ({ choices: [{ message: { content } }] }),
+  }
 }
 
 describe('resumeTailor', () => {
   it('returns a valid TailoredResume shape', async () => {
-    mockCreate.mockResolvedValueOnce(makeResponse(JSON.stringify(mockTailored)))
+    mockFetch.mockResolvedValueOnce(makeResponse(JSON.stringify(mockTailored)))
     const result = await tailorResume(baseResume, rawJd)
     expect(result).toHaveProperty('summary')
     expect(result).toHaveProperty('experience')
@@ -55,7 +56,7 @@ describe('resumeTailor', () => {
   })
 
   it('does not alter company names or role titles', async () => {
-    mockCreate.mockResolvedValueOnce(makeResponse(JSON.stringify(mockTailored)))
+    mockFetch.mockResolvedValueOnce(makeResponse(JSON.stringify(mockTailored)))
     const result = await tailorResume(baseResume, rawJd)
     result.experience.forEach((exp, i) => {
       expect(exp.company).toBe(baseResume.experience[i].company)
@@ -64,7 +65,7 @@ describe('resumeTailor', () => {
   })
 
   it('produces a non-empty diff array when changes are made', async () => {
-    mockCreate.mockResolvedValueOnce(makeResponse(JSON.stringify(mockTailored)))
+    mockFetch.mockResolvedValueOnce(makeResponse(JSON.stringify(mockTailored)))
     const result = await tailorResume(baseResume, rawJd)
     expect(result.diff.length).toBeGreaterThan(0)
     result.diff.forEach((d) => {
@@ -76,14 +77,14 @@ describe('resumeTailor', () => {
 
   it('strips ```json markdown fences before parsing', async () => {
     const fenced = '```json\n' + JSON.stringify(mockTailored) + '\n```'
-    mockCreate.mockResolvedValueOnce(makeResponse(fenced))
+    mockFetch.mockResolvedValueOnce(makeResponse(fenced))
     const result = await tailorResume(baseResume, rawJd)
     expect(result.summary).toBe(mockTailored.summary)
   })
 
   it('strips plain ``` fences before parsing', async () => {
     const fenced = '```\n' + JSON.stringify(mockTailored) + '\n```'
-    mockCreate.mockResolvedValueOnce(makeResponse(fenced))
+    mockFetch.mockResolvedValueOnce(makeResponse(fenced))
     const result = await tailorResume(baseResume, rawJd)
     expect(result.diff).toBeDefined()
   })

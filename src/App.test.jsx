@@ -1,9 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import * as fc from 'fast-check';
 import App from './App.jsx';
 import { supabase } from './supabaseClient';
 import * as gamification from './gamification.js';
+
+// App (via SharedNav) calls useLocation(), which requires a Router ancestor —
+// production wraps App in BrowserRouter (see main.jsx); tests use MemoryRouter.
+function renderApp() {
+  return render(<App />, { wrapper: MemoryRouter });
+}
 
 /**
  * Bug Condition Exploration Test for Gamification Persistence Fix
@@ -138,7 +145,7 @@ describe('Bug Condition Exploration: Race Condition on Initial Load', () => {
           supabase.from = mockFrom;
 
           // Render the App component
-          const { container } = render(<App />);
+          const { container } = renderApp();
 
           // CRITICAL ASSERTION: Check initial render state
           // The bug manifests when the component renders with default values
@@ -274,7 +281,7 @@ describe('Property 2: Preservation - Non-Race-Condition Behavior', () => {
           supabase.from = mockFrom;
 
           // Render the App component
-          render(<App />);
+          renderApp();
 
           // Wait for gamification state to be initialized
           await waitFor(() => {
@@ -382,7 +389,7 @@ describe('Property 2: Preservation - Non-Race-Condition Behavior', () => {
           supabase.from = mockFrom;
 
           // Render and wait for initial load
-          render(<App />);
+          renderApp();
           await waitFor(() => {
             expect(supabase.from).toHaveBeenCalledWith('gamification_state');
           }, { timeout: 1000 });
@@ -529,7 +536,7 @@ describe('Property 2: Preservation - Non-Race-Condition Behavior', () => {
           supabase.from = mockFrom;
 
           // Render the App component
-          render(<App />);
+          renderApp();
 
           // Wait for retroactive calculation to complete
           await waitFor(() => {
@@ -618,7 +625,7 @@ describe('Property 2: Preservation - Non-Race-Condition Behavior', () => {
           supabase.from = mockFrom;
 
           // Render and wait for initial load
-          render(<App />);
+          renderApp();
           await waitFor(() => {
             expect(supabase.from).toHaveBeenCalledWith('gamification_state');
           }, { timeout: 1000 });
