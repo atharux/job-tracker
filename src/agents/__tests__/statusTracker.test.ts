@@ -1,16 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockCreate, mockBetaCreate } = vi.hoisted(() => ({
-  mockCreate: vi.fn(),
-  mockBetaCreate: vi.fn(),
-}))
+const mockFetch = vi.fn()
 
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: class MockAnthropic {
-    messages = { create: mockCreate }
-    // statusTracker accesses client.beta.messages.create via cast
-    beta = { messages: { create: mockBetaCreate } }
-  },
+vi.mock('../../services/gmailAuth', () => ({
+  getGmailToken: vi.fn(async () => 'test-gmail-token'),
+  isGmailConnected: vi.fn(() => true),
 }))
 
 vi.mock('../../supabaseClient', () => ({
@@ -36,10 +30,55 @@ const submittedJob = {
   updated_at: new Date().toISOString(),
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  localStorage.setItem('groq_api_key', 'test-groq-key')
+  vi.stubGlobal('fetch', mockFetch)
+})
 
-function makeResponse(text: string) {
-  return { content: [{ type: 'text', text }] }
+// statusTracker searches Gmail directly via REST (list, then get message), then
+// (only if an email was found) classifies it via callAI's Groq REST endpoint —
+// three possible fetch targets, routed here by URL.
+function mockGmail({ found }: { found: boolean }) {
+  mockFetch.mockImplementation(async (url: string) => {
+    if (url.includes('gmail.googleapis.com/gmail/v1/users/me/messages?q=')) {
+      return {
+        ok: true,
+        json: async () => (found ? { messages: [{ id: 'msg-1' }] } : {}),
+      }
+    }
+    if (url.includes('gmail.googleapis.com/gmail/v1/users/me/messages/msg-1')) {
+      return {
+        ok: true,
+        json: async () => ({
+          snippet: 'We would like to move forward with your application.',
+          payload: { headers: [{ name: 'Subject', value: 'Re: your application' }, { name: 'From', value: 'hr@acme.de' }] },
+        }),
+      }
+    }
+    throw new Error(`Unexpected fetch: ${url}`)
+  })
+}
+
+function mockGmailThenClassify(classification: string) {
+  mockFetch.mockImplementation(async (url: string) => {
+    if (url.includes('gmail.googleapis.com/gmail/v1/users/me/messages?q=')) {
+      return { ok: true, json: async () => ({ messages: [{ id: 'msg-1' }] }) }
+    }
+    if (url.includes('gmail.googleapis.com/gmail/v1/users/me/messages/msg-1')) {
+      return {
+        ok: true,
+        json: async () => ({
+          snippet: 'Email body',
+          payload: { headers: [{ name: 'Subject', value: 'Re: your application' }, { name: 'From', value: 'hr@acme.de' }] },
+        }),
+      }
+    }
+    if (url.includes('api.groq.com')) {
+      return { ok: true, json: async () => ({ choices: [{ message: { content: classification } }] }) }
+    }
+    throw new Error(`Unexpected fetch: ${url}`)
+  })
 }
 
 describe('statusTracker', () => {
@@ -60,7 +99,7 @@ describe('statusTracker', () => {
         eq: vi.fn().mockResolvedValue({ data: [submittedJob], error: null }),
       } as unknown as ReturnType<typeof supabase.from>)
 
-      mockBetaCreate.mockResolvedValueOnce(makeResponse('NO_EMAIL_FOUND'))
+      mockGmail({ found: false })
 
       const results = await syncStatus()
       // no_reply statuses are not persisted
@@ -69,7 +108,7 @@ describe('statusTracker', () => {
 
     it('classifies and returns screening status when email found', async () => {
       let callCount = 0
-      mockFrom.mockImplementation((table: string) => {
+      mockFrom.mockImplementation(() => {
         callCount++
         if (callCount === 1) {
           return {
@@ -83,8 +122,7 @@ describe('statusTracker', () => {
         } as unknown as ReturnType<typeof supabase.from>
       })
 
-      mockBetaCreate.mockResolvedValueOnce(makeResponse('We would like to schedule a screening call.'))
-      mockCreate.mockResolvedValueOnce(makeResponse('screening'))
+      mockGmailThenClassify('screening')
 
       const results = await syncStatus()
       expect(results).toHaveLength(1)
@@ -100,7 +138,7 @@ describe('statusTracker', () => {
         single: vi.fn().mockResolvedValue({ data: submittedJob, error: null }),
       } as unknown as ReturnType<typeof supabase.from>)
 
-      mockBetaCreate.mockResolvedValueOnce(makeResponse('NO_EMAIL_FOUND'))
+      mockGmail({ found: false })
 
       const status = await watchJob('job-1')
       expect(status).toBe('no_reply')
@@ -108,7 +146,7 @@ describe('statusTracker', () => {
 
     it('returns interview when interview email found', async () => {
       let callCount = 0
-      mockFrom.mockImplementation((table: string) => {
+      mockFrom.mockImplementation(() => {
         callCount++
         if (callCount === 1) {
           return {
@@ -123,8 +161,7 @@ describe('statusTracker', () => {
         } as unknown as ReturnType<typeof supabase.from>
       })
 
-      mockBetaCreate.mockResolvedValueOnce(makeResponse('We would like to invite you for an interview.'))
-      mockCreate.mockResolvedValueOnce(makeResponse('interview'))
+      mockGmailThenClassify('interview')
 
       const status = await watchJob('job-1')
       expect(status).toBe('interview')

@@ -16,7 +16,7 @@ vi.mock('../reviewGatekeeper', () => ({
   getQueue: vi.fn(),
   getAll: vi.fn(),
 }))
-vi.mock('../statusTracker', () => ({ syncStatus: vi.fn(), watchJob: vi.fn() }))
+vi.mock('../statusTracker', () => ({ syncStatus: vi.fn(), watchJob: vi.fn(), isStatusTrackerReady: vi.fn(() => false) }))
 vi.mock('../submitter', () => ({
   submitApplication: vi.fn(async () => ({ success: true, method: 'api', message: 'ok', applicationUrl: 'x', requiresManual: false })),
 }))
@@ -54,11 +54,13 @@ const mockScoutResults: ScoutResult[] = [{
   title: 'Senior UX Engineer', company: 'Acme GmbH', location: 'Berlin',
   url: 'https://acme.de/jobs/1', source: 'linkedin',
   raw_jd: 'Looking for UX Engineer with React...', scraped_at: new Date().toISOString(),
+  verified: true, verificationSource: 'manual',
 }]
 
 const mockClassification: ClassifierResult = {
-  job_id: 'job-1', score: 8.0, cv_track: 'ux',
+  job_id: 'job-1', score: 8.0, cv_track: 'ux', industry: 'Other',
   score_rationale: 'Strong UX match.', key_matches: ['React', 'UX design'], red_flags: [],
+  passedThreshold: true, verdict: 'apply_first', hard_cap_reason: null, bonus_count: 2,
 }
 
 const mockCVVersion = {
@@ -84,7 +86,7 @@ function makeJobRecord() {
 // the full chain the orchestrator uses (gte/maybeSingle/in/order).
 function chain(opts: { single?: unknown; maybeSingle?: unknown; resolve?: unknown }) {
   const b: Record<string, unknown> = {}
-  for (const m of ['insert', 'update', 'upsert', 'select', 'eq', 'gte', 'in', 'order']) {
+  for (const m of ['insert', 'update', 'upsert', 'select', 'eq', 'gte', 'in', 'order', 'not']) {
     b[m] = () => b
   }
   b.single = () => Promise.resolve(opts.single ?? { data: null, error: null })
@@ -121,7 +123,7 @@ beforeEach(() => {
 describe('agentOrchestrator', () => {
   describe('runScoutOnly()', () => {
     it('calls scout then classifier then enqueue in order', async () => {
-      mockRunScout.mockResolvedValueOnce(mockScoutResults)
+      mockRunScout.mockResolvedValueOnce({ results: mockScoutResults, suggestedCompanies: [] })
       mockClassifyBatch.mockResolvedValueOnce([mockClassification])
       mockEnqueue.mockResolvedValueOnce({ id: 'queue-1', job_id: 'job-1', status: 'pending_review' } as never)
 
