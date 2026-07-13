@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/claude-code": "^2.1.205",
     "@anthropic-ai/sdk": "^0.78.0",
     "@supabase/supabase-js": "^2.48.0",
     "groq-sdk": "^1.2.0",

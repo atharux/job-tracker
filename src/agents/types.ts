@@ -13,6 +13,8 @@ export interface ScoutResult {
     | 'manual'
   raw_jd: string
   scraped_at: string
+  verified: boolean
+  verificationSource: string | null
 }
 
 export interface ClassifierResult {
@@ -24,6 +26,9 @@ export interface ClassifierResult {
   key_matches: string[]
   red_flags: string[]
   passedThreshold: boolean
+  verdict: 'apply_first' | 'worth_a_look' | 'skipped'
+  hard_cap_reason: string | null
+  bonus_count: number
 }
 
 export interface ContactInfo {
