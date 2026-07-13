@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Key, ExternalLink, Save, Eye, EyeOff, Mail, CheckCircle, RefreshCw } from 'lucide-react';
 import { initiateGmailAuth, isGmailConnected, getGmailUserEmail, disconnectGmail } from '../services/gmailAuth';
 import { fetchAndCacheFreeModels, getCachedFreeModels } from '../agents/openRouterClient';
+import SearchProfilePanel from './SearchProfilePanel';
 
 function getFreeModelsCacheInfo() {
   try {
@@ -633,6 +634,8 @@ export default function ApiKeySettings({ isOpen, onClose }) {
             LLM traces per pipeline run — model, latency, tokens, input/output per agent · EU: eu.cloud.langfuse.com
           </div>
         </div>
+
+        <SearchProfilePanel />
 
         <div className="api-settings-actions">
           <button
