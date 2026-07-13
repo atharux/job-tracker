@@ -1,6 +1,7 @@
 import type { ScoutResult, ClassifierResult } from './types'
 import { callAI, getPreferredFreeModel } from './openRouterClient'
 import { USER_PROFILE } from '../config/userProfile'
+import { loadSearchProfile, hasSearchProfile } from '../config/searchProfile'
 
 const SCORE_THRESHOLD = 3.0
 
@@ -26,6 +27,25 @@ ${trackLines}
 ${communityLine}
 `.trim()
 
+// User-tuned search preferences injected into the classifier prompt. Returns ''
+// when the user has not saved a custom profile, so default scoring is unchanged.
+export function searchPreferences(): string {
+  if (!hasSearchProfile()) return ''
+  const p = loadSearchProfile()
+  const lines: string[] = []
+  if (p.preferredTitles.length) lines.push(`- Preferred titles: ${p.preferredTitles.join(', ')}`)
+  if (p.keywords.length) lines.push(`- Interest keywords: ${p.keywords.join(', ')}`)
+  if (p.antiSignals.length) lines.push(`- Anti-signals (LOWER the score for roles matching these): ${p.antiSignals.join(', ')}`)
+  if (p.targetCompanyProfile) lines.push(`- Target company profile: ${p.targetCompanyProfile}`)
+  if (p.locations.length) lines.push(`- Preferred locations: ${p.locations.join(', ')}`)
+  if (p.seniorityBand) lines.push(`- Target seniority: ${p.seniorityBand}`)
+  if (p.intentText.trim()) lines.push(`- In the candidate's words: ${p.intentText.trim().slice(0, 300)}`)
+  if (lines.length === 0) return ''
+  return `\n\nUSER SEARCH PREFERENCES (tuned by the candidate — weight these alongside the profile above):
+${lines.join('\n')}
+Reward strong matches to the preferred titles and company profile; LOWER the score for roles that match the anti-signals.`
+}
+
 function buildPrompt(job: ScoutResult, jobId: string): string {
   return `You are a job-fit classifier. Score this job for the candidate described below.
 
@@ -34,7 +54,7 @@ not wasting application effort, not for maximizing apparent fit — a role that
 reads well but has a real disqualifier should not be scored to look attractive.
 
 CANDIDATE PROFILE:
-${OWNER_PROFILE}
+${OWNER_PROFILE}${searchPreferences()}
 
 JOB TO SCORE:
 Title: ${job.title}
