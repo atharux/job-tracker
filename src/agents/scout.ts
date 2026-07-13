@@ -1,5 +1,17 @@
 import type { ScoutResult } from './types'
 import { loadSearchProfile } from '../config/searchProfile'
+import { getCustomCompanies, addCustomCompany } from './companyRegistry'
+
+// Union a provider's built-in company list with any the user added (de-duped by
+// slug), so verified funded-startup boards get scanned on the next Scout run.
+function companiesFor(
+  provider: string,
+  builtIn: Array<{ slug: string; name: string; apiBase?: string }>,
+): Array<{ slug: string; name: string; apiBase?: string }> {
+  const seen = new Set(builtIn.map(c => c.slug))
+  const custom = getCustomCompanies().filter(c => c.provider === provider && !seen.has(c.slug))
+  return [...builtIn, ...custom]
+}
 
 // Fetchers produce results before verification tagging happens centrally in runScout().
 type UnverifiedScoutResult = Omit<ScoutResult, 'verified' | 'verificationSource'>
@@ -266,7 +278,7 @@ async function fetchAshby(): Promise<UnverifiedScoutResult[]> {
   const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
-    ASHBY_COMPANIES.map(async ({ slug, name }) => {
+    companiesFor('ashby', ASHBY_COMPANIES).map(async ({ slug, name }) => {
       const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`)
       if (!res.ok) return
       const data = await res.json() as { jobs?: AshbyJob[] }
@@ -314,7 +326,7 @@ async function fetchGreenhouse(): Promise<UnverifiedScoutResult[]> {
   const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
-    GREENHOUSE_COMPANIES.map(async ({ slug, name }) => {
+    companiesFor('greenhouse', GREENHOUSE_COMPANIES).map(async ({ slug, name }) => {
       const res = await fetch(
         `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`
       )
@@ -363,7 +375,7 @@ async function fetchSmartRecruiters(): Promise<UnverifiedScoutResult[]> {
   const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
-    SMARTRECRUITERS_COMPANIES.map(async ({ slug, name }) => {
+    companiesFor('smartrecruiters', SMARTRECRUITERS_COMPANIES).map(async ({ slug, name }) => {
       // One query per track — broad enough to catch varied titles
       const SR_QUERIES = ['ux designer', 'product designer', 'product manager', 'developer relations']
       const searches = SR_QUERIES.map(kw =>
@@ -438,7 +450,7 @@ async function fetchLever(): Promise<UnverifiedScoutResult[]> {
   const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
-    LEVER_COMPANIES.map(async ({ slug, name, apiBase }) => {
+    companiesFor('lever', LEVER_COMPANIES).map(async ({ slug, name, apiBase }) => {
       const base = apiBase ?? 'https://api.lever.co'
       const res = await fetch(`${base}/v0/postings/${slug}?mode=json`)
       if (!res.ok) return
@@ -559,7 +571,7 @@ async function fetchRecruitee(): Promise<UnverifiedScoutResult[]> {
   const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
-    RECRUITEE_COMPANIES.map(async ({ slug, name }) => {
+    companiesFor('recruitee', RECRUITEE_COMPANIES).map(async ({ slug, name }) => {
       const res = await fetch(`https://${slug}.recruitee.com/api/offers/`)
       if (!res.ok) return
       const data = await res.json() as { offers: RecruiteeOffer[] }
@@ -845,3 +857,66 @@ export async function runScout(): Promise<ScoutRunResult> {
 
 export { fetchAtsTitlesForCompany, CURATED_ATS_COMPANIES, normalizeCompanyName }
 export type { AtsSource }
+
+// ── Company finder (issue #17) ─────────────────────────────────────────────────
+// Given a company name or domain, probe every ATS provider with candidate slugs
+// and return the first board that actually returns jobs. Never guesses: a match
+// is only reported/persisted after a live endpoint confirms live postings.
+
+const ATS_PROVIDERS: AtsSource[] = ['ashby', 'greenhouse', 'smartrecruiters', 'lever', 'recruitee']
+
+function candidateSlugs(input: string): string[] {
+  const raw = input.trim().toLowerCase()
+  if (!raw) return []
+  let base = raw
+  if (raw.includes('.')) {
+    // domain → second-level label (taktile.com → taktile; jobs.acme.io → acme)
+    const host = raw.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+    const parts = host.split('.').filter(Boolean)
+    base = parts.length >= 2 ? parts[parts.length - 2] : parts[0]
+  }
+  const alnum = base.replace(/[^a-z0-9]+/g, '')
+  const hyphen = base.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return Array.from(new Set([alnum, hyphen].filter(s => s.length >= 2)))
+}
+
+export interface CompanyBoardMatch {
+  provider: AtsSource
+  slug: string
+  name: string
+  jobCount: number
+  apiBase?: string
+}
+
+export async function findCompanyBoard(input: string): Promise<CompanyBoardMatch | null> {
+  const slugs = candidateSlugs(input)
+  const name = input.trim()
+  for (const slug of slugs) {
+    for (const provider of ATS_PROVIDERS) {
+      // Lever has an EU host for European companies — probe both.
+      const bases = provider === 'lever' ? [undefined, 'https://api.eu.lever.co'] : [undefined]
+      for (const apiBase of bases) {
+        const titles = await fetchAtsTitlesForCompany(provider, slug, apiBase)
+        if (titles.length > 0) {
+          return { provider, slug, name, jobCount: titles.length, ...(apiBase ? { apiBase } : {}) }
+        }
+      }
+    }
+  }
+  return null
+}
+
+// Verify + persist a company so Scout scans it next run. Returns the match, or
+// null if no board verified (nothing is stored on failure — no guessed slugs).
+export async function findAndAddCompany(input: string): Promise<CompanyBoardMatch | null> {
+  const match = await findCompanyBoard(input)
+  if (match) {
+    addCustomCompany({
+      provider: match.provider,
+      slug: match.slug,
+      name: match.name,
+      ...(match.apiBase ? { apiBase: match.apiBase } : {}),
+    })
+  }
+  return match
+}
