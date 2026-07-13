@@ -33,6 +33,8 @@ export default function ApiKeySettings({ isOpen, onClose }) {
   const [gmailEmail, setGmailEmail] = useState('');
   const [freeModelInfo, setFreeModelInfo] = useState(null);
   const [refreshingModels, setRefreshingModels] = useState(false);
+  const [activeTab, setActiveTab] = useState('models');
+  const tabHidden = (t) => (activeTab === t ? {} : { display: 'none' });
 
   useEffect(() => {
     setGmailConnected(isGmailConnected());
@@ -376,8 +378,36 @@ export default function ApiKeySettings({ isOpen, onClose }) {
           <strong style={{ color: '#06b6d4' }}>Groq is free</strong> — start there.
         </div>
 
+        {/* ── Sidebar-nav layout ── */}
+        <div className="api-settings-body" style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', marginTop: '4px' }}>
+          <nav aria-label="Settings sections" style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '140px', flex: '0 0 auto' }}>
+            {[
+              { id: 'models', label: 'Models' },
+              { id: 'integrations', label: 'Integrations' },
+              { id: 'search', label: 'Search' },
+              { id: 'whatsnew', label: "What's New" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setActiveTab(t.id)}
+                aria-current={activeTab === t.id ? 'page' : undefined}
+                style={{
+                  textAlign: 'left', padding: '9px 12px', borderRadius: '6px', cursor: 'pointer',
+                  fontFamily: "'Space Mono', monospace", fontSize: '12px', letterSpacing: '0.03em',
+                  border: `1px solid ${activeTab === t.id ? 'rgba(6,182,212,0.4)' : 'transparent'}`,
+                  background: activeTab === t.id ? 'rgba(6,182,212,0.1)' : 'transparent',
+                  color: activeTab === t.id ? '#06b6d4' : '#94a3b8',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+          <div className="api-settings-content" style={{ flex: '1 1 320px', minWidth: 0 }}>
+
         {/* OpenRouter API Key */}
-        <div className="api-settings-section">
+        <div className="api-settings-section" style={tabHidden('models')}>
           <div className="api-settings-label">
             <span>OpenRouter API Key</span>
             <a
@@ -426,7 +456,7 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         </div>
 
         {/* Groq API Key */}
-        <div className="api-settings-section">
+        <div className="api-settings-section" style={tabHidden('models')}>
           <div className="api-settings-label">
             <span>Groq API Key <span style={{ fontFamily: "'Space Mono', monospace", fontSize: '9px', letterSpacing: '0.08em', background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.25)', borderRadius: '2px', padding: '1px 5px', marginLeft: '6px' }}>FREE — START HERE</span></span>
             <a
@@ -460,7 +490,7 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         </div>
 
         {/* Gmail OAuth */}
-        <div className="api-settings-section">
+        <div className="api-settings-section" style={tabHidden('integrations')}>
           <div className="api-settings-label">
             <span>Gmail — Status Tracker</span>
             {gmailConnected && (
@@ -498,7 +528,7 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         </div>
 
         {/* Claude API Key */}
-        <div className="api-settings-section">
+        <div className="api-settings-section" style={tabHidden('models')}>
           <div className="api-settings-label">
             <span>Anthropic API Key (Optional)</span>
             <a
@@ -532,7 +562,7 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         </div>
 
         {/* Cognee — Knowledge Graph Memory */}
-        <div className="api-settings-section" style={{ borderTop: '1px solid #1e1e2e', paddingTop: '1rem' }}>
+        <div className="api-settings-section" style={{ ...tabHidden('integrations'), borderTop: '1px solid #1e1e2e', paddingTop: '1rem' }}>
           <div className="api-settings-label">
             <span style={{ color: '#8b5cf6' }}>Cognee API Key</span>
             <a
@@ -580,7 +610,7 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         </div>
 
         {/* Langfuse — Pipeline Observability */}
-        <div className="api-settings-section" style={{ borderTop: '1px solid #1e1e2e', paddingTop: '1rem' }}>
+        <div className="api-settings-section" style={{ ...tabHidden('integrations'), borderTop: '1px solid #1e1e2e', paddingTop: '1rem' }}>
           <div className="api-settings-label">
             <span style={{ color: '#06b6d4' }}>Langfuse Public Key</span>
             <a
@@ -636,11 +666,15 @@ export default function ApiKeySettings({ isOpen, onClose }) {
           </div>
         </div>
 
-        <SearchProfilePanel />
+        <div style={tabHidden('search')}>
+          <SearchProfilePanel />
+        </div>
 
-        <ReleaseNotesPanel />
+        <div style={tabHidden('whatsnew')}>
+          <ReleaseNotesPanel />
+        </div>
 
-        <div className="api-settings-actions">
+        <div className="api-settings-actions" style={activeTab === 'models' || activeTab === 'integrations' ? undefined : { display: 'none' }}>
           <button
             className="api-settings-btn api-settings-btn-primary"
             onClick={handleSave}
@@ -661,6 +695,8 @@ export default function ApiKeySettings({ isOpen, onClose }) {
           >
             Cancel
           </button>
+        </div>
+          </div>
         </div>
       </div>
     </div>
