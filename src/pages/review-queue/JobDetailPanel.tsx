@@ -7,6 +7,7 @@ import CoverLetterPreview from './CoverLetterPreview'
 import FormMappingTable from './FormMappingTable'
 import ScreenshotComparison from './ScreenshotComparison'
 import ApprovalControls from './ApprovalControls'
+import WhyThisFits from '../../components/WhyThisFits'
 import { approveAndSubmit, runDocumentsForJob } from '../../services/agentOrchestrator'
 import * as gatekeeper from '../../agents/reviewGatekeeper'
 
@@ -151,6 +152,8 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
             </span>
           )}
         </div>
+
+        <WhyThisFits title={job?.title ?? ''} company={job?.company ?? ''} jd={job?.raw_jd ?? ''} accent={trackColor} />
       </div>
 
       {/* Tabs */}
