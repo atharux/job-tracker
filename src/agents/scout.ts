@@ -1,4 +1,5 @@
 import type { ScoutResult } from './types'
+import { loadSearchProfile } from '../config/searchProfile'
 
 // Fetchers produce results before verification tagging happens centrally in runScout().
 type UnverifiedScoutResult = Omit<ScoutResult, 'verified' | 'verificationSource'>
@@ -62,9 +63,21 @@ const ROLE_KEYWORDS = [
   'prompt engineer', 'ai designer',
 ]
 
-function matchesRole(text: string): boolean {
+// Scout's built-in keywords unioned with any the user added via their
+// SearchProfile (lowercased, de-duped). The default profile has no keywords,
+// so matching is unchanged until the user tunes their search.
+function activeRoleKeywords(): string[] {
+  try {
+    const extra = loadSearchProfile().keywords.map(k => k.toLowerCase().trim()).filter(Boolean)
+    return extra.length ? Array.from(new Set([...ROLE_KEYWORDS, ...extra])) : ROLE_KEYWORDS
+  } catch {
+    return ROLE_KEYWORDS
+  }
+}
+
+export function matchesRole(text: string): boolean {
   const lower = text.toLowerCase()
-  return ROLE_KEYWORDS.some(kw => lower.includes(kw))
+  return activeRoleKeywords().some(kw => lower.includes(kw))
 }
 
 function now(): string {
