@@ -92,8 +92,7 @@ export default function PipelineVisualization() {
   const [selected, setSelected]           = useState<string | null>(null)
   const [showAllSources, setShowAllSources] = useState(false)
   const [cogneeQuery, setCogneeQuery]     = useState('')
-  const [cogneeAnswer, setCogneeAnswer]   = useState('')
-  const [cogneeLinks, setCogneeLinks]     = useState<JobSearchLink[]>([])
+  const [cogneeMessages, setCogneeMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; links?: JobSearchLink[] }>>([])
   const [cogneeLoading, setCogneeLoading] = useState(false)
   const [scoutStatus, setScoutStatus]     = useState('')
   const [scouting, setScouting]           = useState(false)
@@ -128,21 +127,32 @@ export default function PipelineVisualization() {
   async function handleCogneeQuery(overrideQuery?: string) {
     const q = (overrideQuery ?? cogneeQuery).trim()
     if (!q || cogneeLoading) return
-    if (overrideQuery) setCogneeQuery(overrideQuery)
-    setCogneeLoading(true)
-    setCogneeAnswer('')
-    setCogneeLinks([])
 
-    let result = await cogneeSearch(q)
-    const cogneeUnavailable = !result || result.startsWith('⚠')
+    // Prior turns become context so follow-ups resolve ("what about the second one?").
+    // Bounded: last 6 turns, each truncated, to keep the prompt small.
+    const transcript = cogneeMessages
+      .slice(-6)
+      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content.slice(0, 300)}`)
+      .join('\n')
+    const contextualQuery = transcript
+      ? `Conversation so far:\n${transcript}\n\nFollow-up question: ${q}`
+      : q
+
+    setCogneeMessages(prev => [...prev, { role: 'user', content: q }])
+    setCogneeQuery('')
+    setCogneeLoading(true)
+
+    let answer = await cogneeSearch(contextualQuery)
+    let links: JobSearchLink[] = []
+    const cogneeUnavailable = !answer || answer.startsWith('⚠')
 
     if (cogneeUnavailable) {
-      const local = await localJobSearch(q)
-      result = local.answer || 'No results — add a job or run Scout first.'
-      setCogneeLinks(local.links)
+      const local = await localJobSearch(contextualQuery)
+      answer = local.answer || 'No results — add a job or run Scout first.'
+      links = local.links
     }
 
-    setCogneeAnswer(result)
+    setCogneeMessages(prev => [...prev, { role: 'assistant', content: answer, links }])
     setCogneeLoading(false)
   }
 
@@ -190,7 +200,7 @@ export default function PipelineVisualization() {
 
         {/* ── QUERY HERO ── */}
         <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: '8px', padding: '28px', marginBottom: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: cogneeAnswer ? '16px' : '20px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: cogneeMessages.length ? '16px' : '20px' }}>
             <input
               type="text"
               value={cogneeQuery}
@@ -225,44 +235,57 @@ export default function PipelineVisualization() {
             </button>
           </div>
 
-          {/* Answer */}
-          {cogneeAnswer && (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ background: `${PURPLE}08`, border: `1px solid ${PURPLE}20`, borderRadius: '6px', padding: '14px 16px', fontSize: '12px', color: TEXT1, lineHeight: 1.8, maxHeight: '260px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
-                {cogneeAnswer}
-              </div>
-              {cogneeLinks.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
-                  {cogneeLinks.map(link => (
-                    <div key={link.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: BG, border: `1px solid ${BORDER}`, borderRadius: '5px', padding: '9px 13px' }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '12px', color: TEXT1, fontFamily: 'Syne, sans-serif', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {link.title}
-                        </div>
-                        <div style={{ fontSize: '10px', color: TEXT2, marginTop: '2px' }}>
-                          {link.company} · {link.meta}
-                        </div>
-                      </div>
-                      {link.url ? (
-                        <a href={link.url} target="_blank" rel="noopener noreferrer"
-                          style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: link.source === 'pipeline' ? TEAL : PURPLE, border: `1px solid ${link.source === 'pipeline' ? TEAL : PURPLE}44`, borderRadius: '3px', padding: '3px 10px', textDecoration: 'none', letterSpacing: '1px', whiteSpace: 'nowrap' }}
-                        >OPEN ↗</a>
-                      ) : (
-                        <span style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: TEXT3, letterSpacing: '1px' }}>NO URL</span>
-                      )}
+          {/* Conversation thread */}
+          {cogneeMessages.length > 0 && (
+            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '460px', overflowY: 'auto' }}>
+              {cogneeMessages.map((m, i) => (
+                m.role === 'user' ? (
+                  <div key={i} style={{ alignSelf: 'flex-end', maxWidth: '85%', background: BG, border: `1px solid ${BORDER}`, borderRadius: '6px', padding: '9px 13px', fontSize: '12px', color: TEXT1, whiteSpace: 'pre-wrap' }}>
+                    {m.content}
+                  </div>
+                ) : (
+                  <div key={i}>
+                    <div style={{ background: `${PURPLE}08`, border: `1px solid ${PURPLE}20`, borderRadius: '6px', padding: '14px 16px', fontSize: '12px', color: TEXT1, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                      {m.content}
                     </div>
-                  ))}
-                </div>
+                    {m.links && m.links.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                        {m.links.map(link => (
+                          <div key={link.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: BG, border: `1px solid ${BORDER}`, borderRadius: '5px', padding: '9px 13px' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: '12px', color: TEXT1, fontFamily: 'Syne, sans-serif', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {link.title}
+                              </div>
+                              <div style={{ fontSize: '10px', color: TEXT2, marginTop: '2px' }}>
+                                {link.company} · {link.meta}
+                              </div>
+                            </div>
+                            {link.url ? (
+                              <a href={link.url} target="_blank" rel="noopener noreferrer"
+                                style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: link.source === 'pipeline' ? TEAL : PURPLE, border: `1px solid ${link.source === 'pipeline' ? TEAL : PURPLE}44`, borderRadius: '3px', padding: '3px 10px', textDecoration: 'none', letterSpacing: '1px', whiteSpace: 'nowrap' }}
+                              >OPEN ↗</a>
+                            ) : (
+                              <span style={{ flexShrink: 0, marginLeft: '12px', fontSize: '10px', color: TEXT3, letterSpacing: '1px' }}>NO URL</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              ))}
+              {cogneeLoading && (
+                <div style={{ alignSelf: 'flex-start', fontSize: '11px', color: TEXT3, fontFamily: 'Space Mono, monospace' }}>…thinking</div>
               )}
-              <button onClick={() => { setCogneeAnswer(''); setCogneeLinks([]); setCogneeQuery('') }}
-                style={{ marginTop: '10px', background: 'none', border: 'none', color: TEXT3, fontSize: '10px', cursor: 'pointer', fontFamily: 'Space Mono, monospace', padding: 0 }}>
-                ← clear
+              <button onClick={() => { setCogneeMessages([]); setCogneeQuery('') }}
+                style={{ alignSelf: 'flex-start', marginTop: '4px', background: 'none', border: 'none', color: TEXT3, fontSize: '10px', cursor: 'pointer', fontFamily: 'Space Mono, monospace', padding: 0 }}>
+                ← clear conversation
               </button>
             </div>
           )}
 
           {/* Presets */}
-          {!cogneeAnswer && (
+          {cogneeMessages.length === 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               {PRESET_GROUPS.map(({ label, queries }) => (
                 <div key={label}>
