@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Search, Save, RotateCcw } from 'lucide-react';
+import { Search, Save, RotateCcw, Sparkles } from 'lucide-react';
 import {
   loadSearchProfile,
   saveSearchProfile,
   resetSearchProfile,
   DEFAULT_SEARCH_PROFILE,
 } from '../config/searchProfile';
+import { refineSearchProfile } from '../agents/refineSearchProfile';
 
 // Array fields are edited as comma-separated text for a lightweight UI.
 const joinList = (arr) => (Array.isArray(arr) ? arr.join(', ') : '');
@@ -40,6 +41,8 @@ function fromForm(form) {
 export default function SearchProfilePanel() {
   const [form, setForm] = useState(() => toForm(loadSearchProfile()));
   const [saved, setSaved] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [refineError, setRefineError] = useState('');
 
   useEffect(() => {
     setForm(toForm(loadSearchProfile()));
@@ -61,6 +64,38 @@ export default function SearchProfilePanel() {
     resetSearchProfile();
     setForm(toForm(DEFAULT_SEARCH_PROFILE));
     setSaved(false);
+  };
+
+  // Compile the free-text intent into the structured fields via the model.
+  // Populates the fields for review — does NOT save. On failure, leaves the
+  // current field values intact and shows a non-blocking message.
+  const handleRefine = async () => {
+    const intent = form.intentText.trim();
+    if (!intent || refining) return;
+    const hasKey = !!(localStorage.getItem('openrouter_api_key') || localStorage.getItem('groq_api_key'));
+    if (!hasKey) {
+      setRefineError('Add an OpenRouter or Groq key in Settings to use Refine.');
+      return;
+    }
+    setRefineError('');
+    setRefining(true);
+    try {
+      const partial = await refineSearchProfile(intent);
+      setForm((f) => ({
+        ...f,
+        preferredTitles: partial.preferredTitles?.length ? joinList(partial.preferredTitles) : f.preferredTitles,
+        keywords: partial.keywords?.length ? joinList(partial.keywords) : f.keywords,
+        antiSignals: partial.antiSignals?.length ? joinList(partial.antiSignals) : f.antiSignals,
+        targetCompanyProfile: partial.targetCompanyProfile || f.targetCompanyProfile,
+        locations: partial.locations?.length ? joinList(partial.locations) : f.locations,
+        seniorityBand: partial.seniorityBand || f.seniorityBand,
+      }));
+      setSaved(false);
+    } catch {
+      setRefineError('Could not refine — check your key or try again.');
+    } finally {
+      setRefining(false);
+    }
   };
 
   const textField = (field, label, placeholder, hint) => (
@@ -107,6 +142,24 @@ export default function SearchProfilePanel() {
         onChange={update('intentText')}
         style={{ resize: 'vertical', fontFamily: "'Space Mono', monospace" }}
       />
+
+      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="api-settings-btn api-settings-btn-secondary"
+          onClick={handleRefine}
+          disabled={refining || !form.intentText.trim()}
+          style={{ fontSize: '11px', padding: '6px 12px' }}
+        >
+          <Sparkles size={14} />
+          {refining ? 'Refining…' : 'Refine with AI'}
+        </button>
+        <span className="api-settings-hint" style={{ margin: 0 }}>
+          {refineError
+            ? <span style={{ color: '#f59e0b' }}>{refineError}</span>
+            : 'Turns your intent into the fields below — review before saving.'}
+        </span>
+      </div>
 
       {textField('preferredTitles', 'Preferred titles', 'UX Engineer, Design Engineer, ...', 'Comma-separated.')}
       {textField('keywords', 'Keywords', 'ai engineer, founding engineer, ...', "Comma-separated. Added to Scout's built-in role keywords.")}
