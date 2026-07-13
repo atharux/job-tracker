@@ -88,7 +88,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
   const [syncResult, setSyncResult] = useState<{ updated: number } | null>(null)
 
   // Scouted-but-below-threshold jobs
-  const [scoutedJobs, setScoutedJobs] = useState<Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score: number | null; cv_track: string | null }>>([])
+  const [scoutedJobs, setScoutedJobs] = useState<Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score: number | null; cv_track: string | null; verdict: string | null; hard_cap_reason: string | null; verified: boolean }>>([])
   const [scoutedExpanded, setScoutedExpanded] = useState(true)
   const [forcingId, setForcingId] = useState<string | null>(null)
 
@@ -120,7 +120,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
         .order('classifier_score', { ascending: false }),
       supabase
         .from('jobs')
-        .select('id, title, company, location, url, created_at, classifier_score, cv_track')
+        .select('id, title, company, location, url, created_at, classifier_score, cv_track, verdict, hard_cap_reason, verified')
         .order('created_at', { ascending: false })
         .limit(500),
     ])
@@ -134,7 +134,7 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
       return
     }
 
-    const allJobs = (scoutedRes.data ?? []) as Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score?: number | null; cv_track?: string | null }>
+    const allJobs = (scoutedRes.data ?? []) as Array<{ id: string; title: string; company: string; location: string | null; url: string | null; classifier_score?: number | null; cv_track?: string | null; verdict?: string | null; hard_cap_reason?: string | null; verified?: boolean }>
     const queuedIds = new Set((queueRes.data ?? []).map((r: ReviewQueueRecord) => r.job_id))
     setScoutedJobs(
       allJobs
@@ -147,6 +147,9 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
           url: j.url,
           classifier_score: j.classifier_score ?? null,
           cv_track: j.cv_track ?? null,
+          verdict: j.verdict ?? null,
+          hard_cap_reason: j.hard_cap_reason ?? null,
+          verified: j.verified ?? false,
         }))
     )
 
@@ -755,6 +758,25 @@ export default function ReviewQueue({ onOpenSettings }: Props) {
                 }}>
                   {job.classifier_score != null ? job.classifier_score.toFixed(1) : '—'}
                 </span>
+                {!job.verified ? (
+                  <span
+                    title="Not confirmed live on the company's own ATS/careers page"
+                    style={{ fontFamily: 'Space Mono, monospace', fontSize: '0.55rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '3px', color: '#64748b', border: '1px solid #334155', whiteSpace: 'nowrap' }}
+                  >
+                    UNVERIFIED
+                  </span>
+                ) : job.verdict ? (
+                  <span
+                    title={job.hard_cap_reason ?? undefined}
+                    style={{
+                      fontFamily: 'Space Mono, monospace', fontSize: '0.55rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap',
+                      color: job.verdict === 'apply_first' ? '#06b6d4' : job.verdict === 'skipped' ? '#f87171' : '#94a3b8',
+                      border: `1px solid ${job.verdict === 'apply_first' ? '#06b6d4' : job.verdict === 'skipped' ? '#f87171' : '#334155'}`,
+                    }}
+                  >
+                    {job.verdict === 'apply_first' ? 'APPLY FIRST' : job.verdict === 'skipped' ? 'SKIPPED' : 'WORTH A LOOK'}
+                  </span>
+                ) : null}
                 <span style={{ flex: 1, fontSize: '0.8rem', color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {job.title} — {job.company}
                 </span>

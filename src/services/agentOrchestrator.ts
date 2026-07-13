@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient'
-import { runScout } from '../agents/scout'
-import { classifyBatch } from '../agents/classifier'
+import { runScout, fetchAtsTitlesForCompany, CURATED_ATS_COMPANIES, normalizeCompanyName } from '../agents/scout'
+import type { AtsSource } from '../agents/scout'
+import { classifyBatch, SCORE_THRESHOLD } from '../agents/classifier'
 import { callAI } from '../agents/openRouterClient'
 import { hasCogneeConfig, cogneeRemember, buildJobMemory } from '../agents/cogneeClient'
 import { selectCV } from '../agents/cvSelector'
@@ -137,7 +138,11 @@ async function upsertJob(result: ScoutResult, userId: string): Promise<string | 
         source: result.source,
         raw_jd: result.raw_jd,
         scraped_at: result.scraped_at,
-        status: 'discovered',
+        // Unverified listings (no confirmed live source-of-truth match) stop here —
+        // they never reach the classifier or review queue. See Scout verification gate.
+        status: result.verified ? 'discovered' : 'unverified',
+        verified: result.verified,
+        verification_source: result.verificationSource,
         updated_at: new Date().toISOString(),
         user_id: userId,
       },
@@ -175,6 +180,65 @@ async function loadLatestArtifacts(jobId: string): Promise<{ resume: TailoredRes
 }
 
 // ---------------------------------------------------------------------------
+// Liveness re-check (Scout rule: roles that 404 or fill are auto-archived,
+// never re-surfaced — getSeenJobId already blocks re-surfacing once a job
+// row exists, so archiving here is sufficient).
+// ---------------------------------------------------------------------------
+
+function parseAtsSourceFromVerification(verificationSource: string | null): AtsSource | null {
+  if (!verificationSource) return null
+  const direct = verificationSource.match(/^(\w+)-direct$/)
+  const crossVerified = verificationSource.match(/^cross-verified:(\w+)$/)
+  const source = direct?.[1] ?? crossVerified?.[1]
+  return (['ashby', 'greenhouse', 'smartrecruiters', 'lever', 'recruitee'] as const).includes(source as AtsSource)
+    ? (source as AtsSource)
+    : null
+}
+
+interface PendingAtsQueueRow {
+  id: string
+  job_id: string
+  jobs: { id: string; title: string; company: string; url: string; verification_source: string | null } | null
+}
+
+async function recheckPendingAtsJobs(userId: string): Promise<void> {
+  const { data } = await supabase
+    .from('application_review_queue')
+    .select('id, job_id, jobs!inner(id, title, company, url, verification_source, user_id)')
+    .eq('status', 'pending_review')
+    .eq('jobs.user_id', userId)
+
+  const rows = (data ?? []) as unknown as PendingAtsQueueRow[]
+  const atsRows = rows.filter(r => r.jobs && parseAtsSourceFromVerification(r.jobs.verification_source))
+  if (atsRows.length === 0) return
+
+  // Group by curated company so each ATS endpoint is only re-fetched once.
+  const groups = new Map<string, { source: AtsSource; slug: string; apiBase?: string; rows: PendingAtsQueueRow[] }>()
+  for (const row of atsRows) {
+    const source = parseAtsSourceFromVerification(row.jobs!.verification_source)!
+    const curated = CURATED_ATS_COMPANIES.find(
+      c => c.source === source && normalizeCompanyName(c.name) === normalizeCompanyName(row.jobs!.company)
+    )
+    if (!curated) continue
+    const key = `${curated.source}:${curated.slug}`
+    if (!groups.has(key)) groups.set(key, { source: curated.source, slug: curated.slug, apiBase: curated.apiBase, rows: [] })
+    groups.get(key)!.rows.push(row)
+  }
+
+  await Promise.allSettled(
+    Array.from(groups.values()).map(async ({ source, slug, apiBase, rows: groupRows }) => {
+      const liveTitles = new Set((await fetchAtsTitlesForCompany(source, slug, apiBase)).map(t => t.toLowerCase().trim()))
+      for (const row of groupRows) {
+        const stillLive = liveTitles.has(row.jobs!.title.toLowerCase().trim())
+        if (stillLive) continue
+        await supabase.from('application_review_queue').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', row.id)
+        await supabase.from('jobs').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', row.job_id)
+      }
+    })
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Pipeline steps
 // ---------------------------------------------------------------------------
 
@@ -184,7 +248,7 @@ async function runScoutStep(userId: string, onStep?: StepCallback): Promise<Arra
   onStep?.('scout', 'running')
 
   try {
-    const results = await runScout()
+    const { results, suggestedCompanies } = await runScout()
 
     // Collapse duplicate URLs within this single scout batch first. upsertJob
     // runs concurrently below, so two identical URLs would both pass the 7-day
@@ -197,18 +261,27 @@ async function runScoutStep(userId: string, onStep?: StepCallback): Promise<Arra
       return true
     })
 
-    // upsertJob returns null for jobs seen within the last 7 days — filter those out
+    // upsertJob returns null for jobs seen within the last 7 days — filter those out.
+    // Unverified results are still persisted (status: 'unverified') for audit purposes,
+    // but never make it into the array returned here, so they never reach the classifier.
     const withIds = (
       await Promise.all(
         uniqueResults.map(async (r) => {
           const id = await upsertJob(r, userId)
-          if (!id) return null
+          if (!id || !r.verified) return null
           return { ...r, id }
         })
       )
     ).filter((r): r is ScoutResult & { id: string } => r !== null)
 
-    await completeRun(runId, { total: results.length, fresh: withIds.length }, undefined, Date.now() - t0)
+    const unverifiedCount = uniqueResults.filter(r => !r.verified).length
+
+    await completeRun(
+      runId,
+      { total: results.length, fresh: withIds.length, unverified: unverifiedCount, suggestedCompanies },
+      undefined,
+      Date.now() - t0
+    )
     onStep?.('scout', 'success')
     return withIds
   } catch (err) {
@@ -216,6 +289,59 @@ async function runScoutStep(userId: string, onStep?: StepCallback): Promise<Arra
     onStep?.('scout', 'failed')
     throw err
   }
+}
+
+// Classifier rule: never re-score an identical posting. Match on company +
+// title + posted date (calendar day) against everything already scored for
+// this user, and reuse the prior verdict instead of calling the LLM again.
+async function findPriorClassifications(
+  jobs: Array<ScoutResult & { id: string }>,
+  userId: string
+): Promise<Map<string, ClassifierResult>> {
+  const jobIds = new Set(jobs.map(j => j.id))
+  const { data: priorRows } = await supabase
+    .from('jobs')
+    .select('id, title, company, scraped_at, classifier_score, cv_track, industry, verdict, hard_cap_reason')
+    .eq('user_id', userId)
+    .not('classifier_score', 'is', null)
+
+  type PriorRow = {
+    id: string; title: string; company: string; scraped_at: string | null
+    classifier_score: number | null; cv_track: string | null; industry: string | null
+    verdict: string | null; hard_cap_reason: string | null
+  }
+
+  const dedupKey = (title: string, company: string, scrapedAt: string | null) =>
+    `${company.trim().toLowerCase()}|${title.trim().toLowerCase()}|${scrapedAt?.slice(0, 10) ?? ''}`
+
+  const priorByKey = new Map<string, PriorRow>()
+  for (const row of (priorRows ?? []) as PriorRow[]) {
+    if (jobIds.has(row.id)) continue // don't match a job against itself within the same batch
+    const key = dedupKey(row.title, row.company, row.scraped_at)
+    if (!priorByKey.has(key)) priorByKey.set(key, row)
+  }
+
+  const reused = new Map<string, ClassifierResult>()
+  for (const job of jobs) {
+    const prior = priorByKey.get(dedupKey(job.title, job.company, job.scraped_at))
+    if (!prior) continue
+    const score = prior.classifier_score ?? 0
+    const verdict = (prior.verdict ?? 'worth_a_look') as ClassifierResult['verdict']
+    reused.set(job.id, {
+      job_id: job.id,
+      score,
+      cv_track: (prior.cv_track ?? 'ux') as ClassifierResult['cv_track'],
+      industry: prior.industry ?? 'Other',
+      score_rationale: 'Reused from prior identical posting (dedup) — see original job for full rationale.',
+      key_matches: [],
+      red_flags: [],
+      passedThreshold: verdict !== 'skipped' && score >= SCORE_THRESHOLD,
+      verdict,
+      hard_cap_reason: prior.hard_cap_reason,
+      bonus_count: 0,
+    })
+  }
+  return reused
 }
 
 async function runClassifyStep(
@@ -228,7 +354,10 @@ async function runClassifyStep(
   onStep?.('classifier', 'running')
 
   try {
-    const results = await classifyBatch(jobs)
+    const reused = await findPriorClassifications(jobs, userId)
+    const toClassify = jobs.filter(j => !reused.has(j.id))
+    const freshResults = toClassify.length > 0 ? await classifyBatch(toClassify) : []
+    const results = [...reused.values(), ...freshResults]
 
     for (const job of jobs) {
       const classification = results.find((r) => r.job_id === job.id)
@@ -380,6 +509,10 @@ export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]
 
   const userId = await getCurrentUserId()
 
+  // Re-check ATS-sourced roles already pending review — auto-archive anything
+  // that 404s or was filled since it was queued, before scouting new roles.
+  await recheckPendingAtsJobs(userId)
+
   // Scout — no LLM calls
   const jobs = await runScoutStep(userId, onStep)
 
@@ -394,7 +527,13 @@ export async function runScoutOnly(onStep?: StepCallback): Promise<ScoutResult[]
   for (const c of classifications) {
     await supabase
       .from('jobs')
-      .update({ classifier_score: c.score, cv_track: c.cv_track, updated_at: new Date().toISOString() })
+      .update({
+        classifier_score: c.score,
+        cv_track: c.cv_track,
+        verdict: c.verdict,
+        hard_cap_reason: c.hard_cap_reason,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', c.job_id)
   }
   // Write industry separately — non-critical, silently ignored if column missing
@@ -447,6 +586,10 @@ export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
 
   const userId = await getCurrentUserId()
 
+  // Re-check ATS-sourced roles already pending review — auto-archive anything
+  // that 404s or was filled since it was queued, before scouting new roles.
+  await recheckPendingAtsJobs(userId)
+
   // Scout — no LLM
   const jobs = await runScoutStep(userId, onStep)
 
@@ -461,7 +604,13 @@ export async function runFullPipeline(onStep?: StepCallback): Promise<void> {
   for (const c of classifications) {
     await supabase
       .from('jobs')
-      .update({ classifier_score: c.score, cv_track: c.cv_track, updated_at: new Date().toISOString() })
+      .update({
+        classifier_score: c.score,
+        cv_track: c.cv_track,
+        verdict: c.verdict,
+        hard_cap_reason: c.hard_cap_reason,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', c.job_id)
   }
   // Write industry separately — non-critical
@@ -518,6 +667,9 @@ export async function runDocumentsForJob(jobId: string): Promise<void> {
     key_matches: [],
     red_flags: [],
     passedThreshold: true,
+    verdict: 'worth_a_look',
+    hard_cap_reason: null,
+    bonus_count: 0,
   }
 
   await runDocumentStep(jobId, classification, userId)
@@ -583,6 +735,8 @@ export async function runManualJob(
       raw_jd: rawJd || '',
       scraped_at: new Date().toISOString(),
       status: 'discovered',
+      verified: true,
+      verification_source: 'manual',
       updated_at: new Date().toISOString(),
       user_id: userId,
     })
@@ -601,6 +755,9 @@ export async function runManualJob(
     key_matches: [],
     red_flags: [],
     passedThreshold: true,
+    verdict: 'worth_a_look',
+    hard_cap_reason: null,
+    bonus_count: 0,
   }
 
   // Classify — 10s timeout, degrade gracefully on rate limit or slow response
@@ -619,6 +776,8 @@ export async function runManualJob(
         source: 'manual',
         raw_jd: rawJd || '',
         scraped_at: new Date().toISOString(),
+        verified: true,
+        verificationSource: 'manual',
       }]),
       timeout,
     ])

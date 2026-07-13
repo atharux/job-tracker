@@ -1,5 +1,8 @@
 import type { ScoutResult } from './types'
 
+// Fetchers produce results before verification tagging happens centrally in runScout().
+type UnverifiedScoutResult = Omit<ScoutResult, 'verified' | 'verificationSource'>
+
 // ── Edge Function proxy (CORS-blocked sources) ─────────────────────────────────
 // Fetches from Himalayas, WTTJ, TheHub, Workable, Personio via Supabase Edge Function.
 // Deploy: supabase functions deploy job-scout-proxy
@@ -7,7 +10,7 @@ import type { ScoutResult } from './types'
 const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/job-scout-proxy`
 const PROXY_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-async function fetchViaProxy(): Promise<ScoutResult[]> {
+async function fetchViaProxy(): Promise<UnverifiedScoutResult[]> {
   try {
     const res = await fetch(PROXY_URL, {
       method: 'POST',
@@ -114,7 +117,7 @@ interface ArbeitnowJob {
   created_at?: string
 }
 
-async function fetchArbeitnow(): Promise<ScoutResult[]> {
+async function fetchArbeitnow(): Promise<UnverifiedScoutResult[]> {
   // Fetch 20 pages in parallel — covers ~500 jobs vs the old sequential 6 pages (~150).
   // Pages beyond the last real page return empty data arrays, which we skip gracefully.
   const PAGE_COUNT = 20
@@ -127,7 +130,7 @@ async function fetchArbeitnow(): Promise<ScoutResult[]> {
     )
   )
 
-  const results: ScoutResult[] = []
+  const results: UnverifiedScoutResult[] = []
   const seen = new Set<string>()
 
   for (const page of pages) {
@@ -164,9 +167,9 @@ interface RemotiveJob {
   publication_date: string
 }
 
-async function fetchRemotive(): Promise<ScoutResult[]> {
+async function fetchRemotive(): Promise<UnverifiedScoutResult[]> {
   const categories = ['Design', 'Product', 'Marketing', 'Software Development']
-  const results: ScoutResult[] = []
+  const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
     categories.map(async category => {
@@ -202,7 +205,7 @@ function parseGTJTitle(raw: string): { role: string; company: string } {
     : { role: raw, company: '' }
 }
 
-async function fetchGermanTechJobs(): Promise<ScoutResult[]> {
+async function fetchGermanTechJobs(): Promise<UnverifiedScoutResult[]> {
   const res = await fetch('https://germantechjobs.de/rss')
   if (!res.ok) return []
   const xml = await res.text()
@@ -245,9 +248,9 @@ const ASHBY_COMPANIES: Array<{ slug: string; name: string }> = [
   { slug: 'almedia',  name: 'Almedia' },
 ]
 
-async function fetchAshby(): Promise<ScoutResult[]> {
+async function fetchAshby(): Promise<UnverifiedScoutResult[]> {
   if (ASHBY_COMPANIES.length === 0) return []
-  const results: ScoutResult[] = []
+  const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
     ASHBY_COMPANIES.map(async ({ slug, name }) => {
@@ -294,8 +297,8 @@ const GREENHOUSE_COMPANIES = [
   { slug: 'moss',           name: 'Moss' },
 ]
 
-async function fetchGreenhouse(): Promise<ScoutResult[]> {
-  const results: ScoutResult[] = []
+async function fetchGreenhouse(): Promise<UnverifiedScoutResult[]> {
+  const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
     GREENHOUSE_COMPANIES.map(async ({ slug, name }) => {
@@ -343,8 +346,8 @@ const SMARTRECRUITERS_COMPANIES = [
   { slug: 'Taxfix',       name: 'Taxfix' },
 ]
 
-async function fetchSmartRecruiters(): Promise<ScoutResult[]> {
-  const results: ScoutResult[] = []
+async function fetchSmartRecruiters(): Promise<UnverifiedScoutResult[]> {
+  const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
     SMARTRECRUITERS_COMPANIES.map(async ({ slug, name }) => {
@@ -417,9 +420,9 @@ const LEVER_COMPANIES: Array<{ slug: string; name: string; apiBase?: string }> =
   { slug: 'weloglobal',     name: 'Welo Data' },
 ]
 
-async function fetchLever(): Promise<ScoutResult[]> {
+async function fetchLever(): Promise<UnverifiedScoutResult[]> {
   if (LEVER_COMPANIES.length === 0) return []
-  const results: ScoutResult[] = []
+  const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
     LEVER_COMPANIES.map(async ({ slug, name, apiBase }) => {
@@ -449,12 +452,12 @@ async function fetchLever(): Promise<ScoutResult[]> {
 // Design and Product category feeds. May be CORS-blocked in some browsers —
 // falls back gracefully if so (proxy covers it via edge function).
 
-async function fetchWeWorkRemotely(): Promise<ScoutResult[]> {
+async function fetchWeWorkRemotely(): Promise<UnverifiedScoutResult[]> {
   const feeds = [
     'https://weworkremotely.com/categories/remote-design-jobs.rss',
     'https://weworkremotely.com/categories/remote-product-jobs.rss',
   ]
-  const results: ScoutResult[] = []
+  const results: UnverifiedScoutResult[] = []
   const seen = new Set<string>()
 
   await Promise.allSettled(feeds.map(async feedUrl => {
@@ -489,12 +492,12 @@ async function fetchWeWorkRemotely(): Promise<ScoutResult[]> {
 // ── Jobicy RSS ─────────────────────────────────────────────────────────────────
 // Free remote jobs RSS — no key required.
 
-async function fetchJobicy(): Promise<ScoutResult[]> {
+async function fetchJobicy(): Promise<UnverifiedScoutResult[]> {
   const feeds = [
     'https://jobicy.com/feed/job_feed?job_categories=design-multimedia',
     'https://jobicy.com/feed/job_feed?job_categories=management',
   ]
-  const results: ScoutResult[] = []
+  const results: UnverifiedScoutResult[] = []
   const seen = new Set<string>()
 
   await Promise.allSettled(feeds.map(async feedUrl => {
@@ -539,8 +542,8 @@ const RECRUITEE_COMPANIES = [
   { slug: 'airapps',    name: 'Air Apps' },
 ]
 
-async function fetchRecruitee(): Promise<ScoutResult[]> {
-  const results: ScoutResult[] = []
+async function fetchRecruitee(): Promise<UnverifiedScoutResult[]> {
+  const results: UnverifiedScoutResult[] = []
 
   await Promise.allSettled(
     RECRUITEE_COMPANIES.map(async ({ slug, name }) => {
@@ -581,9 +584,9 @@ interface RemoteOKJob {
   legal?: string
 }
 
-async function fetchRemoteOK(): Promise<ScoutResult[]> {
+async function fetchRemoteOK(): Promise<UnverifiedScoutResult[]> {
   const tags = ['design', 'product', 'ux', 'devrel']
-  const results: ScoutResult[] = []
+  const results: UnverifiedScoutResult[] = []
   const seen = new Set<string>()
 
   await Promise.allSettled(tags.map(async tag => {
@@ -618,7 +621,7 @@ async function fetchRemoteOK(): Promise<ScoutResult[]> {
 // ── Berlin Startup Jobs RSS ────────────────────────────────────────────────────
 // Curated Berlin-specific board — great for local on-site/hybrid roles.
 
-async function fetchBerlinStartupJobs(): Promise<ScoutResult[]> {
+async function fetchBerlinStartupJobs(): Promise<UnverifiedScoutResult[]> {
   try {
     const res = await fetch('https://berlinstartupjobs.com/feed/')
     if (!res.ok) return []
@@ -641,7 +644,7 @@ async function fetchBerlinStartupJobs(): Promise<ScoutResult[]> {
 
 // ── EuropeRemotely RSS ─────────────────────────────────────────────────────────
 
-async function fetchEuropeRemotely(): Promise<ScoutResult[]> {
+async function fetchEuropeRemotely(): Promise<UnverifiedScoutResult[]> {
   try {
     const res = await fetch('https://europeremotely.com/feed/')
     if (!res.ok) return []
@@ -662,37 +665,170 @@ async function fetchEuropeRemotely(): Promise<ScoutResult[]> {
   }
 }
 
+// ── Verification (ATS-first rule) ────────────────────────────────────────────
+// Direct-ATS fetchers are the company's own source of truth — verified on arrival.
+// Aggregator fetchers are cross-checked against the curated ATS company lists
+// above; a match confirms the specific title is still live on that company's
+// own endpoint. No match = unverified, and the job never reaches the classifier.
+
+type AtsSource = 'ashby' | 'greenhouse' | 'smartrecruiters' | 'lever' | 'recruitee'
+
+const CURATED_ATS_COMPANIES: Array<{ name: string; slug: string; source: AtsSource; apiBase?: string }> = [
+  ...ASHBY_COMPANIES.map(c => ({ ...c, source: 'ashby' as const })),
+  ...GREENHOUSE_COMPANIES.map(c => ({ ...c, source: 'greenhouse' as const })),
+  ...SMARTRECRUITERS_COMPANIES.map(c => ({ ...c, source: 'smartrecruiters' as const })),
+  ...LEVER_COMPANIES.map(c => ({ ...c, source: 'lever' as const })),
+  ...RECRUITEE_COMPANIES.map(c => ({ ...c, source: 'recruitee' as const })),
+]
+
+function normalizeCompanyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(gmbh|inc|ltd|llc|group|global|corp|co)\b/g, '')
+    .trim()
+}
+
+async function fetchAtsTitlesForCompany(source: AtsSource, slug: string, apiBase?: string): Promise<string[]> {
+  try {
+    switch (source) {
+      case 'ashby': {
+        const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`)
+        if (!res.ok) return []
+        const data = await res.json() as { jobs?: { title: string }[] }
+        return (data.jobs ?? []).map(j => j.title)
+      }
+      case 'greenhouse': {
+        const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`)
+        if (!res.ok) return []
+        const data = await res.json() as { jobs?: { title: string }[] }
+        return (data.jobs ?? []).map(j => j.title)
+      }
+      case 'smartrecruiters': {
+        const res = await fetch(`https://api.smartrecruiters.com/v1/companies/${slug}/postings?limit=100`)
+        if (!res.ok) return []
+        const data = await res.json() as { content?: { name: string }[] }
+        return (data.content ?? []).map(j => j.name)
+      }
+      case 'lever': {
+        const base = apiBase ?? 'https://api.lever.co'
+        const res = await fetch(`${base}/v0/postings/${slug}?mode=json`)
+        if (!res.ok) return []
+        const data = await res.json() as { text: string }[]
+        return data.map(j => j.text)
+      }
+      case 'recruitee': {
+        const res = await fetch(`https://${slug}.recruitee.com/api/offers/`)
+        if (!res.ok) return []
+        const data = await res.json() as { offers?: { title: string }[] }
+        return (data.offers ?? []).map(j => j.title)
+      }
+    }
+  } catch {
+    return []
+  }
+}
+
+async function crossVerifyAggregatorResults(results: UnverifiedScoutResult[]): Promise<ScoutResult[]> {
+  const curatedByResult = results.map(result => ({
+    result,
+    curated: CURATED_ATS_COMPANIES.find(c => normalizeCompanyName(c.name) === normalizeCompanyName(result.company)),
+  }))
+
+  const distinctCurated = Array.from(
+    new Map(
+      curatedByResult
+        .filter((m): m is { result: UnverifiedScoutResult; curated: NonNullable<typeof m.curated> } => !!m.curated)
+        .map(m => [`${m.curated.source}:${m.curated.slug}`, m.curated])
+    ).values()
+  )
+
+  const titleSets = new Map<string, Set<string>>()
+  await Promise.allSettled(
+    distinctCurated.map(async c => {
+      const titles = await fetchAtsTitlesForCompany(c.source, c.slug, c.apiBase)
+      titleSets.set(`${c.source}:${c.slug}`, new Set(titles.map(t => t.toLowerCase().trim())))
+    })
+  )
+
+  return curatedByResult.map(({ result, curated }) => {
+    if (!curated) return { ...result, verified: false, verificationSource: null }
+    const titles = titleSets.get(`${curated.source}:${curated.slug}`) ?? new Set()
+    const isLive = titles.has(result.title.toLowerCase().trim())
+    return {
+      ...result,
+      verified: isLive,
+      verificationSource: isLive ? `cross-verified:${curated.source}` : null,
+    }
+  })
+}
+
 // ── Main export ────────────────────────────────────────────────────────────────
 
-export async function runScout(): Promise<ScoutResult[]> {
-  const settled = await Promise.allSettled([
-    // Direct (CORS-enabled from browser)
-    fetchArbeitnow(),
-    fetchRemotive(),
-    fetchGermanTechJobs(),
-    fetchAshby(),
-    fetchGreenhouse(),
-    fetchSmartRecruiters(),
-    fetchLever(),
-    fetchRecruitee(),
-    fetchWeWorkRemotely(),
-    fetchJobicy(),
-    fetchRemoteOK(),
-    fetchBerlinStartupJobs(),
-    fetchEuropeRemotely(),
-    // Proxied via Supabase Edge Function (CORS-blocked sources)
-    fetchViaProxy(),
+const ATS_DIRECT_FETCHERS: Array<[AtsSource, () => Promise<UnverifiedScoutResult[]>]> = [
+  ['ashby', fetchAshby],
+  ['greenhouse', fetchGreenhouse],
+  ['smartrecruiters', fetchSmartRecruiters],
+  ['lever', fetchLever],
+  ['recruitee', fetchRecruitee],
+]
+
+const AGGREGATOR_FETCHERS: Array<() => Promise<UnverifiedScoutResult[]>> = [
+  fetchArbeitnow,
+  fetchRemotive,
+  fetchGermanTechJobs,
+  fetchWeWorkRemotely,
+  fetchJobicy,
+  fetchRemoteOK,
+  fetchBerlinStartupJobs,
+  fetchEuropeRemotely,
+  // Proxied via Supabase Edge Function (CORS-blocked sources)
+  fetchViaProxy,
+]
+
+export interface ScoutRunResult {
+  results: ScoutResult[]
+  suggestedCompanies: string[]
+}
+
+export async function runScout(): Promise<ScoutRunResult> {
+  const [atsSettled, aggregatorSettled] = await Promise.all([
+    Promise.allSettled(ATS_DIRECT_FETCHERS.map(([, fetcher]) => fetcher())),
+    Promise.allSettled(AGGREGATOR_FETCHERS.map(fetcher => fetcher())),
   ])
 
-  const all: ScoutResult[] = settled.flatMap(r =>
+  const atsResults: ScoutResult[] = atsSettled.flatMap((r, i) => {
+    if (r.status !== 'fulfilled') return []
+    const [source] = ATS_DIRECT_FETCHERS[i]
+    return r.value.map(item => ({ ...item, verified: true, verificationSource: `${source}-direct` }))
+  })
+
+  const aggregatorRaw: UnverifiedScoutResult[] = aggregatorSettled.flatMap(r =>
     r.status === 'fulfilled' ? r.value : []
   )
+  const aggregatorResults = await crossVerifyAggregatorResults(aggregatorRaw)
 
   // Deduplicate by URL
   const seen = new Set<string>()
-  return all.filter(item => {
+  const deduped = [...atsResults, ...aggregatorResults].filter(item => {
     if (!item.url || seen.has(item.url)) return false
     seen.add(item.url)
     return true
   })
+
+  // Watchlist growth — aggregator companies that couldn't be cross-verified and
+  // aren't already on a curated ATS list. Logged by the caller, not auto-added.
+  const curatedNames = new Set(CURATED_ATS_COMPANIES.map(c => normalizeCompanyName(c.name)))
+  const suggestedCompanies = Array.from(
+    new Set(
+      deduped
+        .filter(item => !item.verified && item.company.trim() && !curatedNames.has(normalizeCompanyName(item.company)))
+        .map(item => item.company.trim())
+    )
+  )
+
+  return { results: deduped, suggestedCompanies }
 }
+
+export { fetchAtsTitlesForCompany, CURATED_ATS_COMPANIES, normalizeCompanyName }
+export type { AtsSource }

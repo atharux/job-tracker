@@ -72,27 +72,6 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
 
     setArtifacts(fresh)
     setLoadingArtifacts(false)
-
-    // Auto-generate if no documents exist yet and API keys are present.
-    const hasAny = fresh.tailored || fresh.letter || fresh.mapping || fresh.screenshots
-    const hasKey = !!(localStorage.getItem('openrouter_api_key') || localStorage.getItem('groq_api_key'))
-    if (!hasAny && hasKey) {
-      setGeneratingDocs(true)
-      setDocError(null)
-      runDocumentsForJob(record.job_id)
-        .then(() => loadArtifacts())
-        .catch(err => {
-          const msg = err instanceof Error ? err.message : 'Failed to generate documents'
-          const isCvMissing = msg.includes('CV version not found')
-          setDocError(isCvMissing
-            ? `${msg} — run: npx tsx scripts/importResume.ts`
-            : msg
-          )
-        })
-        .finally(() => setGeneratingDocs(false))
-    } else if (!hasAny && !hasKey) {
-      setDocError('No API key configured. Open Settings (⚙) and add an OpenRouter or Groq key to generate documents.')
-    }
   }
 
   async function handleApprove(jobId: string, notes?: string) {
@@ -117,18 +96,26 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
   }
 
   async function handleRunDocuments(jobId: string) {
+    const hasKey = !!(localStorage.getItem('openrouter_api_key') || localStorage.getItem('groq_api_key'))
+    if (!hasKey) {
+      setDocError('No API key configured. Open Settings (⚙) and add an OpenRouter or Groq key to generate documents.')
+      return
+    }
     setDocError(null)
     setGeneratingDocs(true)
     try {
       await runDocumentsForJob(jobId)
       await loadArtifacts()
     } catch (err) {
-      setDocError(err instanceof Error ? err.message : 'Failed to generate documents')
+      const msg = err instanceof Error ? err.message : 'Failed to generate documents'
+      const isCvMissing = msg.includes('CV version not found')
+      setDocError(isCvMissing ? `${msg} — run: npx tsx scripts/importResume.ts` : msg)
     } finally {
       setGeneratingDocs(false)
     }
   }
 
+  const hasDocs = !!(artifacts.tailored || artifacts.letter || artifacts.mapping || artifacts.screenshots)
   const job = record.job
   const trackColor = record.cv_track === 'ux' ? '#06b6d4'
     : record.cv_track === 'pm' ? '#8b5cf6'
@@ -212,6 +199,28 @@ export default function JobDetailPanel({ record, onStatusChange }: Props) {
         {loadingArtifacts || generatingDocs ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#475569', fontFamily: 'Space Mono, monospace', fontSize: '0.75rem' }}>
             {generatingDocs ? '⚙ GENERATING DOCUMENTS...' : 'LOADING ARTIFACTS...'}
+          </div>
+        ) : !hasDocs ? (
+          <div style={{ padding: '2.5rem', textAlign: 'center' }}>
+            <p style={{ color: '#475569', fontFamily: 'Space Mono, monospace', fontSize: '0.75rem', marginBottom: '1rem' }}>
+              NO DOCUMENTS GENERATED YET
+            </p>
+            <button
+              onClick={() => handleRunDocuments(record.job_id)}
+              style={{
+                padding: '0.5rem 1.25rem',
+                background: trackColor,
+                border: 'none',
+                borderRadius: '3px',
+                color: '#000',
+                cursor: 'pointer',
+                fontFamily: 'Space Mono, monospace',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+              }}
+            >
+              GENERATE DOCUMENTS
+            </button>
           </div>
         ) : (
           <>

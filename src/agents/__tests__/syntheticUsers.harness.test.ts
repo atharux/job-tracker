@@ -111,6 +111,9 @@ vi.mock('../../supabaseClient', () => {
     in() {
       return this
     }
+    not() {
+      return this
+    }
     order() {
       return this
     }
@@ -174,7 +177,7 @@ vi.mock('../../supabaseClient', () => {
 // ---------------------------------------------------------------------------
 // Agent module doubles. The orchestrator's real code runs; agents are stubbed.
 // ---------------------------------------------------------------------------
-vi.mock('../scout', () => ({ runScout: vi.fn(async () => H.currentJobs) }))
+vi.mock('../scout', () => ({ runScout: vi.fn(async () => ({ results: H.currentJobs, suggestedCompanies: [] })) }))
 
 vi.mock('../classifier', () => ({
   classifyBatch: vi.fn(async (jobs: Array<ScoutResult & { id: string }>): Promise<ClassifierResult[]> =>
@@ -182,7 +185,11 @@ vi.mock('../classifier', () => ({
       const track = H.trackByUrl.get(j.url) ?? 'ux'
       H.classifiedTrack.set(j.id, track)
       H.m.track[track] = (H.m.track[track] ?? 0) + 1
-      return { job_id: j.id, score: 7.5, cv_track: track, score_rationale: 'synthetic', key_matches: [], red_flags: [] }
+      return {
+        job_id: j.id, score: 7.5, cv_track: track, industry: 'Other',
+        score_rationale: 'synthetic', key_matches: [], red_flags: [],
+        passedThreshold: true, verdict: 'worth_a_look', hard_cap_reason: null, bonus_count: 0,
+      }
     })
   ),
 }))
@@ -276,6 +283,8 @@ function buildUser(i: number): { userId: string; jobs: ScoutResult[]; rerun: boo
     source: 'arbeitnow',
     raw_jd,
     scraped_at: now,
+    verified: true,
+    verificationSource: 'arbeitnow-direct',
   }
   // Two identical URLs in the SAME batch must collapse to one queued job.
   const jobs = intraDup ? [job, { ...job }] : [job]
