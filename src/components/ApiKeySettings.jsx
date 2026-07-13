@@ -3,6 +3,7 @@ import { X, Key, ExternalLink, Save, Eye, EyeOff, Mail, CheckCircle, RefreshCw }
 import { initiateGmailAuth, isGmailConnected, getGmailUserEmail, disconnectGmail } from '../services/gmailAuth';
 import { fetchAndCacheFreeModels, getCachedFreeModels } from '../agents/openRouterClient';
 import SearchProfilePanel from './SearchProfilePanel';
+import ReleaseNotesPanel from './ReleaseNotesPanel';
 
 function getFreeModelsCacheInfo() {
   try {
@@ -636,6 +637,8 @@ export default function ApiKeySettings({ isOpen, onClose }) {
         </div>
 
         <SearchProfilePanel />
+
+        <ReleaseNotesPanel />
 
         <div className="api-settings-actions">
           <button
