@@ -6,6 +6,7 @@
 // cogneeClient.localJobSearch(); behavior is unchanged.
 
 import type { DataSource, AssistantRecord } from './types'
+import type { CVContent } from '../types'
 
 export const jobTrackerDataSource: DataSource = {
   async getRecords() {
@@ -76,8 +77,69 @@ export const jobTrackerDataSource: DataSource = {
 
   async getProfileContext() {
     const { USER_PROFILE } = await import('../../config/userProfile')
-    return `Candidate: ${USER_PROFILE.name}. Location: ${USER_PROFILE.location}. Preferences: ${USER_PROFILE.locationPreferences}.
+    const base = `Candidate: ${USER_PROFILE.name}. Location: ${USER_PROFILE.location}. Preferences: ${USER_PROFILE.locationPreferences}.
 Background: ${USER_PROFILE.background}
 Tracks: UX Engineer (React/Figma/AI systems), Product Manager (Lean Six Sigma/analytics), Developer Relations (community/agentic demos).`
+
+    // Ground in the user's real CVs when available. Falls back to `base` alone
+    // on any error / no CVs, so behavior degrades gracefully.
+    const cvContext = await loadCvContext()
+    return cvContext ? `${base}\n\n${cvContext}` : base
   },
+}
+
+// Bound total CV context so multiple long CVs cannot blow the prompt budget.
+const MAX_CV_CONTEXT_CHARS = 4000
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+// Render one CV's structured content into compact text — real facts only.
+function renderCv(track: string, label: string | null, content: CVContent): string {
+  if (!content) return ''
+  const lines: string[] = [`## ${label || track} track`]
+  if (content.summary) lines.push(truncate(content.summary, 400))
+  if (content.skills?.length) lines.push(`Skills: ${content.skills.slice(0, 30).join(', ')}`)
+  if (content.experience?.length) {
+    lines.push('Experience:')
+    content.experience.slice(0, 6).forEach(e => {
+      lines.push(`- ${e.role} @ ${e.company}${e.dates ? ` (${e.dates})` : ''}`)
+      ;(e.bullets ?? []).slice(0, 2).forEach(b => lines.push(`  • ${truncate(b, 160)}`))
+    })
+  }
+  if (content.projects?.length) {
+    lines.push('Projects:')
+    content.projects.slice(0, 5).forEach(p => {
+      if (p.name) lines.push(`- ${p.name}${p.description ? `: ${truncate(p.description, 140)}` : ''}`)
+    })
+  }
+  return lines.join('\n')
+}
+
+// Fetch the current user's real CVs and render them. Returns '' on any
+// failure, no signed-in user, or no CV rows — never fabricates.
+async function loadCvContext(): Promise<string> {
+  try {
+    const { supabase } = await import('../../supabaseClient')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return ''
+
+    const { data, error } = await supabase
+      .from('cv_versions')
+      .select('track, label, content')
+      .eq('user_id', user.id)
+
+    if (error || !data || data.length === 0) return ''
+
+    const blocks = data
+      .map(row => renderCv(row.track as string, (row.label as string) ?? null, row.content as CVContent))
+      .filter(Boolean)
+    if (blocks.length === 0) return ''
+
+    const body = `The candidate's actual CV content (use these real facts; do not invent):\n\n${blocks.join('\n\n')}`
+    return truncate(body, MAX_CV_CONTEXT_CHARS)
+  } catch {
+    return ''
+  }
 }
