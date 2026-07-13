@@ -22,8 +22,12 @@ these files first rather than using training-data assumptions.
 
 **To sync CV changes to Supabase:**
 ```bash
-npx tsx scripts/importResume.ts
+IMPORT_EMAIL=… IMPORT_PASSWORD=… npx tsx scripts/importResume.ts
 ```
+> `importResume.ts` holds the CV content inline (all 3 tracks) and upserts `cv_versions`.
+> As of 2026-07-13 it includes NeuroFlow (recruiter-gated, no public URL) and honest Apple
+> framing ("contributed to guideline discussions", not "authored policies"). The contextual
+> assistant grounds answers in `cv_versions`, so run this to keep grounding accurate.
 
 ## Three CV Tracks
 | Track | Role | Accent | Focus |
@@ -35,29 +39,48 @@ npx tsx scripts/importResume.ts
 ## Project Structure
 ```
 src/
-  agents/           ← 8 autonomous AI agents
-    scout.ts        ← job discovery (Arbeitnow, Remotive, GermanTechJobs, EURemoteJobs, Greenhouse, SmartRecruiters, Lever, Recruitee)
-    classifier.ts   ← Groq: scores job fit 0–10, assigns cv_track
-    cvSelector.ts   ← reads cv_versions from Supabase
-    resumeTailor.ts ← rewrites CV bullets per JD (callAI → free model)
-    coverLetterWriter.ts ← generates cover letters (callAI → free model)
-    formMapper.ts   ← maps application form fields
-    screenshotCapturer.ts ← before/after screenshots
-    statusTracker.ts ← tracks email responses via Gmail MCP
+  agents/           ← application pipeline (9-step) + supporting AI modules
+    scout.ts        ← job discovery + verification gate + company-finder
+                       (Arbeitnow, Remotive, RSS, Greenhouse, Ashby, SmartRecruiters, Lever, Recruitee)
+                       matchesRole() unions ROLE_KEYWORDS with SearchProfile keywords
+                       findCompanyBoard()/findAndAddCompany() probe ATS boards live
+    classifier.ts   ← scores job fit 0–10, cv_track, asymmetric rubric (verdict/hard_cap)
+                       buildPrompt() injects SearchProfile prefs (only when a custom profile is saved)
+    cvSelector.ts · resumeTailor.ts · coverLetterWriter.ts · formMapper.ts
+    screenshotCapturer.ts · statusTracker.ts · submitter.ts
     openRouterClient.ts  ← unified AI client: OpenRouter > Groq > Anthropic (from localStorage)
+    refineSearchProfile.ts ← free-text intent → structured SearchProfile (callAI)
+    companyRegistry.ts    ← localStorage registry of user-added ATS companies
+    cogneeClient.ts       ← OPTIONAL Cognee graph memory (unconfigured; re-exports localJobSearch)
+    contextAssistant/     ← reusable DB-assistant seam (portable to other projects)
+      types.ts            ← DataSource + AssistantEngine interfaces
+      jobTrackerAdapter.ts ← Supabase applications+jobs + CV-grounded profile context
+      lightweightEngine.ts ← DEFAULT engine: LLM-over-records (Cognee is optional, not this)
+      whyThisFits.ts · index.ts (runContextAssistant, localJobSearch)
+  config/
+    searchProfile.ts ← user-owned SearchProfile model (localStorage)
+    userProfile.ts · releases.ts (changelog data)
   services/
-    agentOrchestrator.ts ← pipeline: scout → classify → documents → review → submit
+    agentOrchestrator.ts ← pipeline: scout → verify → classify → documents → review → submit
   pages/
-    ReviewQueue.tsx  ← human approval UI
+    ReviewQueue.tsx  ← human approval UI (UNVERIFIED badge)
+    review-queue/JobDetailPanel.tsx ← manual doc-gen + WhyThisFits summary
   components/
-    ApiKeySettings.jsx ← Settings modal (stores keys in localStorage)
+    PipelineVisualization.tsx ← INTEL page: multi-turn contextual assistant
+    ApiKeySettings.jsx ← Settings modal, left-sidebar tabbed nav
+    SearchProfilePanel.jsx · CompanyFinder.jsx · WhyThisFits.tsx · ReleaseNotesPanel.jsx
 ```
 
 ## API Keys (stored in browser localStorage via Settings modal)
-The app reads keys from localStorage — no `.env` file needed for the agents:
+The app reads keys/config from localStorage — no `.env` file needed for the agents:
 - `openrouter_api_key` → OpenRouter (needed for Perplexity Sonar live search)
 - `groq_api_key` → Groq free tier (works for all agents except live Scout search)
 - `anthropic_api_key` → fallback for direct Anthropic calls
+- `cognee_api_key` / `cognee_base_url` → optional Cognee graph memory (Cloud or self-host)
+- `langfuse_public_key` / `langfuse_secret_key` / `langfuse_host` → optional observability
+- `search_profile` → user's SearchProfile (tune-my-search)
+- `custom_ats_companies` → user-added ATS company boards (company-finder)
+- `changelog_last_seen_version` → What's New "new since last seen" marker
 
 ## Job Sources
 | Source | Type | API |
@@ -71,13 +94,13 @@ The app reads keys from localStorage — no `.env` file needed for the agents:
 | Delivery Hero | SmartRecruiters API | free, no key |
 | Air Apps | Recruitee API | free, no key |
 
-**To add a company:** append to the relevant `*_COMPANIES` array in `src/agents/scout.ts`
+**To add a company:** either append to the relevant `*_COMPANIES` array in `src/agents/scout.ts` (built-in), OR use the live **company-finder** in Settings → Search — enter a name/domain, it probes ATS boards and adds the verified slug to the `custom_ats_companies` registry (never a guessed slug). Scout scans built-in ∪ registry.
 
 ## Target Companies (pending scraping/ATS discovery)
 Taktile · Almedia · Welo Data · Lovehoney Group · Yepoda · Truffls · Malt · Get-in-IT · Jobvector
 
 ## Database Tables (Supabase)
-- `jobs` — discovered postings
+- `jobs` — discovered postings (+ `verified`, `verdict`, `hard_cap_reason` scoring/verification columns — needs the `add_verification_and_scoring_columns` migration)
 - `agent_runs` — full audit log per agent call
 - `application_artifacts` — generated docs per job (resume_tailored, cover_letter, form_mapping, screenshots)
 - `application_review_queue` — human approval state machine
@@ -88,6 +111,11 @@ Taktile · Almedia · Welo Data · Lovehoney Group · Yepoda · Truffls · Malt 
 - Document agents use `callAI()` from `openRouterClient.ts` (not Anthropic SDK) so they work with any key from Settings
 - Scout uses free job board APIs — no Perplexity credits needed
 - Human approval is a hard gate before any application is submitted
+- **Search tuning is user-owned** (`SearchProfile` in localStorage), not hardcoded. Consumed only when a custom profile is saved, so default scoring/rubric is unchanged. Build new search behavior through it.
+- **Contextual assistant lives behind a reusable seam** (`agents/contextAssistant/`: `DataSource` + `AssistantEngine`) so it can port to other projects. The **lightweight LLM-over-Supabase engine is the default**; Cognee is an OPTIONAL graph upgrade — do NOT reintroduce it as a hard dependency.
+- **Scout verification gate**: listings are verified against a live ATS source before reaching the classifier/review queue; unverified never auto-apply.
+- **No fabrication**: the company-finder only stores a slug after a live board returns jobs; assistant/fit summaries are grounded only in real DB/CV data.
+- Doc generation is **manual** (button in JobDetailPanel), not auto-on-open.
 - All agent runs are logged to `agent_runs` with input/output snapshots and token counts
 
 ## graphify
