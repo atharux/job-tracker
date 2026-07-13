@@ -93,6 +93,13 @@ const PROJECTS = [
       'Foursquare, extracts booking contact emails from venue websites, and manages outreach ' +
       'status across discovered leads. Stack: React + TypeScript, Supabase, ScrapeGraphAI.',
   },
+  {
+    name: 'NeuroFlow',
+    description:
+      'Full-stack developer learning OS built in React: adaptive curriculum paths, a ' +
+      'cross-domain skill graph, daily active streaks, gamified XP progression, and personal ' +
+      'reflection indexing. Access is recruiter-gated (no public repo).',
+  },
 ]
 
 // Bullets use the XYZ formula: Accomplished [X] as measured by [Y] by doing [Z]
@@ -204,12 +211,12 @@ const EXPERIENCE = [
   },
   {
     company: 'Apple',
-    role: 'iOS App Review / UX Designer',
+    role: 'iOS App Review & Developer Policy',
     dates: 'Sep 2010 – Jan 2016',
     bullets: [
-      'Increased team efficiency by 25% as measured by task throughput by designing and building a gamified productivity app in collaboration with the development team',
-      'Processed 100,000+ app submissions annually as measured by review volume by enforcing UX quality standards and managing the developer appeals workflow',
-      'Improved review consistency across the team by authoring app review workflow policies and best practices documentation adopted org-wide',
+      'Reviewed 100,000+ app submissions per year against Apple developer guidelines, enforcing UX quality standards and handling the developer appeals workflow',
+      'Contributed to internal guideline-effectiveness discussions — flagged rule gaps and suggested refinements based on submission patterns',
+      'Increased team review throughput by 25% by building internal review tooling',
     ],
   },
   {
