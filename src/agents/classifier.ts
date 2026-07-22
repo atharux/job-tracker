@@ -1,5 +1,5 @@
 import type { ScoutResult, ClassifierResult } from './types'
-import { callAI, getPreferredFreeModel } from './openRouterClient'
+import { callAIJson, getPreferredFreeModel } from './openRouterClient'
 import { USER_PROFILE } from '../config/userProfile'
 import { loadSearchProfile, hasSearchProfile } from '../config/searchProfile'
 
@@ -189,30 +189,26 @@ export async function classifyJob(
   job: ScoutResult,
   jobId: string
 ): Promise<ClassifierResult | null> {
-  let responseText: string
-  try {
-    responseText = await callAI({
-      model: getPreferredFreeModel(),
-      groqModel: 'llama-3.3-70b-versatile',
-      max_tokens: 1000,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a precise job-fit classifier. Return only valid JSON. No markdown. No preamble.',
-        },
-        {
-          role: 'user',
-          content: buildPrompt(job, jobId),
-        },
-      ],
-    })
-  } catch {
-    return null
-  }
-
   let parsed: ClassifierResult & RubricSignals
   try {
-    parsed = JSON.parse(stripMarkdown(responseText)) as ClassifierResult & RubricSignals
+    parsed = await callAIJson<ClassifierResult & RubricSignals>(
+      {
+        model: getPreferredFreeModel(),
+        groqModel: 'llama-3.3-70b-versatile',
+        max_tokens: 1000,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a precise job-fit classifier. Return only valid JSON. No markdown. No preamble.',
+          },
+          {
+            role: 'user',
+            content: buildPrompt(job, jobId),
+          },
+        ],
+      },
+      (text) => JSON.parse(stripMarkdown(text)) as ClassifierResult & RubricSignals,
+    )
   } catch {
     return null
   }
