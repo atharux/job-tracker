@@ -1,4 +1,4 @@
-import { callAI, getPreferredFreeModel } from './openRouterClient'
+import { callAIJson, getPreferredFreeModel } from './openRouterClient'
 import type { FormMapping, FormField } from './types'
 
 // Detect ATS platform from URL — determines which standard fields to expect
@@ -117,13 +117,14 @@ export async function mapForm(url: string, rawJd?: string): Promise<FormMapping>
   let extraFields: FormField[] = []
   if (rawJd && rawJd.length > 100) {
     try {
-      const raw = await callAI({
-        model: getPreferredFreeModel(),
-        groqModel: 'llama-3.3-70b-versatile',
-        messages: [
-          {
-            role: 'system',
-            content: `You detect custom application form questions from job descriptions.
+      const parsed = await callAIJson<FormField[]>(
+        {
+          model: getPreferredFreeModel(),
+          groqModel: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: `You detect custom application form questions from job descriptions.
 Return a JSON array of likely custom fields. Each item: { "label": string, "field_name": string, "field_type": "textarea"|"text"|"select"|"checkbox", "value": string, "confidence": 0.0–1.0, "requires_manual": boolean }
 Rules:
 - Only add fields NOT already covered by standard ATS fields (name, email, phone, resume, cover letter, LinkedIn)
@@ -132,18 +133,17 @@ Rules:
 - requires_manual: true only if it needs a job-specific answer
 - Return [] if no obvious custom questions
 Return JSON array only, no prose.`,
-          },
-          {
-            role: 'user',
-            content: `ATS: ${ats}\nJob URL: ${url}\n\nJob Description (excerpt):\n${rawJd.slice(0, 1500)}`,
-          },
-        ],
-        max_tokens: 600,
-        temperature: 0.1,
-      })
-
-      const cleaned = raw.replace(/```json|```/g, '').trim()
-      const parsed = JSON.parse(cleaned) as FormField[]
+            },
+            {
+              role: 'user',
+              content: `ATS: ${ats}\nJob URL: ${url}\n\nJob Description (excerpt):\n${rawJd.slice(0, 1500)}`,
+            },
+          ],
+          max_tokens: 600,
+          temperature: 0.1,
+        },
+        (text) => JSON.parse(text.replace(/```json|```/g, '').trim()) as FormField[],
+      )
       if (Array.isArray(parsed)) extraFields = parsed.slice(0, 6)
     } catch {
       // LLM parse failure — proceed with base fields only

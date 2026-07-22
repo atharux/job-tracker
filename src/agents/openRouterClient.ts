@@ -273,6 +273,37 @@ async function callViaAnthropic(key: string, opts: AIOptions): Promise<AICallRes
   }
 }
 
+/**
+ * Like callAI, but for structured JSON output: runs the caller's `parse` INSIDE
+ * a model-retry loop. If a model returns truncated / non-JSON output, the next
+ * cached free model is tried (a different model is preferred each attempt),
+ * instead of failing on the first response. The happy path is identical to
+ * `parse(await callAI(opts))` — retries only engage when a parse throws.
+ *
+ * `parse` should throw on unusable output (e.g. a bare JSON.parse). Callers keep
+ * their own strip/validation so parsing behaviour is unchanged.
+ */
+export async function callAIJson<T>(
+  opts: AIOptions,
+  parse: (text: string) => T,
+  attempts = 3,
+): Promise<T> {
+  const models = [opts.model, ...(getCachedFreeModels() ?? [])].filter(
+    (m): m is string => Boolean(m),
+  )
+  const candidates = [...new Set(models)].slice(0, Math.max(1, attempts))
+
+  let lastErr: unknown
+  for (const model of candidates) {
+    try {
+      return parse(await callAI({ ...opts, model }))
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('callAIJson: all attempts failed')
+}
+
 export async function callAI(opts: AIOptions): Promise<string> {
   const { provider, key } = getKey()
   const parent = getActiveParent()
