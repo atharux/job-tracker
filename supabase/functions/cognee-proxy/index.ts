@@ -25,6 +25,26 @@ const COGNEE_PATHS: Record<string, string> = {
   delete:  '/api/v1/datasets',
 }
 
+// Cognee Cloud authenticates with `X-Api-Key`. Self-hosted Docker with
+// REQUIRE_AUTHENTICATION=true uses `Authorization: Bearer`. Try the Cloud form
+// first, then fall back, so both deployments work from one code path.
+async function cogneeFetch(
+  url: string,
+  method: string,
+  apiKey: string,
+  extraHeaders: Record<string, string> = {},
+  body?: string,
+): Promise<Response> {
+  const attempt = (auth: Record<string, string>) =>
+    fetch(url, { method, headers: { ...extraHeaders, ...auth }, ...(body ? { body } : {}) })
+
+  const res = await attempt({ 'X-Api-Key': apiKey })
+  if (res.status === 401 || res.status === 403) {
+    return attempt({ Authorization: `Bearer ${apiKey}` })
+  }
+  return res
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -49,9 +69,7 @@ serve(async (req: Request) => {
 
       for (const { path, method } of SEARCH_ATTEMPTS) {
         let url = `${cogneeBaseUrl}${path}`
-        const headers: Record<string, string> = {
-          'Authorization': `Bearer ${cogneeApiKey}`,
-        }
+        const headers: Record<string, string> = {}
         let body: string | undefined
 
         if (method === 'GET') {
@@ -64,7 +82,7 @@ serve(async (req: Request) => {
           body = JSON.stringify(payload)
         }
 
-        const res = await fetch(url, { method, headers, ...(body ? { body } : {}) })
+        const res = await cogneeFetch(url, method, cogneeApiKey, headers, body)
         const text = await res.text()
         const allow = res.headers.get('allow') ?? ''
 
@@ -96,14 +114,13 @@ serve(async (req: Request) => {
       })
     }
 
-    const upstream = await fetch(`${cogneeBaseUrl}${path}`, {
-      method: action === 'delete' ? 'DELETE' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cogneeApiKey}`,
-      },
-      body: JSON.stringify(payload),
-    })
+    const upstream = await cogneeFetch(
+      `${cogneeBaseUrl}${path}`,
+      action === 'delete' ? 'DELETE' : 'POST',
+      cogneeApiKey,
+      { 'Content-Type': 'application/json' },
+      JSON.stringify(payload),
+    )
 
     const text = await upstream.text()
 
