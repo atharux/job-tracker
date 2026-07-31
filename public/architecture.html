@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hydra — Architecture</title>
+<meta name="description" content="Hydra is a job-application pipeline built as nine specialised agents with a human approval gate before every submission. This is how it is wired." />
+<meta property="og:title" content="Hydra — Architecture" />
+<meta property="og:description" content="Nine agents carry a job search from listing to reviewed application. Nothing is submitted without human approval. Here is the wiring." />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface-2: #161616;
+    --line: #232323;
+    --line-bright: #333333;
+    --text: #ededed;
+    --text-soft: #a8a8a8;
+    --text-dim: #6c6c6c;
+    --ux: #06b6d4;
+    --pm: #8b5cf6;
+    --devrel: #f97316;
+    --warn: #f97316;
+    --ok: #22c55e;
+    --mono: 'Space Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+  a { color: var(--ux); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ── HERO ── */
+  header.hero {
+    border-bottom: 1px solid var(--line);
+    padding: 88px 0 56px;
+  }
+  .hero h1 {
+    font-family: var(--display);
+    font-size: clamp(2.6rem, 8vw, 4.6rem);
+    font-weight: 800;
+    line-height: 0.98;
+    letter-spacing: -0.02em;
+    margin: 18px 0 22px;
+  }
+  .hero h1 em { font-style: normal; color: var(--ux); }
+  .hero .sub {
+    font-size: 15px;
+    color: var(--text-soft);
+    max-width: 62ch;
+    line-height: 1.8;
+  }
+  .hero-meta {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-top: 30px;
+  }
+  .chip {
+    border: 1px solid var(--line-bright);
+    padding: 5px 11px;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+  }
+  .chip.on { border-color: var(--ok); color: var(--ok); }
+
+  /* ── SECTIONS ── */
+  section { padding: 64px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+  h2 {
+    font-family: var(--display);
+    font-size: clamp(1.5rem, 4vw, 2.1rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 10px 0 16px;
+  }
+  h3 {
+    font-family: var(--display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 28px 0 8px;
+  }
+  p { color: var(--text-soft); margin-bottom: 14px; max-width: 68ch; }
+  strong { color: var(--text); font-weight: 700; }
+  code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    padding: 1px 5px;
+    color: var(--ux);
+  }
+
+  /* ── PIPELINE ── */
+  .stage {
+    display: grid;
+    grid-template-columns: 54px 1fr;
+    border: 1px solid var(--line);
+    border-bottom: none;
+    background: var(--surface);
+  }
+  .stage:last-of-type { border-bottom: 1px solid var(--line); }
+  .stage:hover { background: var(--surface-2); }
+  .stage-n {
+    border-right: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-dim);
+  }
+  .stage-body { padding: 16px 18px; }
+  .stage-head {
+    display: flex; align-items: baseline; gap: 10px;
+    flex-wrap: wrap; margin-bottom: 5px;
+  }
+  .stage-name {
+    font-family: var(--display);
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .stage-file { font-size: 11px; color: var(--text-dim); }
+  .stage p { font-size: 13px; margin: 0; color: var(--text-soft); max-width: 72ch; }
+  .stage-note {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 7px;
+    padding-left: 11px;
+    border-left: 2px solid var(--line-bright);
+  }
+
+  /* gate */
+  .stage.gate { border-color: var(--warn); background: #1a1206; }
+  .stage.gate .stage-n { border-right-color: var(--warn); color: var(--warn); }
+  .stage.gate + .stage { border-top: 1px solid var(--line); }
+  .gate-tag {
+    font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+    border: 1px solid var(--warn); color: var(--warn);
+    padding: 2px 6px;
+  }
+
+  /* ── TRACKS ── */
+  .tracks { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 22px 0 6px; }
+  .track { border: 1px solid var(--line); border-top-width: 3px; padding: 14px 16px; background: var(--surface); }
+  .track.ux { border-top-color: var(--ux); }
+  .track.pm { border-top-color: var(--pm); }
+  .track.dr { border-top-color: var(--devrel); }
+  .track .t { font-family: var(--display); font-weight: 700; font-size: 0.95rem; margin-bottom: 3px; }
+  .track.ux .t { color: var(--ux); }
+  .track.pm .t { color: var(--pm); }
+  .track.dr .t { color: var(--devrel); }
+  .track p { font-size: 12px; margin: 0; }
+
+  /* ── CALLOUT ── */
+  .note {
+    border: 1px solid var(--line-bright);
+    border-left: 3px solid var(--ux);
+    background: var(--surface);
+    padding: 15px 18px;
+    margin: 22px 0;
+  }
+  .note.warn { border-left-color: var(--warn); }
+  .note p { margin: 0; font-size: 13px; }
+  .note .h {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ux); margin-bottom: 6px; display: block;
+  }
+  .note.warn .h { color: var(--warn); }
+
+  /* ── TABLE ── */
+  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12.5px; }
+  th, td { text-align: left; padding: 9px 12px; border: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--text-dim); font-weight: 400; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; background: var(--surface); }
+  td { color: var(--text-soft); }
+  td strong { color: var(--text); }
+
+  ul { margin: 0 0 14px 18px; color: var(--text-soft); font-size: 13px; }
+  li { margin-bottom: 6px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 40px 0 56px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+  footer a { color: var(--text-soft); }
+
+  @media (max-width: 560px) {
+    header.hero { padding: 60px 0 40px; }
+    section { padding: 44px 0; }
+    .stage { grid-template-columns: 40px 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="label">Hydra — Architecture</p>
+    <h1>Nine agents.<br />One <em>human gate</em>.</h1>
+    <p class="sub">
+      Hydra carries a job search from raw listing to a reviewed, ready-to-submit application.
+      Each step is a separate agent with a narrow job and its own failure mode. Nothing is ever
+      submitted without a person approving it first — that gate is enforced in code, not by convention.
+    </p>
+    <div class="hero-meta">
+      <span class="chip on">Human-in-the-loop</span>
+      <span class="chip">React · Vite · Supabase</span>
+      <span class="chip">OpenRouter → Groq → Anthropic</span>
+      <span class="chip">Public repo</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- WHY -->
+  <section>
+    <p class="label">The problem</p>
+    <h2>Autonomy is the easy half. Restraint is the hard half.</h2>
+    <p>
+      A pipeline that can find jobs, write tailored applications and submit them is not
+      difficult to build. A pipeline you would actually let near your professional reputation
+      is a different thing entirely.
+    </p>
+    <p>
+      Hydra is built around that second problem. Every agent is narrow enough to be
+      inspectable, every listing is checked against a live source before it can reach you,
+      and the submission step is physically unreachable until a human presses approve.
+    </p>
+  </section>
+
+  <!-- PIPELINE -->
+  <section>
+    <p class="label">The pipeline</p>
+    <h2>What each agent does</h2>
+    <p>In order. Each is a separate module under <code>src/agents/</code>.</p>
+
+    <div style="margin-top:26px">
+
+      <div class="stage">
+        <div class="stage-n">01</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">Scout</span>
+            <span class="stage-file">scout.ts</span>
+          </div>
+          <p>Finds openings by scanning applicant-tracking-system boards directly — Greenhouse, Ashby, Lever, SmartRecruiters, Recruitee — rather than scraping aggregators.</p>
+          <p class="stage-note">Unions the built-in company list with boards the user has added, de-duplicated by slug. A company is only ever added after its board is probed and confirmed to exist, so the registry cannot fill with guessed slugs.</p>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-n">02</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">Classifier</span>
+            <span class="stage-file">classifier.ts</span>
+          </div>
+          <p>Scores each listing for fit and assigns it to a CV track. Runs singly or batched.</p>
+          <p class="stage-note">Injects the user's own preferences — preferred titles, anti-signals, seniority, target companies — into the prompt, but only when a custom profile exists. Default scoring stays untouched otherwise.</p>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-n">03</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">CV Selector</span>
+            <span class="stage-file">cvSelector.ts</span>
+          </div>
+          <p>Picks which of three maintained CV tracks to build from — <code>ux</code>, <code>pm</code> or <code>devrel</code>. Not one CV bent to fit; three genuinely different positionings.</p>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-n">04</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">Resume Tailor</span>
+            <span class="stage-file">resumeTailor.ts</span>
+          </div>
+          <p>Adapts the selected CV to the specific listing — emphasis and ordering, working from real history rather than inventing it.</p>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-n">05</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">Cover Letter Writer</span>
+            <span class="stage-file">coverLetterWriter.ts</span>
+          </div>
+          <p>Drafts a letter against the job description and the tailored CV, so the two documents agree with each other.</p>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-n">06</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">Form Mapper</span>
+            <span class="stage-file">formMapper.ts</span>
+          </div>
+          <p>Detects which ATS platform a posting lives on from its URL, and maps the generated material onto the fields that platform expects.</p>
+          <p class="stage-note">Platform detection is deterministic, from the URL — not a model call. There is no reason to spend a model on something a regular expression answers correctly.</p>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-n">07</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">Screenshot Capturer</span>
+            <span class="stage-file">screenshotCapturer.ts</span>
+          </div>
+          <p>Renders the filled application through a headless browser worker, so the reviewer sees the actual form as the employer will receive it — not a JSON summary of it.</p>
+          <p class="stage-note">Requires a deployed Cloudflare Browser Worker. Without one this stage degrades and reports itself unavailable; it does not fail the run or silently skip review.</p>
+        </div>
+      </div>
+
+      <div class="stage gate">
+        <div class="stage-n">08</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">Review Gatekeeper</span>
+            <span class="stage-file">reviewGatekeeper.ts</span>
+            <span class="gate-tag">Human required</span>
+          </div>
+          <p>Everything above this line produces a <strong>proposal</strong>. Nothing below it runs until a person approves.</p>
+          <p class="stage-note">Enqueues at <code>pending_review</code>, then waits for an explicit <code>approve()</code> or <code>reject()</code>. Jobs already in a terminal state — rejected, submitted, archived — cannot be re-enqueued, so a re-run can never quietly resurrect something you already turned down.</p>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-n">09</div>
+        <div class="stage-body">
+          <div class="stage-head">
+            <span class="stage-name">Status Tracker</span>
+            <span class="stage-file">statusTracker.ts</span>
+          </div>
+          <p>Watches for employer replies after submission and moves each application's status accordingly, so the board reflects reality without manual upkeep.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="note warn">
+      <span class="h">Supporting modules — not pipeline stages</span>
+      <p><code>submitter.ts</code> performs the actual submission and fires <em>only</em> after the Gatekeeper approves. <code>openRouterClient.ts</code> is the shared model client. <code>types.ts</code> holds the contracts between agents.</p>
+    </div>
+  </section>
+
+  <!-- GATE -->
+  <section>
+    <p class="label">The gate</p>
+    <h2>Why the interesting part is where it stops</h2>
+    <p>
+      The Review Gatekeeper is the design decision the rest of the system exists to serve.
+      An agent pipeline that submits on your behalf is a liability the first time a model
+      misreads a listing. One that prepares complete work and then waits is an assistant.
+    </p>
+    <p>Three properties make it hold:</p>
+    <ul>
+      <li><strong>Submission is unreachable without approval</strong> — <code>submitter.ts</code> runs downstream of the gate, not in parallel with it.</li>
+      <li><strong>Decisions are terminal</strong> — once rejected, submitted or archived, a job cannot be re-queued by a later run.</li>
+      <li><strong>Review sees the real artefact</strong> — the screenshot stage renders the actual filled form, so approval is based on what the employer receives.</li>
+    </ul>
+    <div class="note">
+      <span class="h">Verification, before review</span>
+      <p>Listings are checked against a live ATS source before they can reach the queue. Anything unverified is badged <strong>UNVERIFIED</strong> and is never eligible for automatic handling — the failure mode of a hallucinated job posting is a wasted application, so it is caught upstream.</p>
+    </div>
+  </section>
+
+  <!-- TRACKS -->
+  <section>
+    <p class="label">CV tracks</p>
+    <h2>Three positionings, not one résumé</h2>
+    <p>The Classifier assigns a track; the CV Selector loads it. They are maintained separately because they make genuinely different arguments.</p>
+    <div class="tracks">
+      <div class="track ux"><div class="t">UX Engineer</div><p>Builds the interface and the system underneath it.</p></div>
+      <div class="track pm"><div class="t">Product Manager</div><p>Owns the problem, the sequencing and the tradeoffs.</p></div>
+      <div class="track dr"><div class="t">Developer Relations</div><p>Builds the thing, then explains it to the people who will use it.</p></div>
+    </div>
+  </section>
+
+  <!-- FAILURE -->
+  <section>
+    <p class="label">Failure behaviour</p>
+    <h2>What happens when something breaks</h2>
+    <p>Degradation is designed rather than accidental. The pipeline is worth more when it is honest about being partially available than when it pretends otherwise.</p>
+    <table>
+      <thead>
+        <tr><th>Failure</th><th>Behaviour</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Model provider unavailable</strong></td><td>Falls through OpenRouter → Groq → Anthropic, whichever key is present. Free models are discovered live rather than hardcoded, because <code>:free</code> model IDs are retired constantly.</td></tr>
+        <tr><td><strong>Model returns malformed JSON</strong></td><td>Parsed and validated inside the retry loop, so a truncated response advances to the next model instead of failing the request.</td></tr>
+        <tr><td><strong>Browser worker not deployed</strong></td><td>Screenshot stage reports unavailable. Review still happens, without the visual.</td></tr>
+        <tr><td><strong>Listing cannot be verified</strong></td><td>Badged UNVERIFIED, excluded from automatic handling.</td></tr>
+        <tr><td><strong>Reviewer rejects</strong></td><td>Terminal. The job cannot re-enter the queue on a later run.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- STACK -->
+  <section>
+    <p class="label">Stack</p>
+    <h2>What it is built on</h2>
+    <table>
+      <tbody>
+        <tr><td><strong>Frontend</strong></td><td>React + Vite</td></tr>
+        <tr><td><strong>Data</strong></td><td>Supabase — jobs, applications, review queue, CV versions</td></tr>
+        <tr><td><strong>Models</strong></td><td>OpenRouter (free tier, live discovery) → Groq → Anthropic</td></tr>
+        <tr><td><strong>Headless browser</strong></td><td>Cloudflare Browser Worker</td></tr>
+        <tr><td><strong>Hosting</strong></td><td>Cloudflare Pages</td></tr>
+        <tr><td><strong>Optional</strong></td><td>Cognee knowledge graph, proxied server-side for CORS</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:18px">
+      <a href="/pipeline">→ See the live pipeline view</a><br />
+      <a href="https://github.com/atharux/job-tracker">→ Source on GitHub</a>
+    </p>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    HYDRA · AGENTIC JOB APPLICATION PIPELINE · <a href="/">Open the app</a>
+  </div>
+</footer>
+
+</body>
+</html>
