@@ -51,6 +51,7 @@ serve(async (req: Request) => {
         let url = `${cogneeBaseUrl}${path}`
         const headers: Record<string, string> = {
           'Authorization': `Bearer ${cogneeApiKey}`,
+          'X-Api-Key': cogneeApiKey,
         }
         let body: string | undefined
 
@@ -101,6 +102,7 @@ serve(async (req: Request) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${cogneeApiKey}`,
+        'X-Api-Key': cogneeApiKey,
       },
       body: JSON.stringify(payload),
     })
