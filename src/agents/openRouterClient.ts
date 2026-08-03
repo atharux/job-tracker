@@ -251,6 +251,8 @@ async function callViaAnthropic(key: string, opts: AIOptions): Promise<AICallRes
       'Content-Type': 'application/json',
       'x-api-key': key,
       'anthropic-version': '2023-06-01',
+      // Required for calls made from the browser — without it the CORS
+      // preflight blocks the request and this fallback never runs.
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify(body),
